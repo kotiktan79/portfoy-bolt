@@ -15,12 +15,11 @@ import {
   generateBuySellSignals,
   calculatePortfolioScore,
   generateSmartSuggestions,
-  generateAIResponse,
   type BuySellSignal,
   type PortfolioScore,
   type SmartSuggestion,
-  type AIChat,
 } from '../services/advancedAI';
+import { generateSmartResponse, ChatMessage } from '../services/smartAIChat';
 
 export default function AIAdvisor() {
   const [holdings, setHoldings] = useState<any[]>([]);
@@ -33,7 +32,7 @@ export default function AIAdvisor() {
   const [buySellSignals, setBuySellSignals] = useState<BuySellSignal[]>([]);
   const [portfolioScore, setPortfolioScore] = useState<PortfolioScore | null>(null);
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([]);
-  const [chatHistory, setChatHistory] = useState<AIChat[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'signals' | 'suggestions' | 'chat'>('overview');
 
@@ -158,23 +157,21 @@ export default function AIAdvisor() {
   const handleChatSubmit = () => {
     if (!chatInput.trim()) return;
 
-    const totalPnL = holdings.reduce((sum, h) => {
-      const invested = h.purchase_price * h.quantity;
-      const current = h.current_price * h.quantity;
-      return sum + ((current - invested) / invested) * 100;
-    }, 0) / holdings.length;
-
-    const context = {
-      riskProfile,
-      portfolioScore,
-      topRecommendation: recommendations[0],
-      strongBuySignal: buySellSignals.find((s) => s.signal === 'strong_buy')?.symbol,
-      strongSellSignal: buySellSignals.find((s) => s.signal === 'strong_sell')?.symbol,
-      totalPnL,
+    const userMsg: ChatMessage = {
+      role: 'user',
+      content: chatInput,
+      timestamp: new Date(),
     };
 
-    const response = generateAIResponse(chatInput, context);
-    setChatHistory([...chatHistory, response]);
+    const aiResponse = generateSmartResponse(chatInput, {
+      holdings,
+      riskProfile,
+      signals: buySellSignals,
+      score: portfolioScore,
+      suggestions: smartSuggestions,
+    });
+
+    setChatHistory(prev => [...prev, userMsg, aiResponse]);
     setChatInput('');
   };
 
@@ -662,59 +659,85 @@ export default function AIAdvisor() {
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Sohbet</h3>
           </div>
 
-          <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+          <div className="space-y-4 mb-6 max-h-[500px] overflow-y-auto">
             {chatHistory.length === 0 && (
               <div className="text-center py-8">
+                <Brain className="w-12 h-12 text-purple-300 mx-auto mb-3" />
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Portföyünüz hakkında sorular sorun!
+                  Portföyünüz hakkında her şeyi sorun!
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  <button
-                    onClick={() => setChatInput('Risk profilim nedir?')}
-                    className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
-                  >
-                    Risk profilim nedir?
-                  </button>
-                  <button
-                    onClick={() => setChatInput('Hangi hisseyi almalıyım?')}
-                    className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
-                  >
-                    Hangi hisseyi almalıyım?
-                  </button>
-                  <button
-                    onClick={() => setChatInput('Performansım nasıl?')}
-                    className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
-                  >
-                    Performansım nasıl?
-                  </button>
+                  {['Ne yapmalıyım?', 'Performansım nasıl?', 'Al/Sat sinyalleri?', 'Risk profilim?', 'Kârlı varlıklarım?', 'Dağılım?'].map(q => (
+                    <button
+                      key={q}
+                      onClick={() => setChatInput(q)}
+                      className="px-3 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm hover:bg-purple-100 dark:hover:bg-purple-900/50 font-medium transition-colors"
+                    >
+                      {q}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
 
-            {chatHistory.map((chat, index) => (
-              <div key={index} className="space-y-3">
-                <div className="flex justify-end">
-                  <div className="bg-purple-600 text-white rounded-lg px-4 py-2 max-w-md">
-                    <p className="text-sm">{chat.question}</p>
-                  </div>
-                </div>
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-3 max-w-md">
-                    <p className="text-sm text-gray-900 dark:text-white mb-2">{chat.answer}</p>
-                    {chat.suggestions.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {chat.suggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setChatInput(suggestion)}
-                            className="px-2 py-1 bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-xs hover:bg-gray-50 dark:hover:bg-gray-500"
-                          >
-                            {suggestion}
-                          </button>
-                        ))}
-                      </div>
+            {chatHistory.map((msg, index) => (
+              <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`rounded-2xl px-4 py-3 max-w-lg ${
+                  msg.role === 'user'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700'
+                }`}>
+                  <div className={`text-sm whitespace-pre-wrap ${msg.role === 'ai' ? 'text-gray-900 dark:text-white' : ''}`}>
+                    {msg.content.split(/(\*\*.*?\*\*)/).map((part, i) =>
+                      part.startsWith('**') && part.endsWith('**')
+                        ? <strong key={i}>{part.slice(2, -2)}</strong>
+                        : part
                     )}
                   </div>
+
+                  {msg.data?.metrics && (
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      {msg.data.metrics.map((m, i) => (
+                        <div key={i} className="bg-white/80 dark:bg-gray-600 rounded-lg p-2 text-center">
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400">{m.label}</p>
+                          <p className={`text-sm font-bold ${
+                            m.color === 'green' ? 'text-green-600' :
+                            m.color === 'red' ? 'text-red-600' :
+                            m.color === 'blue' ? 'text-blue-600' :
+                            'text-gray-900 dark:text-white'
+                          }`}>{m.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {msg.data?.actions && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {msg.data.actions.map((a, i) => (
+                        <button
+                          key={i}
+                          onClick={() => a.route && window.location.assign(a.route)}
+                          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 transition-colors"
+                        >
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {msg.suggestions && msg.suggestions.length > 0 && msg.role === 'ai' && (
+                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                      {msg.suggestions.map((s, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setChatInput(s)}
+                          className="px-2.5 py-1 bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-500 font-medium transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
