@@ -78,7 +78,7 @@ export async function getPnLData(): Promise<{
   try {
     const { data: snapshots, error } = await supabase
       .from('portfolio_snapshots')
-      .select('snapshot_date, total_value, total_deposits, total_withdrawals')
+      .select('snapshot_date, total_value, total_investment, total_deposits, total_withdrawals')
       .order('snapshot_date', { ascending: false })
       .limit(500);
 
@@ -125,8 +125,7 @@ export async function getPnLData(): Promise<{
       return best;
     };
 
-    const currentDeposits = Number(current.total_deposits) || 0;
-    const currentWithdrawals = Number(current.total_withdrawals) || 0;
+    const currentInvestment = Number(current.total_investment) || 0;
 
     const calculateChange = (previous: typeof snapshots[0] | null) => {
       if (!previous) return { value: currentValue, percentage: 0, change: 0 };
@@ -134,13 +133,15 @@ export async function getPnLData(): Promise<{
       const prevValue = Number(previous.total_value) || 0;
       if (prevValue === 0) return { value: currentValue, percentage: 0, change: 0 };
 
-      const prevDeposits = Number(previous.total_deposits) || 0;
-      const prevWithdrawals = Number(previous.total_withdrawals) || 0;
+      const prevInvestment = Number(previous.total_investment) || 0;
 
-      const netCashFlowInPeriod = (currentDeposits - currentWithdrawals) - (prevDeposits - prevWithdrawals);
+      // Investment change = new money added or removed (not market gain/loss)
+      const investmentChange = currentInvestment - prevInvestment;
 
-      const valueChange = (currentValue - prevValue) - netCashFlowInPeriod;
-      const percentage = (valueChange / prevValue) * 100;
+      // Real PnL = value change minus new money in/out
+      // If you added 100K new holdings, value goes up 100K but that's not profit
+      const valueChange = (currentValue - prevValue) - investmentChange;
+      const percentage = (prevValue / 1) > 0 ? (valueChange / prevValue) * 100 : 0;
 
       return {
         value: currentValue,
