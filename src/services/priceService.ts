@@ -716,7 +716,7 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
         price = await fetchCryptoPrice(symbol);
         break;
       case 'currency':
-        if (symbol === 'USD') price = await fetchUSDTRYRate();
+        if (symbol === 'USD' || symbol === 'USDC' || symbol === 'USDT' || symbol === 'BUSD' || symbol === 'FDUSD') price = await fetchUSDTRYRate();
         else if (symbol === 'EURO' || symbol === 'EUR') price = await fetchEURTRYRate();
         break;
       case 'commodity':
