@@ -36,7 +36,7 @@ function canMakeRequest(service: string): boolean {
   if (!limit) return true;
 
   const now = Date.now();
-  limit.requests = limit.requests.filter(time => now - time < limit.window);
+  limit.requests = limit.requests.filter(time => now - time < limit.window && now - time >= 0);
 
   if (limit.requests.length >= limit.limit) {
     return false;
@@ -380,6 +380,9 @@ async function fetchCryptoFromBinance(symbol: string): Promise<number | null> {
 export async function fetchGoldPrice(): Promise<number> {
   if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
 
+  // Cache USD rate once upfront to avoid redundant fetches in this call chain
+  const usdTryRate = await fetchUSDTRYRate();
+
   const config = getSupabaseConfig();
   if (config) {
     try {
@@ -395,7 +398,6 @@ export async function fetchGoldPrice(): Promise<number> {
           return result.data.pricePerGramTRY;
         }
         if (result.success && result.data?.pricePerOz) {
-          const usdTryRate = await fetchUSDTRYRate();
           return (result.data.pricePerOz / 31.1035) * usdTryRate;
         }
       }
@@ -404,10 +406,10 @@ export async function fetchGoldPrice(): Promise<number> {
     }
   }
 
-  return await fetchGoldFromAlternative();
+  return await fetchGoldFromAlternative(usdTryRate);
 }
 
-async function fetchGoldFromAlternative(): Promise<number> {
+async function fetchGoldFromAlternative(usdTryRate: number): Promise<number> {
   try {
     const response = await fetchWithTimeout(`${API_URLS.METALS_API}/gold`, {}, 5000);
     if (!response.ok) throw new Error('Metals.live failed');
@@ -416,16 +418,17 @@ async function fetchGoldFromAlternative(): Promise<number> {
     const goldPricePerOunce = data[0]?.price || data.price;
     if (!goldPricePerOunce) throw new Error('No gold data');
 
-    const usdTryRate = await fetchUSDTRYRate();
     return (goldPricePerOunce / 31.1035) * usdTryRate;
   } catch {
-    const usdTryRate = await fetchUSDTRYRate();
     return (2900 / 31.1035) * usdTryRate;
   }
 }
 
 export async function fetchSilverPrice(): Promise<number> {
   if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
+
+  // Cache USD rate once upfront to avoid redundant fetches in this call chain
+  const usdTryRate = await fetchUSDTRYRate();
 
   const config = getSupabaseConfig();
   if (config) {
@@ -442,7 +445,6 @@ export async function fetchSilverPrice(): Promise<number> {
           return result.data.pricePerGramTRY;
         }
         if (result.success && result.data?.pricePerOz) {
-          const usdTryRate = await fetchUSDTRYRate();
           return (result.data.pricePerOz / 31.1035) * usdTryRate;
         }
       }
@@ -451,10 +453,10 @@ export async function fetchSilverPrice(): Promise<number> {
     }
   }
 
-  return await fetchSilverFromAlternative();
+  return await fetchSilverFromAlternative(usdTryRate);
 }
 
-async function fetchSilverFromAlternative(): Promise<number> {
+async function fetchSilverFromAlternative(usdTryRate: number): Promise<number> {
   try {
     const response = await fetchWithTimeout(`${API_URLS.METALS_API}/silver`, {}, 5000);
     if (!response.ok) throw new Error('Metals.live silver failed');
@@ -463,10 +465,8 @@ async function fetchSilverFromAlternative(): Promise<number> {
     const silverPricePerOunce = data[0]?.price || data.price;
     if (!silverPricePerOunce) throw new Error('No silver data');
 
-    const usdTryRate = await fetchUSDTRYRate();
     return (silverPricePerOunce / 31.1035) * usdTryRate;
   } catch {
-    const usdTryRate = await fetchUSDTRYRate();
     return (32 / 31.1035) * usdTryRate;
   }
 }
@@ -515,27 +515,7 @@ export async function fetchBISTPrice(symbol: string): Promise<number | null> {
         }
       }
     } catch {
-      // fall through
-    }
-  }
-
-  const config2 = getSupabaseConfig();
-  if (config2) {
-    try {
-      const response = await fetchWithTimeout(
-        `${config2.url}/functions/v1/price-proxy?type=bist&symbols=${symbol}`,
-        { headers: proxyHeaders(config2.key) },
-        8000
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data?.[symbol]) {
-          return result.data[symbol].price;
-        }
-      }
-    } catch {
-      // fall through
+      // fall through to fallback
     }
   }
 
@@ -562,6 +542,8 @@ function updateConnectionStatus(status: ConnectionStatus) {
 let binanceWS: WebSocket | null = null;
 const wsSubscriptions = new Set<string>();
 const priceUpdateListeners: ((update: PriceUpdate) => void)[] = [];
+const wsNotifyThrottle = new Map<string, number>();
+const WS_THROTTLE_MS = 2000;
 let wsSymbolsRef: string[] = [];
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -639,10 +621,16 @@ export function initializeWebSocketConnection(symbols: string[]) {
 
       setCachedPrice(symbol, tryPrice);
 
+      // Per-symbol throttle: only notify listeners at most once every 2 seconds
+      const lastNotify = wsNotifyThrottle.get(symbol) || 0;
+      const msgNow = Date.now();
+      if (msgNow - lastNotify < WS_THROTTLE_MS) return;
+      wsNotifyThrottle.set(symbol, msgNow);
+
       notifyPriceUpdate({
         symbol,
         price: tryPrice,
-        timestamp: Date.now(),
+        timestamp: msgNow,
         source: 'Binance WebSocket',
       });
     } catch {
@@ -678,7 +666,7 @@ function scheduleReconnect() {
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    if (!binanceWS || binanceWS.readyState === WebSocket.CLOSED) {
+    if (!binanceWS || binanceWS.readyState === WebSocket.CLOSED || binanceWS.readyState === WebSocket.CLOSING) {
       initializeWebSocketConnection(wsSymbolsRef);
     }
   }, delay);
@@ -741,6 +729,12 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
         break;
       case 'fund':
       case 'eurobond':
+        // No real-time API supports fund/eurobond prices.
+        // Return cached price if available; otherwise leave price as null
+        // so the fallback logic below can provide a default.
+        if (cached) {
+          price = cached.price;
+        }
         break;
     }
   } catch {
@@ -748,7 +742,9 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
   }
 
   const finalPrice = price || FALLBACK_PRICES[symbol] || 100;
-  const source = price ? 'api' : 'fallback';
+  // Mark as 'fallback' when no API price was fetched, or when the returned
+  // price matches the hardcoded fallback (sub-functions may return fallback values directly)
+  const source = (price && price !== FALLBACK_PRICES[symbol]) ? 'api' : 'fallback';
 
   priceCache[symbol] = { price: finalPrice, timestamp: now, source };
 
@@ -767,63 +763,95 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
 }
 
 export async function fetchMultiplePrices(symbols: { symbol: string; assetType: AssetType }[]): Promise<PriceData> {
-  const prices: PriceData = {};
-  const bistStocks = symbols.filter(s => s.assetType === 'stock' && !EURONEXT_STOCKS[s.symbol]);
-  const otherAssets = symbols.filter(s => s.assetType !== 'stock' || EURONEXT_STOCKS[s.symbol]);
+  const BATCH_TIMEOUT_MS = 15000;
 
-  if (bistStocks.length > 0) {
-    const config = getSupabaseConfig();
-    if (config) {
-      try {
-        const symbolList = bistStocks.map(s => s.symbol).join(',');
-        const response = await fetchWithTimeout(
-          `${config.url}/functions/v1/price-proxy?type=bist&symbols=${symbolList}`,
-          { headers: proxyHeaders(config.key) },
-          10000
-        );
+  const batchWork = async (): Promise<PriceData> => {
+    const prices: PriceData = {};
+    const bistStocks = symbols.filter(s => s.assetType === 'stock' && !EURONEXT_STOCKS[s.symbol]);
+    const otherAssets = symbols.filter(s => s.assetType !== 'stock' || EURONEXT_STOCKS[s.symbol]);
 
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data) {
-            Object.entries(result.data).forEach(([symbol, priceData]) => {
-              const price = (priceData as { price: number }).price;
-              if (price && price > 0) {
-                prices[symbol] = price;
-                priceCache[symbol] = { price, timestamp: Date.now(), source: 'api' };
-                setCachedPrice(symbol, price);
+    if (bistStocks.length > 0) {
+      const config = getSupabaseConfig();
+      if (config) {
+        try {
+          const symbolList = bistStocks.map(s => s.symbol).join(',');
+          const response = await fetchWithTimeout(
+            `${config.url}/functions/v1/price-proxy?type=bist&symbols=${symbolList}`,
+            { headers: proxyHeaders(config.key) },
+            10000
+          );
 
-                notifyPriceUpdate({
-                  symbol,
-                  price,
-                  timestamp: Date.now(),
-                  source: 'Price Proxy',
-                });
-              }
-            });
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+              Object.entries(result.data).forEach(([symbol, priceData]) => {
+                const price = (priceData as { price: number }).price;
+                if (price && price > 0) {
+                  prices[symbol] = price;
+                  priceCache[symbol] = { price, timestamp: Date.now(), source: 'api' };
+                  setCachedPrice(symbol, price);
+
+                  notifyPriceUpdate({
+                    symbol,
+                    price,
+                    timestamp: Date.now(),
+                    source: 'Price Proxy',
+                  });
+                }
+              });
+            }
           }
+        } catch {
+          // fall through to individual
         }
-      } catch {
-        // fall through to individual
+      }
+
+      const missingSymbols = bistStocks.filter(s => !prices[s.symbol]);
+      if (missingSymbols.length > 0) {
+        const results = await Promise.allSettled(
+          missingSymbols.map(({ symbol, assetType }) => fetchRealTimePrice(symbol, assetType))
+        );
+        missingSymbols.forEach((s, i) => {
+          const result = results[i];
+          if (result.status === 'fulfilled') {
+            prices[s.symbol] = result.value;
+          } else {
+            prices[s.symbol] = FALLBACK_PRICES[s.symbol] || 100;
+          }
+        });
       }
     }
 
-    const missingSymbols = bistStocks.filter(s => !prices[s.symbol]);
-    if (missingSymbols.length > 0) {
-      await Promise.all(
-        missingSymbols.map(async ({ symbol, assetType }) => {
-          prices[symbol] = await fetchRealTimePrice(symbol, assetType);
-        })
-      );
-    }
-  }
+    const otherResults = await Promise.allSettled(
+      otherAssets.map(({ symbol, assetType }) => fetchRealTimePrice(symbol, assetType))
+    );
+    otherAssets.forEach((s, i) => {
+      const result = otherResults[i];
+      if (result.status === 'fulfilled') {
+        prices[s.symbol] = result.value;
+      } else {
+        prices[s.symbol] = FALLBACK_PRICES[s.symbol] || 100;
+      }
+    });
 
-  await Promise.all(
-    otherAssets.map(async ({ symbol, assetType }) => {
-      prices[symbol] = await fetchRealTimePrice(symbol, assetType);
-    })
+    return prices;
+  };
+
+  // Overall 15-second timeout for the entire batch operation
+  const timeoutPromise = new Promise<PriceData>((_, reject) =>
+    setTimeout(() => reject(new Error('Batch fetch timed out')), BATCH_TIMEOUT_MS)
   );
 
-  return prices;
+  try {
+    return await Promise.race([batchWork(), timeoutPromise]);
+  } catch {
+    // On timeout, return fallback prices for all requested symbols
+    const fallbackPrices: PriceData = {};
+    symbols.forEach(({ symbol }) => {
+      fallbackPrices[symbol] = FALLBACK_PRICES[symbol] || 100;
+    });
+    return fallbackPrices;
+  }
 }
 
 export function formatCurrency(value: number, decimals: number = 2): string {

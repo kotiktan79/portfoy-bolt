@@ -132,6 +132,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const sessionOpenValueRef = useRef<number | null>(null);
   const dailyOpenPricesRef = useRef<Record<string, number>>({});
   const holdingsRef = useRef<Holding[]>([]);
+  const isUpdatingRef = useRef(false);
 
   // Keep ref in sync
   useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
@@ -291,6 +292,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }
 
   async function updatePricesForHoldings(holdingsToUpdate: Holding[]) {
+    if (isUpdatingRef.current) return;
+    isUpdatingRef.current = true;
     try {
       const holdingsToAutoUpdate = holdingsToUpdate.filter(
         h => !h.manual_price && h.asset_type !== 'fund' && h.asset_type !== 'eurobond'
@@ -305,7 +308,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
       const prices = await fetchMultiplePrices(symbols);
 
-      const updates = holdingsToUpdate.map(async (holding) => {
+      const updates = holdingsToUpdate.map(async (holding): Promise<Holding> => {
         if (holding.manual_price || holding.asset_type === 'fund' || holding.asset_type === 'eurobond') {
           return holding;
         }
@@ -321,17 +324,31 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
             })
             .eq('id', holding.id);
 
-          return { ...holding, current_price: newPrice, currency: 'TRY' };
+          return { ...holding, current_price: newPrice, currency: 'TRY' as const };
         }
         return holding;
       });
 
-      const updatedHoldings = await Promise.all(updates);
-      setHoldings(updatedHoldings);
+      const results = await Promise.allSettled(updates);
+      setHoldings(prev => prev.map(h => {
+        const idx = holdingsToUpdate.findIndex(hu => hu.id === h.id);
+        if (idx === -1) return h;
+        const result = results[idx];
+        if (result.status === 'fulfilled') return result.value;
+        return h; // keep original on failure
+      }));
 
-      await calculateAndUpdatePnL(updatedHoldings);
+      // Build the latest holdings snapshot for PnL calculation
+      const updatedForPnl = holdingsToUpdate.map((h, idx) => {
+        const result = results[idx];
+        if (result.status === 'fulfilled') return result.value;
+        return h;
+      });
+      await calculateAndUpdatePnL(updatedForPnl);
     } catch (error) {
       console.error('Error updating prices:', error);
+    } finally {
+      isUpdatingRef.current = false;
     }
   }
 

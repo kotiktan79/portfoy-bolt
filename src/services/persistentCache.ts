@@ -37,7 +37,8 @@ function ensureLoaded(): CacheData {
 
     memoryCache = cleaned;
     return memoryCache;
-  } catch {
+  } catch (error) {
+    console.warn('Price cache corrupted, resetting:', error);
     memoryCache = {};
     return memoryCache;
   }
@@ -52,8 +53,8 @@ function scheduleSave(): void {
       try {
         localStorage.setItem(CACHE_KEY, JSON.stringify(memoryCache));
         isDirty = false;
-      } catch {
-        // storage full or unavailable
+      } catch (error) {
+        console.warn('Failed to save price cache:', error);
       }
     }
   }, SAVE_DEBOUNCE_MS);
