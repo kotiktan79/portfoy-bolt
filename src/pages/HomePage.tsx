@@ -19,6 +19,7 @@ import { ToastContainer } from '../components/Toast';
 import { CashDashboard } from '../components/CashDashboard';
 import { PerformanceDashboard } from '../components/PerformanceDashboard';
 import { FinancialCoach } from '../components/FinancialCoach';
+import { DailyActionPlan } from '../components/DailyActionPlan';
 import { SmartAlerts } from '../components/SmartAlerts';
 import { AssetBreakdownWidget } from '../components/AssetBreakdownWidget';
 import { DashboardHeader } from '../components/DashboardHeader';
@@ -151,7 +152,19 @@ export default function HomePage() {
             {/* 0. Smart Alerts */}
             {holdings.length > 0 && <SmartAlerts />}
 
-            {/* 1. Financial Coach */}
+            {/* 1. Daily Action Plan - step by step guidance */}
+            {holdings.length > 0 && (
+              <DailyActionPlan
+                holdings={holdings}
+                totalValue={totalCurrentValue}
+                totalInvestment={totalInvestment}
+                totalProfitLoss={totalProfitLoss}
+                totalProfitLossPercent={totalProfitLossPercent}
+                totalCashValue={totalCashValue}
+              />
+            )}
+
+            {/* 2. Financial Coach - detailed analysis */}
             {holdings.length > 0 && (
               <FinancialCoach
                 holdings={holdings}
