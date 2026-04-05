@@ -146,13 +146,13 @@ export default function HomePage() {
             totalCashValue={totalCashValue}
           />
 
-          {/* Dashboard Content */}
-          <div className="px-4 md:px-6 pt-5 pb-2 space-y-4">
+          {/* Dashboard Content - Clean, minimal */}
+          <div className="px-3 md:px-5 pt-4 pb-2 space-y-3">
 
-            {/* 0. Smart Alerts */}
+            {/* Alerts - only when critical */}
             {holdings.length > 0 && <SmartAlerts />}
 
-            {/* 1. Daily Action Plan - step by step guidance */}
+            {/* AI Action Plan - the core feature */}
             {holdings.length > 0 && (
               <DailyActionPlan
                 holdings={holdings}
@@ -164,41 +164,9 @@ export default function HomePage() {
               />
             )}
 
-            {/* 2. Financial Coach - detailed analysis */}
-            {holdings.length > 0 && (
-              <FinancialCoach
-                holdings={holdings}
-                totalValue={totalCurrentValue}
-                totalInvestment={totalInvestment}
-                totalProfitLoss={totalProfitLoss}
-                totalProfitLossPercent={totalProfitLossPercent}
-                totalCashValue={totalCashValue}
-              />
-            )}
-
-            {/* 2. ProfitSummary + AssetBreakdown side by side */}
-            {holdings.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <ProfitSummary unrealizedProfit={totalProfitLoss} unrealizedProfitPercent={totalProfitLossPercent} />
-                <AssetBreakdownWidget holdings={holdings} totalValue={totalCurrentValue} />
-              </div>
-            )}
-
-            {/* 3. CashDashboard */}
-            {livePnlData && <CashDashboard />}
-
-            {/* 3.5. DCA Planner, Investment Goals & Tax Calculator */}
-            <Suspense fallback={<ChartLoader />}>
-              <DCAPlanner />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
-                <InvestmentGoals />
-                <TaxCalculator />
-              </div>
-            </Suspense>
-
-            {/* 4. PnL Cards */}
+            {/* PnL Cards - compact row */}
             {livePnlData && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <PnLCard data={livePnlData.daily} />
                 <PnLCard data={livePnlData.weekly} />
                 <PnLCard data={livePnlData.monthly} />
@@ -298,63 +266,27 @@ export default function HomePage() {
           )}
 
           {showCharts && holdings.length > 0 && (
-            <div className="px-4 md:px-6 pb-4 space-y-4">
+            <div className="px-3 md:px-5 pb-4 space-y-3">
               <Suspense fallback={<ChartLoader />}>
-                <TradingSignals holdings={holdings} />
-                <AIPortfolioSuggestions holdings={holdings} totalValue={totalCurrentValue} />
-                <AdvancedAnalytics holdings={holdings} totalValue={totalCurrentValue} totalInvestment={totalInvestment} />
-                <MultiBenchmark portfolioValue={totalCurrentValue} initialValue={totalInvestment} />
-
-                {holdings.length > 0 && (
-                  <AdvancedChart symbol={holdings[0].symbol} currentPrice={holdings[0].current_price} />
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-slate-200 dark:border-gray-700">
-                    <h3 className="text-xs font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <BarChart3 className="text-blue-500" size={14} />
-                      Performans
-                    </h3>
-                    <div className="h-64">
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Performans</h3>
+                    <div className="h-56">
                       {historicalData.length > 0 ? (
                         <PortfolioChart data={historicalData} type="area" />
                       ) : (
-                        <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600">
-                          <p className="text-sm">Gecmis veri bekleniyor...</p>
-                        </div>
+                        <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600 text-sm">Veri bekleniyor...</div>
                       )}
                     </div>
                   </div>
                   <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-slate-200 dark:border-gray-700">
-                    <h3 className="text-xs font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <PieChart className="text-blue-500" size={14} />
-                      Dagilim
-                    </h3>
-                    <div className="h-64">
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Dağılım</h3>
+                    <div className="h-56">
                       <AllocationChart holdings={holdings} />
                     </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <RiskMetrics />
-                  <ScenarioAnalysis holdings={holdings} currentValue={totalCurrentValue} />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <TransactionHistory />
-                  <AchievementBadges
-                    stats={{
-                      totalHoldings: holdings.length,
-                      totalValue: totalCurrentValue,
-                      totalPnL: totalProfitLoss,
-                      assetTypes: [...new Set(holdings.map((h) => h.asset_type))],
-                      positiveDays: 0,
-                      totalDividends: 0,
-                      totalTransactions: 0,
-                    }}
-                  />
-                </div>
+                <TransactionHistory />
               </Suspense>
             </div>
           )}
