@@ -18,7 +18,7 @@ import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
 import { CashDashboard } from '../components/CashDashboard';
 import { PerformanceDashboard } from '../components/PerformanceDashboard';
-import { AIDailyGuide } from '../components/AIDailyGuide';
+import { FinancialCoach } from '../components/FinancialCoach';
 import { AssetBreakdownWidget } from '../components/AssetBreakdownWidget';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { PortfolioMetricsBar } from '../components/PortfolioMetricsBar';
@@ -145,14 +145,15 @@ export default function HomePage() {
           {/* Dashboard Content */}
           <div className="px-4 md:px-6 pt-5 pb-2 space-y-4">
 
-            {/* 1. AI Daily Guide */}
+            {/* 1. Financial Coach */}
             {holdings.length > 0 && (
-              <AIDailyGuide
+              <FinancialCoach
                 holdings={holdings}
                 totalValue={totalCurrentValue}
                 totalInvestment={totalInvestment}
                 totalProfitLoss={totalProfitLoss}
                 totalProfitLossPercent={totalProfitLossPercent}
+                totalCashValue={totalCashValue}
               />
             )}
 
