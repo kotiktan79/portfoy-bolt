@@ -1,4 +1,4 @@
-import { Home, TrendingUp, PieChart, Settings, Scale, Zap } from 'lucide-react';
+import { Home, TrendingUp, PieChart, Eye, Scale } from 'lucide-react';
 
 interface MobileBottomNavProps {
   onNavigate: (page: string) => void;
@@ -9,10 +9,9 @@ export default function MobileBottomNav({ onNavigate, currentPage = 'home' }: Mo
   const navItems = [
     { id: 'home', icon: Home, label: 'Ana Sayfa' },
     { id: 'analytics', icon: TrendingUp, label: 'Analitik' },
+    { id: 'watchlist', icon: Eye, label: 'İzleme' },
     { id: 'allocation', icon: PieChart, label: 'Dağılım' },
     { id: 'rebalance', icon: Scale, label: 'Rebalance' },
-    { id: 'scenario', icon: Zap, label: 'Senaryo' },
-    { id: 'settings', icon: Settings, label: 'Ayarlar' },
   ];
 
   return (

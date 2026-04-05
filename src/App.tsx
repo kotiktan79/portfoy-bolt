@@ -11,6 +11,7 @@ const RebalancingPage = lazy(() => import('./pages/RebalancingPage'));
 const ScenarioPage = lazy(() => import('./pages/ScenarioPage'));
 const AIAdvisorPage = lazy(() => import('./pages/AIAdvisorPage'));
 const AllocationPage = lazy(() => import('./pages/AllocationPage'));
+const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 
 function PageLoader() {
   return (
@@ -36,6 +37,7 @@ function App() {
             <Route path="/scenario" element={<Suspense fallback={<PageLoader />}><ScenarioPage /></Suspense>} />
             <Route path="/ai-advisor" element={<Suspense fallback={<PageLoader />}><AIAdvisorPage /></Suspense>} />
             <Route path="/allocation" element={<Suspense fallback={<PageLoader />}><AllocationPage /></Suspense>} />
+            <Route path="/watchlist" element={<Suspense fallback={<PageLoader />}><WatchlistPage /></Suspense>} />
           </Route>
         </Routes>
       </PortfolioProvider>

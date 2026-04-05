@@ -4,6 +4,7 @@ import MobileBottomNav from './MobileBottomNav';
 const pageMap: Record<string, string> = {
   home: '/',
   analytics: '/analytics',
+  watchlist: '/watchlist',
   allocation: '/allocation',
   rebalance: '/rebalancing',
   scenario: '/scenario',
