@@ -18,6 +18,7 @@ import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
 import { CashDashboard } from '../components/CashDashboard';
 import { PerformanceDashboard } from '../components/PerformanceDashboard';
+import { AIDailyGuide } from '../components/AIDailyGuide';
 import { AssetBreakdownWidget } from '../components/AssetBreakdownWidget';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { PortfolioMetricsBar } from '../components/PortfolioMetricsBar';
@@ -142,6 +143,16 @@ export default function HomePage() {
 
           {/* Dashboard Content */}
           <div className="p-4 md:p-6 bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 border-b border-slate-200 dark:border-gray-700 space-y-5">
+
+            {holdings.length > 0 && (
+              <AIDailyGuide
+                holdings={holdings}
+                totalValue={totalCurrentValue}
+                totalInvestment={totalInvestment}
+                totalProfitLoss={totalProfitLoss}
+                totalProfitLossPercent={totalProfitLossPercent}
+              />
+            )}
 
             {holdings.length > 0 && (
               <PerformanceDashboard holdings={holdings} totalValue={totalCurrentValue} totalInvestment={totalInvestment} />
