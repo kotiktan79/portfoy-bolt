@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Brain, TrendingUp, TrendingDown, AlertTriangle, Shield,
@@ -230,14 +230,22 @@ export function AIDailyGuide({ holdings, totalValue, totalInvestment, totalProfi
   const [analysis, setAnalysis] = useState<DailyAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(true);
+  const hasRunRef = useRef(false);
+  const holdingsCountRef = useRef(0);
 
   useEffect(() => {
     if (holdings.length === 0) {
       setLoading(false);
       return;
     }
-    runAnalysis();
-  }, [holdings]);
+    // Only run on first load or when holdings count changes (add/delete)
+    // NOT on every price update
+    if (!hasRunRef.current || holdings.length !== holdingsCountRef.current) {
+      hasRunRef.current = true;
+      holdingsCountRef.current = holdings.length;
+      runAnalysis();
+    }
+  }, [holdings.length]);
 
   async function runAnalysis() {
     setLoading(true);
