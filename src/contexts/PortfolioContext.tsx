@@ -375,65 +375,84 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }
 
   function calculateLivePnL() {
-    if (holdings.length === 0) { setLivePnlData(null); return; }
+    const investmentOnly = holdings.filter(h => h.asset_type !== 'cash');
+    if (investmentOnly.length === 0) { setLivePnlData(null); return; }
 
-    const currentTotalValue = holdings.filter(h => h.asset_type !== 'cash').reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+    const currentTotalValue = investmentOnly.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+
+    // Calculate daily open value from stored open prices (per-holding)
     const openPrices = dailyOpenPricesRef.current;
     let dailyOpenValue = 0;
-    let hasOpenPrices = false;
+    let holdingsWithOpenPrice = 0;
 
-    for (const h of holdings) {
-      if (h.asset_type === 'cash') continue;
+    for (const h of investmentOnly) {
       const op = openPrices[h.id];
       if (op && op > 0) {
+        // Sanity check: open price shouldn't differ from current by more than 50%
         const ratio = h.current_price > 0 ? op / h.current_price : 1;
-        const validOpen = ratio < 0.1 || ratio > 10 ? h.current_price : op;
-        dailyOpenValue += validOpen * h.quantity;
-        hasOpenPrices = true;
+        if (ratio > 0.5 && ratio < 2.0) {
+          dailyOpenValue += op * h.quantity;
+          holdingsWithOpenPrice++;
+        } else {
+          // Open price seems stale/wrong, use current
+          dailyOpenValue += h.current_price * h.quantity;
+        }
       } else {
         dailyOpenValue += h.current_price * h.quantity;
       }
     }
 
-    if (!hasOpenPrices) {
+    // If we don't have open prices for any holding, use session storage as baseline
+    if (holdingsWithOpenPrice === 0) {
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       if (sessionOpenValueRef.current === null && currentTotalValue > 0) {
-        const stored = sessionStorage.getItem('portfolio_open_value');
-        const storedDate = sessionStorage.getItem('portfolio_open_date');
+        const stored = sessionStorage.getItem('portfolio_open_value_v2');
+        const storedDate = sessionStorage.getItem('portfolio_open_date_v2');
 
         if (stored && storedDate === today) {
           sessionOpenValueRef.current = parseFloat(stored);
         } else {
           sessionOpenValueRef.current = currentTotalValue;
-          sessionStorage.setItem('portfolio_open_value', String(currentTotalValue));
-          sessionStorage.setItem('portfolio_open_date', today);
+          sessionStorage.setItem('portfolio_open_value_v2', String(currentTotalValue));
+          sessionStorage.setItem('portfolio_open_date_v2', today);
         }
       }
       dailyOpenValue = sessionOpenValueRef.current || currentTotalValue;
     }
 
-    const sessionBase = dailyOpenValue;
-    const dailyBase = sessionBase;
-    let weeklyBase = sessionBase;
-    let monthlyBase = sessionBase;
+    // Sanity check: daily change shouldn't be more than 30% of portfolio
+    const dailyChange = currentTotalValue - dailyOpenValue;
+    const dailyPct = dailyOpenValue > 0 ? (dailyChange / dailyOpenValue) * 100 : 0;
+
+    // If daily change seems unreasonable (>30%), reset to 0
+    const safeDailyChange = Math.abs(dailyPct) > 30 ? 0 : dailyChange;
+    const safeDailyPct = Math.abs(dailyPct) > 30 ? 0 : dailyPct;
+
+    // Weekly and monthly: use snapshot data if available, with sanity checks
+    let weeklyChange = safeDailyChange;
+    let weeklyPct = safeDailyPct;
+    let monthlyChange = safeDailyChange;
+    let monthlyPct = safeDailyPct;
 
     if (pnlData) {
-      const pnlWeeklyBase = pnlData.weekly.value - pnlData.weekly.change;
-      const pnlMonthlyBase = pnlData.monthly.value - pnlData.monthly.change;
-      if (pnlWeeklyBase > 0) weeklyBase = pnlWeeklyBase;
-      if (pnlMonthlyBase > 0) monthlyBase = pnlMonthlyBase;
+      // Validate weekly data
+      if (Math.abs(pnlData.weekly.percentage) < 50) {
+        weeklyChange = pnlData.weekly.change;
+        weeklyPct = pnlData.weekly.percentage;
+      }
+      // Validate monthly data
+      if (Math.abs(pnlData.monthly.percentage) < 80) {
+        monthlyChange = pnlData.monthly.change;
+        monthlyPct = pnlData.monthly.percentage;
+      }
     }
 
-    const dailyChange = currentTotalValue - dailyBase;
-    const weeklyChange = currentTotalValue - weeklyBase;
-    const monthlyChange = currentTotalValue - monthlyBase;
-
     setLivePnlData({
-      daily: { period: 'Günlük', value: currentTotalValue, change: dailyChange, percentage: dailyBase > 0 ? (dailyChange / dailyBase) * 100 : 0 },
-      weekly: { period: 'Haftalık', value: currentTotalValue, change: weeklyChange, percentage: weeklyBase > 0 ? (weeklyChange / weeklyBase) * 100 : 0 },
-      monthly: { period: 'Aylık', value: currentTotalValue, change: monthlyChange, percentage: monthlyBase > 0 ? (monthlyChange / monthlyBase) * 100 : 0 },
+      daily: { period: 'Günlük', value: currentTotalValue, change: safeDailyChange, percentage: safeDailyPct },
+      weekly: { period: 'Haftalık', value: currentTotalValue, change: weeklyChange, percentage: weeklyPct },
+      monthly: { period: 'Aylık', value: currentTotalValue, change: monthlyChange, percentage: monthlyPct },
     });
   }
 
