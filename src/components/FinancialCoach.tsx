@@ -79,68 +79,116 @@ export function FinancialCoach({ holdings, totalValue, totalInvestment, totalPro
     const losers = holdingStats.filter(h => h.pnlPct < 0).sort((a, b) => a.pnlPct - b.pnlPct);
     const assetTypes = new Set(investmentHoldings.map(h => h.asset_type));
 
+    // Determine what's MISSING for diversification suggestions
+    const typeWeights: Record<string, number> = {};
+    holdingStats.forEach(h => {
+      typeWeights[h.asset_type] = (typeWeights[h.asset_type] || 0) + h.weight;
+    });
+
+    function getBuyAlternative(sellAmount: number, excludeType?: string): string {
+      // Suggest what to buy based on portfolio gaps
+      const suggestions: string[] = [];
+
+      if (!assetTypes.has('commodity') || (typeWeights['commodity'] || 0) < 10) {
+        suggestions.push(`${formatCurrency(sellAmount * 0.4)} ₺ Altın (portföy koruma)`);
+      }
+      if (!assetTypes.has('stock') || (typeWeights['stock'] || 0) < 20) {
+        suggestions.push(`${formatCurrency(sellAmount * 0.3)} ₺ BIST hisse (THYAO, ASELS gibi)`);
+      }
+      if (!assetTypes.has('crypto') || (typeWeights['crypto'] || 0) < 10) {
+        suggestions.push(`${formatCurrency(sellAmount * 0.2)} ₺ BTC/ETH`);
+      }
+      if (excludeType === 'stock') {
+        suggestions.unshift(`${formatCurrency(sellAmount * 0.4)} ₺ Altın`);
+      }
+      if (excludeType === 'crypto') {
+        suggestions.unshift(`${formatCurrency(sellAmount * 0.4)} ₺ BIST hisse`);
+      }
+
+      // Filter out suggestions for asset type we're selling from
+      const filtered = suggestions.filter(s => {
+        if (excludeType === 'commodity' && s.includes('Altın')) return false;
+        if (excludeType === 'stock' && s.includes('BIST')) return false;
+        if (excludeType === 'crypto' && s.includes('BTC')) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        return `${formatCurrency(sellAmount)} ₺ farklı varlık türlerine dağıtın`;
+      }
+      return filtered.slice(0, 2).join(' + ');
+    }
+
     // 1. URGENT: Big losers (>20% loss)
     const bigLosers = losers.filter(l => l.pnlPct < -20);
     if (bigLosers.length > 0) {
+      const loser = bigLosers[0];
+      const sellValue = loser.value;
       items.push({
         priority: 'urgent',
         icon: 'warning',
-        title: `${bigLosers[0].symbol} %${Math.abs(bigLosers[0].pnlPct).toFixed(0)} zararda`,
-        description: `Stop-loss belirleyin veya pozisyonu kapatmayı değerlendirin. Zarar: ${formatCurrency(Math.abs(bigLosers[0].pnl))} ₺`,
-        amount: `-${formatCurrency(Math.abs(bigLosers[0].pnl))} ₺`,
+        title: `${loser.symbol} sat → alternatife yönlendir`,
+        description: `%${Math.abs(loser.pnlPct).toFixed(0)} zararda (${formatCurrency(Math.abs(loser.pnl))} ₺). Satın ve yerine: ${getBuyAlternative(sellValue, loser.asset_type)}`,
+        amount: `${formatCurrency(sellValue)} ₺`,
       });
     }
 
     // 2. URGENT: Over-concentration (>40%)
     if (sorted.length > 0 && sorted[0].weight > 40) {
+      const top = sorted[0];
+      const sellAmount = top.value * 0.4;
       items.push({
         priority: 'urgent',
         icon: 'rebalance',
-        title: `${sorted[0].symbol} portföyün %${sorted[0].weight.toFixed(0)}'i`,
-        description: `Tek varlık riski çok yüksek. %20-25'e düşürmek için ${formatCurrency(sorted[0].value * 0.4)} ₺ satış yapabilirsiniz.`,
-        amount: `${formatCurrency(sorted[0].value * 0.4)} ₺ sat`,
+        title: `${top.symbol}'den ${formatCurrency(sellAmount)} ₺ sat → dağıt`,
+        description: `Portföyün %${top.weight.toFixed(0)}'i tek varlıkta. Satıp yerine: ${getBuyAlternative(sellAmount, top.asset_type)}`,
+        amount: `${formatCurrency(sellAmount)} ₺ aktar`,
         route: '/rebalancing',
       });
     }
 
-    // 3. IMPORTANT: Take profit (>50% gain)
+    // 3. IMPORTANT: Take profit (>50% gain) → suggest what to buy
     const bigWinners = winners.filter(w => w.pnlPct > 50);
     if (bigWinners.length > 0) {
-      const profitToTake = bigWinners[0].pnl * 0.3; // Suggest taking 30% of profit
+      const winner = bigWinners[0];
+      const profitToTake = winner.pnl * 0.3;
       items.push({
         priority: 'important',
         icon: 'sell',
-        title: `${bigWinners[0].symbol}'den kâr al (%+${bigWinners[0].pnlPct.toFixed(0)})`,
-        description: `Kârın %30'unu realize edin. Önerilen satış: ${formatCurrency(profitToTake)} ₺ değerinde`,
+        title: `${winner.symbol}'den kâr al → yeniden dağıt`,
+        description: `%+${winner.pnlPct.toFixed(0)} kârda. ${formatCurrency(profitToTake)} ₺ realize edip yerine: ${getBuyAlternative(profitToTake, winner.asset_type)}`,
         amount: `+${formatCurrency(profitToTake)} ₺`,
       });
     }
 
-    // 4. IMPORTANT: Low diversification
+    // 4. IMPORTANT: Low diversification → specific buy suggestions
     if (assetTypes.size < 3 && investmentHoldings.length >= 3) {
-      const missing = [];
-      if (!assetTypes.has('stock')) missing.push('hisse');
-      if (!assetTypes.has('crypto')) missing.push('kripto');
-      if (!assetTypes.has('commodity')) missing.push('altın/emtia');
+      const buyBudget = totalValue * 0.1; // Suggest 10% of portfolio
+      const suggestions: string[] = [];
+      if (!assetTypes.has('commodity')) suggestions.push(`Altın (${formatCurrency(buyBudget)} ₺)`);
+      if (!assetTypes.has('stock')) suggestions.push(`BIST hisse - THYAO, SISE, ASELS (${formatCurrency(buyBudget)} ₺)`);
+      if (!assetTypes.has('crypto')) suggestions.push(`BTC + ETH (${formatCurrency(buyBudget)} ₺)`);
+      if (!assetTypes.has('currency')) suggestions.push(`USD/EUR döviz (${formatCurrency(buyBudget)} ₺)`);
       items.push({
         priority: 'important',
         icon: 'buy',
-        title: 'Portföyü çeşitlendirin',
-        description: `Sadece ${assetTypes.size} varlık türünüz var. ${missing.slice(0, 2).join(' ve ')} ekleyin.`,
+        title: 'Eksik varlık türleri ekleyin',
+        description: `Alın: ${suggestions.slice(0, 2).join(', ')}`,
         route: '/watchlist',
       });
     }
 
-    // 5. SUGGESTION: Cash too high
+    // 5. SUGGESTION: Cash too high → specific buy suggestions
     if (totalCashValue > 0 && grandTotal > 0) {
       const cashRatio = (totalCashValue / grandTotal) * 100;
       if (cashRatio > 30) {
+        const investAmount = totalCashValue * 0.5;
         items.push({
           priority: 'suggestion',
           icon: 'cash',
-          title: `Nakit oranı yüksek (%${cashRatio.toFixed(0)})`,
-          description: `${formatCurrency(totalCashValue)} ₺ nakit bekliyor. Enflasyona karşı yatırıma yönlendirin.`,
-          amount: `${formatCurrency(totalCashValue * 0.5)} ₺ yatır`,
+          title: `${formatCurrency(investAmount)} ₺ nakiti yatırıma çevirin`,
+          description: `Nakit %${cashRatio.toFixed(0)}. Öneri: ${getBuyAlternative(investAmount)}`,
+          amount: `${formatCurrency(investAmount)} ₺ yatır`,
         });
       }
     }
@@ -150,19 +198,22 @@ export function FinancialCoach({ holdings, totalValue, totalInvestment, totalPro
       items.push({
         priority: 'suggestion',
         icon: 'goal',
-        title: `Portföy %${totalProfitLossPercent.toFixed(0)} kârda - harika!`,
-        description: 'Hedeflerinizi gözden geçirin ve kâr realizasyonu stratejisi belirleyin.',
+        title: `Portföy %${totalProfitLossPercent.toFixed(0)} kârda`,
+        description: `Toplam ${formatCurrency(totalProfitLoss)} ₺ kâr. Kârın bir kısmını altın veya dövize kaydırarak koruma altına alın.`,
       });
     }
 
-    // 7. SUGGESTION: Buy opportunity for losers with small loss
+    // 7. SUGGESTION: Buy opportunity (small dip)
     const smallLosers = losers.filter(l => l.pnlPct > -10 && l.pnlPct < -3);
-    if (smallLosers.length > 0 && totalCashValue > 0) {
+    if (smallLosers.length > 0 && totalCashValue > 1000) {
+      const target = smallLosers[0];
+      const buyAmount = Math.min(totalCashValue * 0.2, target.value * 0.3);
       items.push({
         priority: 'suggestion',
         icon: 'buy',
-        title: `${smallLosers[0].symbol} maliyeti düşürme fırsatı`,
-        description: `%${Math.abs(smallLosers[0].pnlPct).toFixed(1)} düşüşte. Ek alım yaparak ortalama maliyeti düşürebilirsiniz.`,
+        title: `${target.symbol} alım fırsatı (%${target.pnlPct.toFixed(1)} düşüş)`,
+        description: `${formatCurrency(buyAmount)} ₺ ek alım yaparak ortalama maliyeti ${formatCurrency(target.purchase_price * 0.97)} ₺'ye düşürebilirsiniz.`,
+        amount: `${formatCurrency(buyAmount)} ₺ al`,
       });
     }
 
