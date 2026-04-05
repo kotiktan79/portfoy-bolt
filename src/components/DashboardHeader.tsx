@@ -3,7 +3,7 @@ import {
   TrendingUp, Plus, RefreshCw, Moon, Sun, Bell, BarChart3,
   Wifi, WifiOff, Activity, Download, Tv, Shield, Palette,
   PieChart, Scale, Zap, Database, ChevronDown, Settings,
-  Target, Menu, X, Trash2, Globe
+  Target, Menu, X, Trash2
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
 import { useLanguage } from '../contexts/LanguageContext';

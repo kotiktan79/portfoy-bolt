@@ -14,7 +14,6 @@ import {
 import {
   getPnLData,
   savePortfolioSnapshot,
-  calculateRebalance,
   getDefaultTargetAllocations,
   getHistoricalSnapshots,
   PnLData,
@@ -241,7 +240,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       if (data) {
         setHoldings(data);
 
-        const dailyPrices = await loadDailyOpenPrices();
+        const holdingIds = data.map(h => h.id);
+        const dailyPrices = await loadDailyOpenPrices(holdingIds);
         if (dailyPrices) {
           dailyOpenPricesRef.current = dailyPrices;
         }
@@ -273,7 +273,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         }
         if (needsSave) {
           dailyOpenPricesRef.current = stored;
-          await saveDailyOpenPrices(stored);
+          await saveDailyOpenPrices(data, stored);
         }
       }
     } catch (error) {

@@ -505,7 +505,7 @@ export function generateAIResponse(question: string, context: AIResponseContext)
     answer = `En güçlü AL sinyali: ${context.strongBuySignal || 'Hesaplanıyor'}. En güçlü SAT sinyali: ${context.strongSellSignal || 'Hesaplanıyor'}. Teknik analiz sayfasından detaylı sinyalleri görebilirsiniz.`;
     suggestions.push('Hangi varlıkta RSI düşük?', 'MACD sinyalleri nedir?');
   } else if (lowerQ.includes('performans') || lowerQ.includes('getiri')) {
-    answer = `Portföy notunuz: ${context.portfolioScore?.grade || 'hesaplanıyor'}. Toplam getiri: ${context.totalPnL?.toFixed(1) || 0}%. Piyasaya göre: ${context.portfolioScore?.comparison?.vsMarket > 0 ? '+' : ''}${context.portfolioScore?.comparison?.vsMarket?.toFixed(1) || 0}%.`;
+    answer = `Portföy notunuz: ${context.portfolioScore?.grade || 'hesaplanıyor'}. Toplam getiri: ${context.totalPnL?.toFixed(1) || 0}%. Piyasaya göre: ${(context.portfolioScore?.comparison?.vsMarket ?? 0) > 0 ? '+' : ''}${context.portfolioScore?.comparison?.vsMarket?.toFixed(1) || 0}%.`;
     suggestions.push('Notumu nasıl yükseltebilirim?', 'Performansım iyi mi?');
   } else {
     answer = 'Portföyünüz hakkında daha spesifik bir soru sorabilirsiniz. Risk analizi, alım-satım önerileri veya performans değerlendirmesi gibi konularda yardımcı olabilirim.';
