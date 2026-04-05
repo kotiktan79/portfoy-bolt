@@ -6,212 +6,168 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+interface HoldingData {
+  symbol: string;
+  asset_type: string;
+  quantity: number;
+  purchase_price: number;
+  current_price: number;
+  total_value: number;
+  pnl: number;
+  pnl_percent: number;
+  weight: number;
+}
+
 interface PortfolioData {
-  holdings: Array<{
-    symbol: string;
-    asset_type: string;
-    quantity: number;
-    avg_price: number;
-    current_price: number;
-    total_value: number;
-    profit_loss: number;
-    profit_loss_percent: number;
-  }>;
+  holdings: HoldingData[];
   total_value: number;
   total_invested: number;
-  total_profit_loss: number;
-  total_profit_loss_percent: number;
+  total_pnl: number;
+  total_pnl_percent: number;
+  cash_balance: number;
+  risk_score: number;
 }
 
 interface AIRequest {
   portfolio: PortfolioData;
-  analysisType: 'overview' | 'risk' | 'diversification' | 'suggestions';
-  riskProfile?: 'conservative' | 'moderate' | 'aggressive';
+  question: string;
+  conversationHistory?: Array<{ role: string; content: string }>;
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const { portfolio, analysisType, riskProfile = 'moderate' }: AIRequest = await req.json();
+    const { portfolio, question, conversationHistory = [] }: AIRequest = await req.json();
 
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) {
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!anthropicKey) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'OpenAI API key not configured',
-          suggestions: getStaticSuggestions(portfolio, analysisType, riskProfile)
+        JSON.stringify({
+          success: false,
+          error: 'Claude API key not configured',
+          fallback: true,
         }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const prompt = buildPrompt(portfolio, analysisType, riskProfile);
+    const systemPrompt = buildSystemPrompt(portfolio);
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const messages = [
+      ...conversationHistory.slice(-6).map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+      { role: 'user' as const, content: question },
+    ];
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiKey}`,
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'Sen profesyonel bir yatırım danışmanısın. Türk yatırımcılara portföy analizi ve önerileri sunuyorsun. Yanıtlarını Türkçe, net, anlaşılır ve uygulanabilir şekilde ver. Risk analizi, diversifikasyon ve piyasa trendlerini göz önünde bulundur.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        system: systemPrompt,
+        messages,
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('OpenAI API error:', error);
+      console.error('Claude API error:', error);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'AI service temporarily unavailable',
-          suggestions: getStaticSuggestions(portfolio, analysisType, riskProfile)
+          fallback: true,
         }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
+    const aiResponse = data.content[0].text;
 
     return new Response(
       JSON.stringify({
         success: true,
-        analysis: aiResponse,
+        response: aiResponse,
+        model: 'claude-sonnet-4-20250514',
         timestamp: new Date().toISOString(),
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message,
-        suggestions: []
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ success: false, error: error.message, fallback: true }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
 
-function buildPrompt(portfolio: PortfolioData, analysisType: string, riskProfile: string): string {
-  const { holdings, total_value, total_invested, total_profit_loss_percent } = portfolio;
+function buildSystemPrompt(portfolio: PortfolioData): string {
+  const { holdings, total_value, total_invested, total_pnl_percent, cash_balance, risk_score } = portfolio;
 
-  const assetDistribution = holdings.reduce((acc, h) => {
-    acc[h.asset_type] = (acc[h.asset_type] || 0) + h.total_value;
-    return acc;
-  }, {} as Record<string, number>);
+  const byType: Record<string, { count: number; value: number; pnl: number }> = {};
+  holdings.forEach(h => {
+    if (!byType[h.asset_type]) byType[h.asset_type] = { count: 0, value: 0, pnl: 0 };
+    byType[h.asset_type].count++;
+    byType[h.asset_type].value += h.total_value;
+    byType[h.asset_type].pnl += h.pnl;
+  });
 
-  const distText = Object.entries(assetDistribution)
-    .map(([type, value]) => `${type}: ${((value / total_value) * 100).toFixed(1)}%`)
-    .join(', ');
+  const typeNames: Record<string, string> = {
+    stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
+    fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia', cash: 'Nakit',
+  };
 
-  const topHoldings = holdings
+  const distribution = Object.entries(byType)
+    .sort((a, b) => b[1].value - a[1].value)
+    .map(([type, d]) => `${typeNames[type] || type}: ${d.count} adet, ${d.value.toFixed(0)} TL (%${((d.value / total_value) * 100).toFixed(1)}), KZ: ${d.pnl.toFixed(0)} TL`)
+    .join('\n');
+
+  const topHoldings = [...holdings]
     .sort((a, b) => b.total_value - a.total_value)
-    .slice(0, 5)
-    .map(h => `${h.symbol} (${h.asset_type}): ${((h.total_value / total_value) * 100).toFixed(1)}%`)
-    .join(', ');
+    .slice(0, 10)
+    .map(h => `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}): ${h.quantity} adet, Alış: ${h.purchase_price.toFixed(2)} TL, Güncel: ${h.current_price.toFixed(2)} TL, Değer: ${h.total_value.toFixed(0)} TL, KZ: ${h.pnl >= 0 ? '+' : ''}${h.pnl.toFixed(0)} TL (%${h.pnl_percent >= 0 ? '+' : ''}${h.pnl_percent.toFixed(1)}), Ağırlık: %${h.weight.toFixed(1)}`)
+    .join('\n');
 
-  const baseInfo = `
-Portföy Özeti:
-- Toplam Değer: ${total_value.toFixed(2)} TL
-- Yatırılan: ${total_invested.toFixed(2)} TL
-- Kar/Zarar: %${total_profit_loss_percent.toFixed(2)}
-- Varlık Dağılımı: ${distText}
-- En Büyük 5 Holding: ${topHoldings}
-- Risk Profili: ${riskProfile}
-- Toplam ${holdings.length} pozisyon
-`;
+  const winners = holdings.filter(h => h.pnl_percent > 0).sort((a, b) => b.pnl_percent - a.pnl_percent).slice(0, 3);
+  const losers = holdings.filter(h => h.pnl_percent < 0).sort((a, b) => a.pnl_percent - b.pnl_percent).slice(0, 3);
 
-  switch (analysisType) {
-    case 'overview':
-      return `${baseInfo}\n\nBu portföy hakkında genel bir değerlendirme yap. Güçlü ve zayıf yönlerini belirt. 3-4 madde halinde özetle.`;
-    
-    case 'risk':
-      return `${baseInfo}\n\nBu portföyün risk analizini yap. Konsantrasyon riski, volatilite, korelasyon gibi faktörleri değerlendir. Risk azaltma önerileri sun. 4-5 madde halinde.`;
-    
-    case 'diversification':
-      return `${baseInfo}\n\nDiversifikasyon açısından portföyü değerlendir. Hangi varlık sınıflarında eksiklik var? Daha iyi bir dağılım için ne önerirsin? 4-5 madde halinde.`;
-    
-    case 'suggestions':
-      return `${baseInfo}\n\nBu portföy için somut yatırım önerileri ver. Hangi varlıkları almayı/satmayı önerirsin? Hedef ağırlıklar belirt. Risk profiline uygun 5-6 öneri sun.`;
-    
-    default:
-      return baseInfo;
-  }
-}
+  return `Sen profesyonel bir Türk yatırım danışmanısın. Kullanıcının portföyünü analiz edip kişiselleştirilmiş, uygulanabilir öneriler sunuyorsun.
 
-function getStaticSuggestions(portfolio: PortfolioData, _analysisType: string, _riskProfile: string): string[] {
-  const cryptoRatio = portfolio.holdings
-    .filter(h => h.asset_type === 'crypto')
-    .reduce((sum, h) => sum + h.total_value, 0) / portfolio.total_value;
+KURALLAR:
+- Her zaman Türkçe yanıtla
+- Somut, uygulanabilir öneriler ver (hangi varlık, ne kadar, neden)
+- Risk uyarılarını açıkça belirt
+- Yatırım tavsiyesi verirken "yatırım tavsiyesi değildir" disclaimer'ı kullanma - kullanıcı zaten biliyor
+- Kısa ve öz ol, gereksiz açıklama yapma
+- Emoji kullan ama abartma
+- Fiyat ve yüzde bilgilerini portföy verisinden al, uydurma
 
-  const stockRatio = portfolio.holdings
-    .filter(h => h.asset_type === 'stock')
-    .reduce((sum, h) => sum + h.total_value, 0) / portfolio.total_value;
+KULLANICININ PORTFÖYÜ:
+Toplam Değer: ${total_value.toFixed(0)} TL
+Toplam Yatırım: ${total_invested.toFixed(0)} TL
+Toplam KZ: %${total_pnl_percent >= 0 ? '+' : ''}${total_pnl_percent.toFixed(1)} (${(total_value - total_invested).toFixed(0)} TL)
+Nakit: ${cash_balance.toFixed(0)} TL
+Risk Skoru: ${risk_score}/100
+Pozisyon Sayısı: ${holdings.length}
 
-  const goldRatio = portfolio.holdings
-    .filter(h => h.asset_type === 'commodity')
-    .reduce((sum, h) => sum + h.total_value, 0) / portfolio.total_value;
+VARLIK DAĞILIMI:
+${distribution}
 
-  const suggestions: string[] = [];
+EN BÜYÜK POZİSYONLAR:
+${topHoldings}
 
-  if (cryptoRatio > 0.5) {
-    suggestions.push('⚠️ Kripto ağırlığı yüksek - Risk azaltmak için hisse veya altına geçiş yapabilirsiniz');
-  }
-
-  if (goldRatio < 0.1) {
-    suggestions.push('💰 Altın pozisyonu düşük - Hedge olarak %10-15 altın eklemeyi düşünün');
-  }
-
-  if (stockRatio > 0.7) {
-    suggestions.push('📊 Hisse yoğunluğu fazla - Portföyü dengeli hale getirmek için diversifikasyon öneriyoruz');
-  }
-
-  if (portfolio.holdings.length < 5) {
-    suggestions.push('🎯 Pozisyon sayısı az - En az 8-10 farklı varlığa yayılım yapın');
-  }
-
-  if (portfolio.total_profit_loss_percent < -15) {
-    suggestions.push('📉 Yüksek zarar - Pozisyonlarınızı gözden geçirin, stop-loss belirleyin');
-  }
-
-  if (suggestions.length === 0) {
-    suggestions.push('✅ Portföyünüz dengeli görünüyor');
-    suggestions.push('📈 Düzenli rebalancing yapmayı unutmayın');
-    suggestions.push('💡 Risk yönetimi için stop-loss kullanın');
-  }
-
-  return suggestions;
+EN KARLI: ${winners.map(w => `${w.symbol} %+${w.pnl_percent.toFixed(1)}`).join(', ') || 'Yok'}
+EN ZARARLI: ${losers.map(l => `${l.symbol} %${l.pnl_percent.toFixed(1)}`).join(', ') || 'Yok'}`;
 }

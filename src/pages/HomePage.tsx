@@ -26,7 +26,6 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import InstallPWA from '../components/InstallPWA';
 import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
-import { APIHealthMonitor } from '../components/APIHealthMonitor';
 
 // Lazy loaded components (charts, modals, analytics - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
@@ -396,7 +395,6 @@ export default function HomePage() {
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
       <InstallPWA />
       <PriceUpdateNotification />
-      <APIHealthMonitor />
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   type SmartSuggestion,
 } from '../services/advancedAI';
 import { generateSmartResponse, ChatMessage } from '../services/smartAIChat';
+import { askClaude } from '../services/claudeAIService';
 
 export default function AIAdvisor() {
   const [holdings, setHoldings] = useState<any[]>([]);
@@ -154,8 +155,10 @@ export default function AIAdvisor() {
     }
   };
 
-  const handleChatSubmit = () => {
-    if (!chatInput.trim()) return;
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const handleChatSubmit = async () => {
+    if (!chatInput.trim() || chatLoading) return;
 
     const userMsg: ChatMessage = {
       role: 'user',
@@ -163,16 +166,55 @@ export default function AIAdvisor() {
       timestamp: new Date(),
     };
 
-    const aiResponse = generateSmartResponse(chatInput, {
-      holdings,
-      riskProfile,
-      signals: buySellSignals,
-      score: portfolioScore,
-      suggestions: smartSuggestions,
-    });
-
-    setChatHistory(prev => [...prev, userMsg, aiResponse]);
+    setChatHistory(prev => [...prev, userMsg]);
     setChatInput('');
+    setChatLoading(true);
+
+    try {
+      // Try Claude API first
+      const conversationHistory = chatHistory
+        .filter(m => m.role === 'user' || m.role === 'ai')
+        .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
+
+      const claudeResult = await askClaude(
+        chatInput,
+        holdings,
+        conversationHistory,
+        riskProfile?.score || 50
+      );
+
+      if (claudeResult.isAI && claudeResult.response) {
+        const aiMsg: ChatMessage = {
+          role: 'ai',
+          content: claudeResult.response,
+          suggestions: ['Ne yapmalıyım?', 'Risk profilim?', 'Al/Sat sinyalleri?'],
+          timestamp: new Date(),
+        };
+        setChatHistory(prev => [...prev, aiMsg]);
+      } else {
+        // Fallback to local AI
+        const localResponse = generateSmartResponse(chatInput, {
+          holdings,
+          riskProfile,
+          signals: buySellSignals,
+          score: portfolioScore,
+          suggestions: smartSuggestions,
+        });
+        setChatHistory(prev => [...prev, localResponse]);
+      }
+    } catch {
+      // Fallback to local AI on any error
+      const localResponse = generateSmartResponse(chatInput, {
+        holdings,
+        riskProfile,
+        signals: buySellSignals,
+        score: portfolioScore,
+        suggestions: smartSuggestions,
+      });
+      setChatHistory(prev => [...prev, localResponse]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   if (loading) {
@@ -743,18 +785,27 @@ export default function AIAdvisor() {
             ))}
           </div>
 
+          {chatLoading && (
+            <div className="flex items-center gap-2 px-4 py-2 text-sm text-purple-600 dark:text-purple-400">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent" />
+              Claude düşünüyor...
+            </div>
+          )}
+
           <div className="flex gap-2">
             <input
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleChatSubmit()}
-              placeholder="Portföyünüz hakkında soru sorun..."
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder={chatLoading ? 'Claude yanıtlıyor...' : 'Portföyünüz hakkında soru sorun...'}
+              disabled={chatLoading}
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50"
             />
             <button
               onClick={handleChatSubmit}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              disabled={chatLoading}
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
             >
               <Send className="w-5 h-5" />
             </button>

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { getAdvancedMetrics, type AdvancedMetrics } from '../services/analyticsService';
 import { Activity, TrendingUp, AlertTriangle, Target, Award, BarChart3 } from 'lucide-react';
 import SectorAnalysis from './SectorAnalysis';
-import ProfitLossTrend from './ProfitLossTrend';
 import PeriodicReturns from './PeriodicReturns';
 
 export default function ComprehensiveAnalytics() {
@@ -179,7 +178,6 @@ export default function ComprehensiveAnalytics() {
         )}
       </div>
 
-      <ProfitLossTrend />
       <PeriodicReturns />
       <SectorAnalysis />
     </div>
