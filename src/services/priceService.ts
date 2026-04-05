@@ -94,7 +94,7 @@ async function retryFetch<T>(
       return await fetchFn();
     } catch {
       if (i === retries) return null;
-      const waitTime = delay * Math.pow(2, i);
+      const waitTime = delay * Math.pow(2, i) * (0.5 + Math.random() * 0.5);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
   }
@@ -134,16 +134,16 @@ const EURONEXT_STOCKS: { [key: string]: string } = {
 
 const FALLBACK_PRICES: PriceData = {
   'AKSEN': 55.00,
-  'ALTIN': 3950,
-  'GOLD': 3950,
-  'XAG': 40,
-  'SILVER': 40,
-  'GUMUS': 40,
-  'ASELS': 220.00,
-  'BIMAS': 580.00,
-  'BTC': 3850000,
+  'ALTIN': 3200,
+  'GOLD': 3200,
+  'XAG': 38,
+  'SILVER': 38,
+  'GUMUS': 38,
+  'ASELS': 90.00,
+  'BIMAS': 600.00,
+  'BTC': 3200000,
   'CCOLA': 58.00,
-  'ASML': 3600,
+  'ASML': 12000,
   'LVMH': 3900,
   'SAP': 10200,
   'TTE': 3300,
@@ -158,44 +158,45 @@ const FALLBACK_PRICES: PriceData = {
   'PROSUS': 1700,
   'EKGYO': 21.50,
   'ENKAI': 80.00,
-  'EREGL': 29.50,
-  'ETH': 145000,
+  'EREGL': 60.00,
+  'ETH': 120000,
   'EURO': 41.50,
   'EUR': 41.50,
-  'GARAN': 158.00,
+  'GARAN': 150.00,
   'HALKB': 60.00,
   'ISCTR': 29.50,
-  'KCHOL': 160.00,
+  'KCHOL': 230.00,
   'KOZAL': 47.00,
   'PGSUS': 320.00,
   'PETKM': 170.00,
   'GPA': 20.00,
   'IPV': 66.00,
   'LINK': 750,
-  'SAHOL': 85.00,
-  'SISE': 37.50,
-  'SOL': 6800,
-  'TCELL': 105.00,
-  'THYAO': 315.00,
-  'TOASO': 280.00,
-  'TUPRS': 200.00,
-  'VAKBN': 44.00,
-  'YKBNK': 40.00,
+  'SAHOL': 95.00,
+  'SISE': 50.00,
+  'SOL': 8500,
+  'TCELL': 120.00,
+  'THYAO': 350.00,
+  'TOASO': 320.00,
+  'TUPRS': 230.00,
+  'VAKBN': 50.00,
+  'YKBNK': 45.00,
   'US900123CJ75': 43000,
   'USD': DEFAULT_USD_TRY_RATE,
   'TRY': 1.00,
-  'XRP': 110,
-  'ADA': 38,
-  'AVAX': 1550,
-  'DOT': 290,
-  'MATIC': 22,
-  'BNB': 27500,
-  'DOGE': 1.85,
+  'XRP': 95,
+  'ADA': 20,
+  'AVAX': 1200,
+  'DOT': 250,
+  'MATIC': 18,
+  'BNB': 25000,
+  'DOGE': 8,
+  'AKBNK': 70.00,
 };
 
 const CACHE_DURATIONS: Record<string, number> = {
   'stock': 30000,
-  'crypto': 120000,
+  'crypto': 30000,
   'commodity': 60000,
   'currency': 300000,
   'fund': 300000,
@@ -279,22 +280,24 @@ export async function fetchEURTRYRate(): Promise<number> {
   if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
 
   const config = getSupabaseConfig();
-  if (config) {
+  if (config && shouldUseService('eur-proxy')) {
     try {
-      const response = await fetchWithTimeout(
-        `${config.url}/functions/v1/price-proxy?type=eur`,
-        { headers: proxyHeaders(config.key) },
-        8000
-      );
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data?.rate) {
-          eurTryRateCache = { rate: result.data.rate, timestamp: Date.now() };
-          return result.data.rate;
-        }
+      const result = await trackAPICall('eur-proxy', async () => {
+        const response = await fetchWithTimeout(
+          `${config.url}/functions/v1/price-proxy?type=eur`,
+          { headers: proxyHeaders(config.key) },
+          8000
+        );
+        if (!response.ok) throw new Error(`EUR proxy: ${response.status}`);
+        return response.json();
+      });
+
+      if (result?.success && result.data?.rate) {
+        eurTryRateCache = { rate: result.data.rate, timestamp: Date.now() };
+        return result.data.rate;
       }
     } catch {
-      // fall through
+      // fall through to alternative
     }
   }
 
@@ -622,7 +625,10 @@ export function initializeWebSocketConnection(symbols: string[]) {
       const usdPrice = parseFloat(data.c);
       if (!usdPrice || isNaN(usdPrice)) return;
 
-      const cachedRate = usdTryRateCache?.rate || FALLBACK_PRICES['USD'];
+      // Don't convert with a stale fallback rate — wait until we have a real cached rate
+      // to avoid showing misleading TRY prices from the default config value
+      if (!usdTryRateCache) return;
+      const cachedRate = usdTryRateCache.rate;
       const tryPrice = usdPrice * cachedRate;
 
       priceCache[symbol] = {
