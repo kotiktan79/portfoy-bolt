@@ -19,6 +19,7 @@ import { ToastContainer } from '../components/Toast';
 import { CashDashboard } from '../components/CashDashboard';
 import { PerformanceDashboard } from '../components/PerformanceDashboard';
 import { FinancialCoach } from '../components/FinancialCoach';
+import { SmartAlerts } from '../components/SmartAlerts';
 import { AssetBreakdownWidget } from '../components/AssetBreakdownWidget';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { PortfolioMetricsBar } from '../components/PortfolioMetricsBar';
@@ -49,6 +50,7 @@ const Security2FA = lazy(() => import('../components/Security2FA').then(m => ({ 
 const AutoRebalanceSettings = lazy(() => import('../components/AutoRebalanceSettings').then(m => ({ default: m.AutoRebalanceSettings })));
 const TaxCalculator = lazy(() => import('../components/TaxCalculator').then(m => ({ default: m.TaxCalculator })));
 const InvestmentGoals = lazy(() => import('../components/InvestmentGoals').then(m => ({ default: m.InvestmentGoals })));
+const DCAPlanner = lazy(() => import('../components/DCAPlanner').then(m => ({ default: m.DCAPlanner })));
 
 function ChartLoader() {
   return (
@@ -115,6 +117,7 @@ export default function HomePage() {
             onShowExport={() => setShowExportImportModal(true)}
             onShowBackup={() => setShowBackupModal(true)}
             onShow2FA={() => setShow2FAModal(true)}
+            onShowPerformance={() => navigate('/performance')}
             onShowAnalytics={() => navigate('/analytics')}
             onShowAllocation={() => navigate('/allocation')}
             onShowRebalancing={() => navigate('/rebalancing')}
@@ -145,6 +148,9 @@ export default function HomePage() {
           {/* Dashboard Content */}
           <div className="px-4 md:px-6 pt-5 pb-2 space-y-4">
 
+            {/* 0. Smart Alerts */}
+            {holdings.length > 0 && <SmartAlerts />}
+
             {/* 1. Financial Coach */}
             {holdings.length > 0 && (
               <FinancialCoach
@@ -168,9 +174,10 @@ export default function HomePage() {
             {/* 3. CashDashboard */}
             {livePnlData && <CashDashboard />}
 
-            {/* 3.5. Investment Goals & Tax Calculator */}
+            {/* 3.5. DCA Planner, Investment Goals & Tax Calculator */}
             <Suspense fallback={<ChartLoader />}>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <DCAPlanner />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
                 <InvestmentGoals />
                 <TaxCalculator />
               </div>

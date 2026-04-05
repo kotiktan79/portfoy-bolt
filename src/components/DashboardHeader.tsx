@@ -25,6 +25,7 @@ interface DashboardHeaderProps {
   onShowRebalancing: () => void;
   onShowScenario: () => void;
   onShowAIAdvisor: () => void;
+  onShowPerformance: () => void;
   onShowRebalanceModal: () => void;
   onEnableNotifications: () => void;
   onThemeCycle: () => void;
@@ -47,6 +48,7 @@ export function DashboardHeader({
   onShowRebalancing,
   onShowScenario,
   onShowAIAdvisor,
+  onShowPerformance,
   onShowRebalanceModal,
   onEnableNotifications,
   onThemeCycle,
@@ -112,6 +114,7 @@ export function DashboardHeader({
     { label: 'Analitik', onClick: onShowAnalytics, icon: BarChart3 },
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
     { label: 'Rebalance', onClick: onShowRebalancing, icon: Scale },
+    { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
     { label: 'Senaryo', onClick: onShowScenario, icon: Zap },
   ];
 
@@ -421,6 +424,16 @@ export function DashboardHeader({
               }`}
             >
               <Zap size={18} className="flex-shrink-0" /> Senaryo
+            </button>
+            <button
+              onClick={() => { onShowPerformance(); setMobileMenuOpen(false); }}
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                isDark
+                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
+              }`}
+            >
+              <TrendingUp size={18} className="flex-shrink-0" /> Performans
             </button>
             <button
               onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }}
