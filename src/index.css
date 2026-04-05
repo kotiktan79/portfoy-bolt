@@ -2,6 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ──────────────────────────────────────────────
+   Base – better font rendering & defaults
+   ────────────────────────────────────────────── */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Better focus styles */
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500 ring-0;
+  }
+
+  /* Custom scrollbar – thin, dark */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(100, 116, 139, 0.35);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.55);
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Utility classes
+   ────────────────────────────────────────────── */
+@layer utilities {
+  /* Glass-morphism */
+  .glass {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+  .dark .glass {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(148, 163, 184, 0.12);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+  }
+
+  /* Card hover glow */
+  .card-glow {
+    position: relative;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+  .card-glow:hover {
+    box-shadow: 0 0 20px -4px rgba(99, 102, 241, 0.35),
+                0 8px 24px -8px rgba(99, 102, 241, 0.18);
+    transform: translateY(-2px);
+  }
+  .dark .card-glow:hover {
+    box-shadow: 0 0 24px -4px rgba(129, 140, 248, 0.3),
+                0 8px 28px -8px rgba(129, 140, 248, 0.15);
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Keyframe animations
+   ────────────────────────────────────────────── */
+
+/* Existing – slide-in */
 @keyframes slide-in {
   from {
     transform: translateX(100%);
@@ -12,11 +97,11 @@
     opacity: 1;
   }
 }
-
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
 }
 
+/* Existing – slide-in-right */
 @keyframes slide-in-right {
   from {
     transform: translateX(400px);
@@ -27,11 +112,11 @@
     opacity: 1;
   }
 }
-
 .animate-slide-in-right {
   animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Existing – scroll (ticker) */
 @keyframes scroll {
   0% {
     transform: translateX(0);
@@ -40,19 +125,14 @@
     transform: translateX(-50%);
   }
 }
-
 .animate-scroll {
   animation: scroll 40s linear infinite;
 }
-
 .animate-scroll:hover {
   animation-play-state: paused;
 }
 
-.safe-area-inset-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
+/* Existing – slide-up */
 @keyframes slide-up {
   from {
     transform: translateY(100%);
@@ -63,9 +143,61 @@
     opacity: 1;
   }
 }
-
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
+}
+
+/* New – fade-in (page transitions) */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+/* New – scale-in (modals / popovers) */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-scale-in {
+  animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ──────────────────────────────────────────────
+   Card & modal smooth transitions
+   ────────────────────────────────────────────── */
+@layer components {
+  .card-transition {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm;
+    animation: fade-in 0.2s ease-out;
+  }
+
+  .modal-content {
+    animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Safe-area & standalone overrides
+   ────────────────────────────────────────────── */
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 @media (display-mode: standalone) {

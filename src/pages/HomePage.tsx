@@ -98,9 +98,9 @@ export default function HomePage() {
   } = portfolioMetrics;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 dark:from-gray-950 dark:via-gray-900 dark:to-slate-900">
-      <div className="max-w-7xl mx-auto px-3 md:px-4 py-4 md:py-6">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-200/50 dark:border-gray-700/50">
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 animate-fade-in">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white dark:bg-gray-900 min-h-screen">
 
           <DashboardHeader
             connectionStatus={connectionStatus}
@@ -142,7 +142,7 @@ export default function HomePage() {
           />
 
           {/* Dashboard Content */}
-          <div className="p-4 md:p-6 bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 border-b border-slate-200 dark:border-gray-700 space-y-5">
+          <div className="p-4 md:p-6 space-y-5">
 
             {holdings.length > 0 && (
               <AIDailyGuide
@@ -270,12 +270,9 @@ export default function HomePage() {
           </div>
 
           {/* Holdings Table */}
-          <div>
-            <div className="px-4 md:px-6 py-4 flex items-center gap-3 border-b border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-              <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Activity size={16} className="text-blue-600 dark:text-blue-400" />
-              </div>
-              <h2 className="text-base font-bold text-slate-800 dark:text-gray-200">Varlık Portföyü</h2>
+          <div className="border-t border-slate-200 dark:border-gray-800">
+            <div className="px-4 md:px-6 py-4 flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-gray-100 uppercase tracking-wider">Varlıklar</h2>
               {holdings.length > 0 && (
                 <span className="ml-auto text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-gray-700 px-2.5 py-1 rounded-full">
                   {holdings.length} varlık
@@ -357,39 +354,21 @@ export default function HomePage() {
         )}
 
         {/* Status Bar */}
-        <div className="mt-4 mb-2">
-          <div className="bg-white dark:bg-gray-800 px-5 py-3 rounded-xl border border-slate-200 dark:border-gray-700 flex items-center justify-between gap-4 flex-wrap">
+        <div className="px-4 md:px-6 py-3 border-t border-slate-100 dark:border-gray-800">
+          <div className="flex items-center justify-between gap-4 text-xs text-slate-400 dark:text-slate-500">
             <div className="flex items-center gap-3">
-              {connectionStatus === 'connected' ? (
-                <div className="flex items-center gap-1.5">
-                  <Activity className="text-green-500 animate-pulse" size={14} />
-                  <span className="text-xs font-semibold text-green-600 dark:text-green-400">WebSocket Aktif</span>
-                </div>
-              ) : connectionStatus === 'connecting' ? (
-                <div className="flex items-center gap-1.5">
-                  <RefreshCw className="text-yellow-500 animate-spin" size={14} />
-                  <span className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">Bağlanıyor...</span>
-                </div>
-              ) : connectionStatus === 'error' ? (
-                <div className="flex items-center gap-1.5">
-                  <Activity className="text-red-500" size={14} />
-                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">Bağlantı Hatası</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <Activity className="text-slate-400" size={14} />
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Çevrimdışı</span>
-                </div>
-              )}
-              <div className="h-3 w-px bg-slate-200 dark:bg-gray-600"></div>
               <div className="flex items-center gap-1.5">
-                <RefreshCw className="text-blue-500" size={14} />
-                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">REST API (30s)</span>
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' :
+                  connectionStatus === 'connecting' ? 'bg-yellow-500' :
+                  connectionStatus === 'error' ? 'bg-red-500' : 'bg-slate-400'
+                }`} />
+                <span>{connectionStatus === 'connected' ? 'Canlı' : connectionStatus === 'connecting' ? 'Bağlanıyor' : connectionStatus === 'error' ? 'Hata' : 'Çevrimdışı'}</span>
               </div>
+              <span>·</span>
+              <span>30s yenileme</span>
             </div>
-            {lastUpdate && (
-              <p className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-xs">Son: {lastUpdate}</p>
-            )}
+            {lastUpdate && <span className="truncate max-w-xs">{lastUpdate}</span>}
           </div>
         </div>
       </div>
