@@ -55,16 +55,15 @@ export function FinancialCoach({ holdings, totalValue, totalInvestment, totalPro
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(true);
   const hasRunRef = useRef(false);
+  const [showAddMoney, setShowAddMoney] = useState(false);
+  const [newMoneyAmount, setNewMoneyAmount] = useState('');
+  const [allocationResult, setAllocationResult] = useState<string[] | null>(null);
 
   const investmentHoldings = useMemo(() => holdings.filter(h => h.asset_type !== 'cash'), [holdings]);
   const grandTotal = totalValue + totalCashValue;
 
-  // ── Action Items ──────────────────────────────────────────
-  const actionItems = useMemo((): ActionItem[] => {
-    if (investmentHoldings.length === 0) return [];
-    const items: ActionItem[] = [];
-
-    // Calculate per-holding stats
+  // ── Portfolio analysis data (shared between action items and allocation) ──
+  const portfolioAnalysis = useMemo(() => {
     const holdingStats = investmentHoldings.map(h => {
       const value = h.current_price * h.quantity;
       const invested = h.purchase_price * h.quantity;
@@ -74,49 +73,86 @@ export function FinancialCoach({ holdings, totalValue, totalInvestment, totalPro
       return { ...h, value, invested, pnl, pnlPct, weight };
     });
 
+    const assetTypes = new Set(investmentHoldings.map(h => h.asset_type));
+    const typeWeights: Record<string, number> = {};
+    holdingStats.forEach(h => { typeWeights[h.asset_type] = (typeWeights[h.asset_type] || 0) + h.weight; });
+
+    const STOCK_PICKS = ['THYAO', 'ASELS', 'BIMAS', 'SISE', 'KCHOL', 'TUPRS', 'GARAN', 'EREGL', 'TOASO', 'SAHOL'];
+    const ownedSymbols = new Set(holdingStats.map(h => h.symbol));
+    const availableStocks = STOCK_PICKS.filter(s => !ownedSymbols.has(s));
+    const stockPick1 = availableStocks[0] || 'THYAO';
+    const stockPick2 = availableStocks[1] || 'ASELS';
+    const cryptoPick = (['BTC', 'ETH'].find(c => !ownedSymbols.has(c))) || 'BTC';
+
+    return { holdingStats, assetTypes, typeWeights, stockPick1, stockPick2, cryptoPick };
+  }, [investmentHoldings, totalValue]);
+
+  // ── getFullAllocation (accessible outside useMemo) ────────
+  const getFullAllocation = useMemo(() => {
+    const { typeWeights, stockPick1, stockPick2 } = portfolioAnalysis;
+    return (amount: number): string[] => {
+      const lines: string[] = [];
+      const stockWeight = Math.max(30, 50 - (typeWeights['stock'] || 0));
+      const cryptoWeight = Math.max(5, 15 - (typeWeights['crypto'] || 0));
+      const goldWeight = Math.max(10, 20 - (typeWeights['commodity'] || 0));
+      const currencyWeight = Math.max(5, 15 - (typeWeights['currency'] || 0));
+      const total = stockWeight + cryptoWeight + goldWeight + currencyWeight;
+
+      if (stockWeight > 5) {
+        const amt = amount * (stockWeight / total);
+        lines.push(`📊 ${stockPick1}: ${formatCurrency(amt * 0.6)} ₺ + ${stockPick2}: ${formatCurrency(amt * 0.4)} ₺`);
+      }
+      if (goldWeight > 5) {
+        lines.push(`🥇 ALTIN: ${formatCurrency(amount * (goldWeight / total))} ₺`);
+      }
+      if (cryptoWeight > 5) {
+        const amt = amount * (cryptoWeight / total);
+        lines.push(`₿ BTC: ${formatCurrency(amt * 0.7)} ₺ + ETH: ${formatCurrency(amt * 0.3)} ₺`);
+      }
+      if (currencyWeight > 5) {
+        lines.push(`💵 USD: ${formatCurrency(amount * (currencyWeight / total))} ₺`);
+      }
+      return lines.length > 0 ? lines : [`${formatCurrency(amount)} ₺ dengeli dağıtın`];
+    };
+  }, [portfolioAnalysis]);
+
+  // ── Action Items ──────────────────────────────────────────
+  const actionItems = useMemo((): ActionItem[] => {
+    if (investmentHoldings.length === 0) return [];
+    const items: ActionItem[] = [];
+
+    const { holdingStats, assetTypes, typeWeights, stockPick1, stockPick2, cryptoPick } = portfolioAnalysis;
+
     const sorted = [...holdingStats].sort((a, b) => b.value - a.value);
     const winners = holdingStats.filter(h => h.pnlPct > 0).sort((a, b) => b.pnlPct - a.pnlPct);
     const losers = holdingStats.filter(h => h.pnlPct < 0).sort((a, b) => a.pnlPct - b.pnlPct);
-    const assetTypes = new Set(investmentHoldings.map(h => h.asset_type));
 
-    // Determine what's MISSING for diversification suggestions
-    const typeWeights: Record<string, number> = {};
-    holdingStats.forEach(h => {
-      typeWeights[h.asset_type] = (typeWeights[h.asset_type] || 0) + h.weight;
-    });
+    function getBuyAlternative(amount: number, excludeType?: string): string {
+      const parts: string[] = [];
 
-    function getBuyAlternative(sellAmount: number, excludeType?: string): string {
-      // Suggest what to buy based on portfolio gaps
-      const suggestions: string[] = [];
-
-      if (!assetTypes.has('commodity') || (typeWeights['commodity'] || 0) < 10) {
-        suggestions.push(`${formatCurrency(sellAmount * 0.4)} ₺ Altın (portföy koruma)`);
+      if (excludeType !== 'commodity' && (!assetTypes.has('commodity') || (typeWeights['commodity'] || 0) < 15)) {
+        parts.push(`${formatCurrency(amount * 0.35)} ₺ ALTIN`);
       }
-      if (!assetTypes.has('stock') || (typeWeights['stock'] || 0) < 20) {
-        suggestions.push(`${formatCurrency(sellAmount * 0.3)} ₺ BIST hisse (THYAO, ASELS gibi)`);
+      if (excludeType !== 'stock' && (!assetTypes.has('stock') || (typeWeights['stock'] || 0) < 25)) {
+        parts.push(`${formatCurrency(amount * 0.35)} ₺ ${stockPick1} + ${stockPick2}`);
       }
-      if (!assetTypes.has('crypto') || (typeWeights['crypto'] || 0) < 10) {
-        suggestions.push(`${formatCurrency(sellAmount * 0.2)} ₺ BTC/ETH`);
+      if (excludeType !== 'crypto' && (!assetTypes.has('crypto') || (typeWeights['crypto'] || 0) < 10)) {
+        parts.push(`${formatCurrency(amount * 0.2)} ₺ ${cryptoPick}`);
       }
-      if (excludeType === 'stock') {
-        suggestions.unshift(`${formatCurrency(sellAmount * 0.4)} ₺ Altın`);
-      }
-      if (excludeType === 'crypto') {
-        suggestions.unshift(`${formatCurrency(sellAmount * 0.4)} ₺ BIST hisse`);
+      if (excludeType !== 'currency' && (!assetTypes.has('currency') || (typeWeights['currency'] || 0) < 10)) {
+        parts.push(`${formatCurrency(amount * 0.1)} ₺ USD`);
       }
 
-      // Filter out suggestions for asset type we're selling from
-      const filtered = suggestions.filter(s => {
-        if (excludeType === 'commodity' && s.includes('Altın')) return false;
-        if (excludeType === 'stock' && s.includes('BIST')) return false;
-        if (excludeType === 'crypto' && s.includes('BTC')) return false;
-        return true;
-      });
-
-      if (filtered.length === 0) {
-        return `${formatCurrency(sellAmount)} ₺ farklı varlık türlerine dağıtın`;
+      if (parts.length === 0) {
+        // Portfolio is well-diversified, suggest underweight assets
+        const underweight = Object.entries(typeWeights).sort((a, b) => a[1] - b[1]);
+        if (underweight.length > 0) {
+          const typeName: Record<string, string> = { stock: stockPick1, crypto: cryptoPick, commodity: 'ALTIN', currency: 'USD' };
+          return `${formatCurrency(amount)} ₺ ${typeName[underweight[0][0]] || underweight[0][0]} (en düşük ağırlık)`;
+        }
+        return `${formatCurrency(amount)} ₺ farklı varlıklara dağıtın`;
       }
-      return filtered.slice(0, 2).join(' + ');
+      return parts.slice(0, 3).join(' + ');
     }
 
     // 1. URGENT: Big losers (>20% loss)
@@ -434,6 +470,59 @@ export function FinancialCoach({ holdings, totalValue, totalInvestment, totalPro
               <div className="text-[10px] text-gray-400 mb-0.5">Varlık</div>
               <div className="text-sm font-bold text-gray-900 dark:text-white">{investmentHoldings.length} adet</div>
             </div>
+          </div>
+
+          {/* New Money Allocation */}
+          <div className="space-y-2">
+            <button
+              onClick={() => { setShowAddMoney(!showAddMoney); setAllocationResult(null); setNewMoneyAmount(''); }}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
+                showAddMoney
+                  ? 'bg-green-600 text-white border-green-600'
+                  : 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/40'
+              }`}
+            >
+              <DollarSign size={16} />
+              {showAddMoney ? 'Kapat' : 'Yeni Para Ekleyeceğim — Nasıl Dağıtayım?'}
+            </button>
+
+            {showAddMoney && (
+              <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={newMoneyAmount}
+                    onChange={e => setNewMoneyAmount(e.target.value)}
+                    placeholder="Eklenecek tutar (₺)"
+                    className="flex-1 px-3 py-2 rounded-lg border border-green-300 dark:border-green-800 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      const amt = parseFloat(newMoneyAmount);
+                      if (amt > 0) setAllocationResult(actionItems.length > 0 ? getFullAllocation(amt) : [`${formatCurrency(amt)} ₺ dengeli dağıtın`]);
+                    }}
+                    disabled={!newMoneyAmount || parseFloat(newMoneyAmount) <= 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-40"
+                  >
+                    Hesapla
+                  </button>
+                </div>
+
+                {allocationResult && (
+                  <div className="space-y-1.5 pt-2 border-t border-green-200 dark:border-green-800">
+                    <p className="text-xs font-semibold text-green-800 dark:text-green-300">
+                      {formatCurrency(parseFloat(newMoneyAmount))} ₺ şöyle dağıtın:
+                    </p>
+                    {allocationResult.map((line, i) => (
+                      <p key={i} className="text-sm text-green-700 dark:text-green-400">{line}</p>
+                    ))}
+                    <p className="text-[10px] text-green-600 dark:text-green-500 mt-2 italic">
+                      * Portföyünüzde eksik/düşük ağırlıklı varlık türlerine göre hesaplandı
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick Actions */}
