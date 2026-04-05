@@ -14,6 +14,7 @@ const AllocationPage = lazy(() => import('./pages/AllocationPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const MarketPage = lazy(() => import('./pages/MarketPage'));
 const PerformancePage = lazy(() => import('./pages/PerformancePage'));
+const BinancePage = lazy(() => import('./pages/BinancePage'));
 
 function PageLoader() {
   return (
@@ -42,6 +43,7 @@ function App() {
             <Route path="/watchlist" element={<Suspense fallback={<PageLoader />}><WatchlistPage /></Suspense>} />
             <Route path="/market" element={<Suspense fallback={<PageLoader />}><MarketPage /></Suspense>} />
             <Route path="/performance" element={<Suspense fallback={<PageLoader />}><PerformancePage /></Suspense>} />
+            <Route path="/binance" element={<Suspense fallback={<PageLoader />}><BinancePage /></Suspense>} />
           </Route>
         </Routes>
       </PortfolioProvider>
