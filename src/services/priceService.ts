@@ -420,7 +420,7 @@ async function fetchGoldFromAlternative(usdTryRate: number): Promise<number> {
 
     return (goldPricePerOunce / 31.1035) * usdTryRate;
   } catch {
-    return (2900 / 31.1035) * usdTryRate;
+    return (3300 / 31.1035) * usdTryRate;
   }
 }
 
