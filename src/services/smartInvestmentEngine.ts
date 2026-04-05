@@ -507,7 +507,7 @@ function calculateWithdrawal(
   const safeMonthly = grandTotal * 0.02 / 12;
   const moderateMonthly = grandTotal * 0.04 / 12;
   const aggressiveMonthly = grandTotal * 0.06 / 12;
-  const fromProfitsOnly = totalPnl > 0 ? totalPnl * (annualReturnPct / 100) / 12 : 0;
+  const fromProfitsOnly = annualReturnPct > 0 ? grandTotal * (annualReturnPct / 100) / 12 : 0;
   const maxSafe = cashBalance * 0.8; // %80'i çekilebilir
 
   let recommendation: string;
@@ -589,8 +589,8 @@ function getPicksForType(type: string, ownedSymbols: Set<string>, count: number)
   }
   if (type === 'commodity') return [{ symbol: 'ALTIN', name: 'Altın' }];
   if (type === 'currency') return [{ symbol: 'USD', name: 'Amerikan Doları' }];
-  if (type === 'fund') return [{ symbol: 'FONFON', name: 'Yatırım Fonu' }];
-  if (type === 'eurobond') return [{ symbol: 'EUROBOND', name: 'Eurobond' }];
+  if (type === 'fund') return [{ symbol: 'IPV', name: 'İş Portföy' }];
+  if (type === 'eurobond') return [{ symbol: 'US900123CJ75', name: 'Türkiye Eurobond' }];
   return [];
 }
 

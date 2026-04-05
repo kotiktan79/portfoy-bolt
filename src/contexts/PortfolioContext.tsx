@@ -319,12 +319,11 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
             .from('holdings')
             .update({
               current_price: newPrice,
-              currency: 'TRY',
               updated_at: new Date().toISOString()
             })
             .eq('id', holding.id);
 
-          return { ...holding, current_price: newPrice, currency: 'TRY' as const };
+          return { ...holding, current_price: newPrice };
         }
         return holding;
       });
@@ -585,10 +584,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await reloadHoldings();
-    await updatePrices();
-    await loadPnLData();
-    await loadHistoricalData();
-    await loadCashValue();
+    await Promise.all([updatePrices(), loadPnLData(), loadHistoricalData(), loadCashValue()]);
     setTimeout(() => setRefreshing(false), 500);
   }, [reloadHoldings]);
 

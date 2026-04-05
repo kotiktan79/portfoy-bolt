@@ -122,18 +122,6 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
         const newTotalRealized = currentRealized + realizedProfit;
 
         if (newQuantity <= 0) {
-          const { error: updateError } = await supabase
-            .from('holdings')
-            .update({
-              total_realized_pnl: newTotalRealized,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', holding.id);
-
-          if (updateError) {
-            console.warn('Failed to update realized PnL before delete:', updateError);
-          }
-
           const { error: deleteError } = await supabase
             .from('holdings')
             .delete()
@@ -170,7 +158,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
   }
 
   const isBuy = type === 'buy';
-  const canSell = !isBuy && parseFloat(quantity || '0') > holding.quantity;
+  const exceedsQuantity = !isBuy && parseFloat(quantity || '0') > holding.quantity;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -289,7 +277,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
             </div>
           </div>
 
-          {canSell && (
+          {exceedsQuantity && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
               <strong>Uyarı:</strong> Satış miktarı mevcut miktardan fazla olamaz!
             </div>
@@ -306,7 +294,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
             </button>
             <button
               type="submit"
-              disabled={loading || canSell}
+              disabled={loading || exceedsQuantity}
               className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                 isBuy
                   ? 'bg-green-600 hover:bg-green-700'

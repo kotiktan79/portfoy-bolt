@@ -80,7 +80,7 @@ export async function getPnLData(): Promise<{
       .from('portfolio_snapshots')
       .select('snapshot_date, total_value, total_investment, total_deposits, total_withdrawals')
       .order('snapshot_date', { ascending: false })
-      .limit(500);
+      .limit(35);
 
     if (error || !snapshots || snapshots.length === 0) {
       if (error) console.error('Error fetching snapshots:', error);
@@ -141,7 +141,7 @@ export async function getPnLData(): Promise<{
       // Real PnL = value change minus new money in/out
       // If you added 100K new holdings, value goes up 100K but that's not profit
       const valueChange = (currentValue - prevValue) - investmentChange;
-      const percentage = (prevValue / 1) > 0 ? (valueChange / prevValue) * 100 : 0;
+      const percentage = prevValue > 0 ? (valueChange / prevValue) * 100 : 0;
 
       return {
         value: currentValue,
@@ -204,7 +204,7 @@ export async function getHistoricalSnapshots(days: number): Promise<PortfolioSna
   const { data, error } = await supabase
     .from('portfolio_snapshots')
     .select('*')
-    .order('snapshot_date', { ascending: true })
+    .order('snapshot_date', { ascending: false })
     .limit(days);
 
   if (error) {
@@ -213,7 +213,7 @@ export async function getHistoricalSnapshots(days: number): Promise<PortfolioSna
 
   if (!data) return [];
 
-  return data.map((snapshot) => ({
+  return data.reverse().map((snapshot) => ({
     date: snapshot.snapshot_date,
     total_value: snapshot.total_value,
     total_investment: snapshot.total_investment,
@@ -240,7 +240,7 @@ export function calculateRebalance(
 
   const allocations: AssetAllocation[] = holdings.map((holding) => {
     const value = holding.current_price * holding.quantity;
-    const percentage = (value / totalValue) * 100;
+    const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
     const targetPercentage = targetAllocations[holding.asset_type] || 0;
     const targetValue = (totalValue * targetPercentage) / 100;
     const rebalanceAmount = targetValue - value;

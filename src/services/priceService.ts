@@ -741,7 +741,8 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
     // will use fallback
   }
 
-  const finalPrice = price || FALLBACK_PRICES[symbol] || 100;
+  const finalPrice = (price != null && price > 0) ? price : (FALLBACK_PRICES[symbol] || null);
+  if (!finalPrice) return null as unknown as number;
   // Mark as 'fallback' when no API price was fetched, or when the returned
   // price matches the hardcoded fallback (sub-functions may return fallback values directly)
   const source = (price && price !== FALLBACK_PRICES[symbol]) ? 'api' : 'fallback';
@@ -816,7 +817,7 @@ export async function fetchMultiplePrices(symbols: { symbol: string; assetType: 
           if (result.status === 'fulfilled') {
             prices[s.symbol] = result.value;
           } else {
-            prices[s.symbol] = FALLBACK_PRICES[s.symbol] || 100;
+            prices[s.symbol] = FALLBACK_PRICES[s.symbol] || 0;
           }
         });
       }
@@ -830,7 +831,7 @@ export async function fetchMultiplePrices(symbols: { symbol: string; assetType: 
       if (result.status === 'fulfilled') {
         prices[s.symbol] = result.value;
       } else {
-        prices[s.symbol] = FALLBACK_PRICES[s.symbol] || 100;
+        prices[s.symbol] = FALLBACK_PRICES[s.symbol] || 0;
       }
     });
 
@@ -848,7 +849,7 @@ export async function fetchMultiplePrices(symbols: { symbol: string; assetType: 
     // On timeout, return fallback prices for all requested symbols
     const fallbackPrices: PriceData = {};
     symbols.forEach(({ symbol }) => {
-      fallbackPrices[symbol] = FALLBACK_PRICES[symbol] || 100;
+      fallbackPrices[symbol] = FALLBACK_PRICES[symbol] || 0;
     });
     return fallbackPrices;
   }
