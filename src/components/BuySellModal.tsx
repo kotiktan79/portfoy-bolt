@@ -78,7 +78,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
         : holding.quantity - qty;
 
       if (type === 'buy') {
-        const totalCost = (holding.purchase_price * holding.quantity) + totalWithFee;
+        const totalCost = (holding.purchase_price * holding.quantity) + (prc * qty);
         const newAvgPrice = totalCost / newQuantity;
 
         await updateCashBalance('TRY', totalWithFee, 'buy',
@@ -118,7 +118,22 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
           console.warn('Realized profit update failed:', profitError);
         }
 
+        const currentRealized = holding.total_realized_pnl || 0;
+        const newTotalRealized = currentRealized + realizedProfit;
+
         if (newQuantity <= 0) {
+          const { error: updateError } = await supabase
+            .from('holdings')
+            .update({
+              total_realized_pnl: newTotalRealized,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', holding.id);
+
+          if (updateError) {
+            console.warn('Failed to update realized PnL before delete:', updateError);
+          }
+
           const { error: deleteError } = await supabase
             .from('holdings')
             .delete()
@@ -132,6 +147,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
             .from('holdings')
             .update({
               quantity: newQuantity,
+              total_realized_pnl: newTotalRealized,
               updated_at: new Date().toISOString(),
             })
             .eq('id', holding.id);

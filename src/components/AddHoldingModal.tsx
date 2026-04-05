@@ -10,7 +10,7 @@ interface AddHoldingModalProps {
     purchase_price: number;
     quantity: number;
     current_price: number;
-  }) => void;
+  }) => Promise<void>;
 }
 
 export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
@@ -31,7 +31,9 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
     }
   }, [isCash, cashCurrency]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -41,8 +43,9 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
         setError('Geçerli bir tutar girin');
         return;
       }
+      setSubmitting(true);
       try {
-        onAdd({
+        await onAdd({
           symbol: cashCurrency,
           asset_type: 'cash',
           purchase_price: 1,
@@ -52,6 +55,8 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
         onClose();
       } catch (err) {
         setError('Nakit eklenirken bir hata oluştu');
+      } finally {
+        setSubmitting(false);
       }
       return;
     }
@@ -79,8 +84,9 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
       return;
     }
 
+    setSubmitting(true);
     try {
-      onAdd({
+      await onAdd({
         symbol: symbol.toUpperCase().trim(),
         asset_type: assetType,
         purchase_price: price,
@@ -91,6 +97,8 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
     } catch (err) {
       setError('Varlık eklenirken bir hata oluştu');
       console.error('Error adding holding:', err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
