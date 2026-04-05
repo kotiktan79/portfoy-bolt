@@ -125,23 +125,14 @@ export function DashboardHeader({
     >
       <div className="px-4 md:px-6 h-16 flex items-center justify-between gap-4">
         {/* Left: Logo + status dot */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className={`flex-shrink-0 p-2 rounded-lg ${
-              isDark ? 'bg-blue-600/20' : 'bg-blue-50'
-            }`}
-          >
-            <TrendingUp
-              className={isDark ? 'text-blue-400' : 'text-blue-600'}
-              size={22}
-            />
-          </div>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <img src="/logo.svg" alt="Tandor Finans" className="w-9 h-9 rounded-lg flex-shrink-0" />
           <h1
-            className={`text-lg font-semibold tracking-tight truncate ${
+            className={`text-lg font-bold tracking-tight truncate ${
               isDark ? 'text-gray-100' : 'text-gray-900'
             }`}
           >
-            Tandor Finans
+            <span className="text-amber-500">Tandor</span> Finans
           </h1>
           {/* Connection status dot */}
           <div className="flex items-center gap-1.5" title={statusLabel()}>
