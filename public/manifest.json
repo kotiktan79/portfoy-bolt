@@ -1,10 +1,10 @@
 {
-  "name": "Portföy Takip - Akıllı Yatırım Yönetimi",
-  "short_name": "Portföy Takip",
-  "description": "Yatırımlarınızı profesyonel şekilde takip edin. Hisse, kripto, döviz ve daha fazlası.",
+  "name": "Tandor Finans - Akıllı Portföy Yönetimi",
+  "short_name": "Tandor Finans",
+  "description": "AI destekli profesyonel portföy takip uygulaması. Hisse, kripto, döviz ve emtia yatırımlarınızı canlı fiyatlarla yönetin.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1e293b",
+  "background_color": "#0f172a",
   "theme_color": "#2563eb",
   "orientation": "portrait-primary",
   "icons": [
@@ -22,23 +22,16 @@
     }
   ],
   "categories": ["finance", "productivity"],
-  "screenshots": [
-    {
-      "src": "/screenshot1.png",
-      "sizes": "1280x720",
-      "type": "image/png"
-    }
-  ],
   "shortcuts": [
     {
-      "name": "Grafikleri Görüntüle",
-      "url": "/?view=charts",
-      "description": "Portföy grafiklerini incele"
+      "name": "AI Danışman",
+      "url": "/ai-advisor",
+      "description": "AI destekli portföy analizi"
     },
     {
-      "name": "Canlı Dashboard",
-      "url": "/dashboard.html",
-      "description": "Canlı fiyat takibi"
+      "name": "İzleme Listesi",
+      "url": "/watchlist",
+      "description": "Takip ettiğiniz varlıklar"
     }
   ]
 }

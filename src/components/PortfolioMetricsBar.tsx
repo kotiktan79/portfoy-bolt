@@ -41,29 +41,31 @@ export function PortfolioMetricsBar({
   const isDailyPositive = dailyChange ? dailyChange.percentage >= 0 : true;
 
   return (
-    <div className="px-3 sm:px-4 md:px-6 py-4 border-b border-slate-200 dark:border-gray-700">
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5 md:gap-3">
+    <div className="px-3 sm:px-4 md:px-6 py-3 md:py-4 border-b border-slate-200 dark:border-gray-700">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 md:gap-3">
 
-        {/* Toplam Deger */}
+        {/* Toplam Deger - priority card */}
         <MetricCard
           label="Toplam Deger"
           value={`${formatCurrency(totalCurrentValue)} TL`}
-          valueClassName="text-xl md:text-2xl font-extrabold text-blue-600 dark:text-blue-400"
+          valueClassName="text-sm md:text-2xl font-extrabold text-blue-600 dark:text-blue-400"
+          priority
+        />
+
+        {/* Kar / Zarar - priority card */}
+        <MetricCard
+          label="Kar / Zarar"
+          value={`${isPositive ? '+' : ''}${formatCurrency(totalProfitLoss)} TL`}
+          valueClassName={`text-sm md:text-lg font-bold ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+          change={`${isPositive ? '+' : ''}${totalProfitLossPercent.toFixed(2)}%`}
+          changePositive={isPositive}
+          priority
         />
 
         {/* Toplam Yatirim */}
         <MetricCard
           label="Toplam Yatirim"
           value={`${formatCurrency(totalInvestment)} TL`}
-        />
-
-        {/* Kar / Zarar */}
-        <MetricCard
-          label="Kar / Zarar"
-          value={`${isPositive ? '+' : ''}${formatCurrency(totalProfitLoss)} TL`}
-          valueClassName={`text-lg font-bold ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
-          change={`${isPositive ? '+' : ''}${totalProfitLossPercent.toFixed(2)}%`}
-          changePositive={isPositive}
         />
 
         {/* Gunluk Degisim */}
@@ -74,7 +76,7 @@ export function PortfolioMetricsBar({
               ? `${isDailyPositive ? '+' : ''}${dailyChange.percentage.toFixed(2)}%`
               : '--'
           }
-          valueClassName={`text-lg font-bold ${
+          valueClassName={`text-sm md:text-lg font-bold ${
             dailyChange
               ? isDailyPositive
                 ? 'text-green-600 dark:text-green-400'
@@ -112,23 +114,25 @@ function MetricCard({
   valueClassName,
   change,
   changePositive,
+  priority,
 }: {
   label: string;
   value: string;
   valueClassName?: string;
   change?: string;
   changePositive?: boolean;
+  priority?: boolean;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg px-3 py-2.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1 truncate">
+    <div className={`bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg px-2.5 md:px-3 py-2 md:py-2.5 ${priority ? 'ring-1 ring-blue-100 dark:ring-blue-900/30 md:ring-0' : ''}`}>
+      <p className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-0.5 md:mb-1 truncate">
         {label}
       </p>
-      <p className={valueClassName ?? 'text-lg font-bold text-slate-900 dark:text-white truncate'}>
+      <p className={valueClassName ?? 'text-sm md:text-lg font-bold text-slate-900 dark:text-white truncate'}>
         {value}
       </p>
       {change && (
-        <p className={`text-xs font-medium mt-0.5 ${changePositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+        <p className={`text-[10px] md:text-xs font-medium mt-0.5 ${changePositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
           {change}
         </p>
       )}

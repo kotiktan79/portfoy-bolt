@@ -176,7 +176,7 @@ export default function HomePage() {
           </div>
 
           {/* Holdings Table */}
-          <div className="mt-2 mx-4 md:mx-6 rounded-xl border border-slate-200 dark:border-gray-800 overflow-hidden">
+          <div className="mt-2 mx-2 md:mx-6 rounded-xl border border-slate-200 dark:border-gray-800 overflow-hidden">
             <div className="px-4 md:px-5 py-3 bg-slate-50/80 dark:bg-gray-800/50 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-300 tracking-wide">Varliklar</h2>
               {holdings.length > 0 && (

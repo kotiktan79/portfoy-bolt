@@ -141,7 +141,7 @@ export function DashboardHeader({
               isDark ? 'text-gray-100' : 'text-gray-900'
             }`}
           >
-            Portföy Takip
+            Tandor Finans
           </h1>
           {/* Connection status dot */}
           <div className="flex items-center gap-1.5" title={statusLabel()}>
@@ -379,67 +379,67 @@ export function DashboardHeader({
             isDark ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'
           }`}
         >
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
             {/* Navigation items */}
             <button
               onClick={() => { onShowAIAdvisor(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Activity size={15} /> AI Danışman
+              <Activity size={18} className="flex-shrink-0" /> AI Danışman
             </button>
             <button
               onClick={() => { onShowAnalytics(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <BarChart3 size={15} /> Analitik
+              <BarChart3 size={18} className="flex-shrink-0" /> Analitik
             </button>
             <button
               onClick={() => { onShowAllocation(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <PieChart size={15} /> Dağılım
+              <PieChart size={18} className="flex-shrink-0" /> Dağılım
             </button>
             <button
               onClick={() => { onShowRebalancing(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Scale size={15} /> Rebalance
+              <Scale size={18} className="flex-shrink-0" /> Rebalance
             </button>
             <button
               onClick={() => { onShowScenario(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Zap size={15} /> Senaryo
+              <Zap size={18} className="flex-shrink-0" /> Senaryo
             </button>
             <button
               onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Target size={15} /> Hızlı Rebalance
+              <Target size={18} className="flex-shrink-0" /> Hızlı Rebalance
             </button>
 
             {/* Divider */}
@@ -452,38 +452,38 @@ export function DashboardHeader({
             {/* Utility items */}
             <button
               onClick={() => { onShowAlerts(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Bell size={15} /> Alarmlar
+              <Bell size={18} className="flex-shrink-0" /> Alarmlar
             </button>
             <button
               onClick={() => { onShowExport(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Download size={15} /> Dışa Aktar
+              <Download size={18} className="flex-shrink-0" /> Dışa Aktar
             </button>
             <button
               onClick={() => { onToggleDark(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              {isDark ? <Sun size={18} className="flex-shrink-0" /> : <Moon size={18} className="flex-shrink-0" />}
               {isDark ? 'Açık Mod' : 'Karanlık Mod'}
             </button>
             <button
               onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-bold transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
@@ -493,13 +493,13 @@ export function DashboardHeader({
             </button>
             <button
               onClick={() => { clearCache(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-red-400 hover:bg-red-900/30'
                   : 'text-red-500 hover:bg-red-50'
               }`}
             >
-              <Trash2 size={15} /> Cache Temizle
+              <Trash2 size={18} className="flex-shrink-0" /> Cache Temizle
             </button>
           </div>
         </div>

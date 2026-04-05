@@ -26,7 +26,7 @@ export default function Layout() {
         currentPage={currentPage}
         onNavigate={(page) => navigate(pageMap[page] || '/')}
       />
-      <div className="md:hidden h-20" /> {/* Spacer for bottom nav */}
+      <div className="md:hidden h-20 safe-area-inset-bottom" /> {/* Spacer for bottom nav */}
     </>
   );
 }
