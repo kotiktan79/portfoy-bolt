@@ -1,0 +1,44 @@
+{
+  "name": "Portföy Takip - Akıllı Yatırım Yönetimi",
+  "short_name": "Portföy Takip",
+  "description": "Yatırımlarınızı profesyonel şekilde takip edin. Hisse, kripto, döviz ve daha fazlası.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "192x192",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "512x512",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "1280x720",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Grafikleri Görüntüle",
+      "url": "/?view=charts",
+      "description": "Portföy grafiklerini incele"
+    },
+    {
+      "name": "Canlı Dashboard",
+      "url": "/dashboard.html",
+      "description": "Canlı fiyat takibi"
+    }
+  ]
+}
