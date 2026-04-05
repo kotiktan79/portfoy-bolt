@@ -47,6 +47,8 @@ const MultiBenchmark = lazy(() => import('../components/MultiBenchmark').then(m 
 const AdvancedAnalytics = lazy(() => import('../components/AdvancedAnalytics').then(m => ({ default: m.AdvancedAnalytics })));
 const Security2FA = lazy(() => import('../components/Security2FA').then(m => ({ default: m.Security2FA })));
 const AutoRebalanceSettings = lazy(() => import('../components/AutoRebalanceSettings').then(m => ({ default: m.AutoRebalanceSettings })));
+const TaxCalculator = lazy(() => import('../components/TaxCalculator').then(m => ({ default: m.TaxCalculator })));
+const InvestmentGoals = lazy(() => import('../components/InvestmentGoals').then(m => ({ default: m.InvestmentGoals })));
 
 function ChartLoader() {
   return (
@@ -164,6 +166,14 @@ export default function HomePage() {
 
             {/* 3. CashDashboard */}
             {livePnlData && <CashDashboard />}
+
+            {/* 3.5. Investment Goals & Tax Calculator */}
+            <Suspense fallback={<ChartLoader />}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <InvestmentGoals />
+                <TaxCalculator />
+              </div>
+            </Suspense>
 
             {/* 4. PnL Cards */}
             {livePnlData && (

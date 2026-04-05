@@ -6,6 +6,7 @@ const pageMap: Record<string, string> = {
   analytics: '/analytics',
   watchlist: '/watchlist',
   allocation: '/allocation',
+  market: '/market',
   rebalance: '/rebalancing',
   scenario: '/scenario',
 };
