@@ -538,13 +538,23 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     setPendingDeleteId(null);
   }, []);
 
+  const reloadHoldings = useCallback(async () => {
+    const { data } = await supabase
+      .from('holdings')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) setHoldings(data);
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    await reloadHoldings();
     await updatePrices();
     await loadPnLData();
     await loadHistoricalData();
+    await loadCashValue();
     setTimeout(() => setRefreshing(false), 500);
-  }, []);
+  }, [reloadHoldings]);
 
   // ── Memoized values ────────────────────────────────────────────
   const portfolioMetrics = useMemo(() => {
