@@ -71,6 +71,7 @@ interface PortfolioContextType {
     unrealizedPnl: number;
     totalProfitLoss: number;
     totalProfitLossPercent: number;
+    grandTotal: number;
     usdRate: number;
     totalInvestmentUSD: number;
     totalCurrentValueUSD: number;
@@ -212,8 +213,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       calculateAndUpdatePnL();
       calculateLivePnL();
 
-      const totalInvestment = holdings.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
-      const totalCurrentValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+      const investmentOnly = holdings.filter(h => h.asset_type !== 'cash');
+      const totalInvestment = investmentOnly.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
+      const totalCurrentValue = investmentOnly.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
       const totalRealized = holdings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
       const unrealizedPnl = totalCurrentValue - totalInvestment;
       const totalProfitLoss = unrealizedPnl + totalRealized;
@@ -337,7 +339,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     try {
       if (currentHoldings.length === 0) return;
 
-      const normalized = await normalizeToBaseCurrency(currentHoldings, 'TRY');
+      const investmentHoldings = currentHoldings.filter(h => h.asset_type !== 'cash');
+      const normalized = await normalizeToBaseCurrency(investmentHoldings, 'TRY');
       const totalValue = normalized.reduce((sum, h) => sum + h.normalized_current, 0);
       const totalInv = normalized.reduce((sum, h) => sum + h.normalized_invested, 0);
       const totalRealized = currentHoldings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
@@ -357,7 +360,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   function calculateLivePnL() {
     if (holdings.length === 0) { setLivePnlData(null); return; }
 
-    const currentTotalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+    const currentTotalValue = holdings.filter(h => h.asset_type !== 'cash').reduce((sum, h) => sum + h.current_price * h.quantity, 0);
     const openPrices = dailyOpenPricesRef.current;
     let dailyOpenValue = 0;
     let hasOpenPrices = false;
@@ -545,12 +548,19 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   // ── Memoized values ────────────────────────────────────────────
   const portfolioMetrics = useMemo(() => {
-    const totalInvestment = holdings.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
-    const totalCurrentValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+    // Separate investment holdings from cash holdings
+    const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
+
+    const totalInvestment = investmentHoldings.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
+    const totalCurrentValue = investmentHoldings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
     const totalRealized = holdings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
     const unrealizedPnl = totalCurrentValue - totalInvestment;
     const totalProfitLoss = unrealizedPnl + totalRealized;
     const totalProfitLossPercent = totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
+
+    // Grand total includes cash
+    const grandTotal = totalCurrentValue + totalCashValue;
+
     const usdHolding = holdings.find(h => h.symbol === 'USD');
     const usdRate = usdHolding?.current_price && usdHolding.current_price > 1
       ? usdHolding.current_price
@@ -562,10 +572,11 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       unrealizedPnl,
       totalProfitLoss,
       totalProfitLossPercent,
+      grandTotal,
       usdRate,
       totalInvestmentUSD: totalInvestment / usdRate,
       totalCurrentValueUSD: totalCurrentValue / usdRate,
-      grandTotalUSD: (totalCurrentValue + totalCashValue) / usdRate,
+      grandTotalUSD: grandTotal / usdRate,
     };
   }, [holdings, totalCashValue]);
 
