@@ -14,9 +14,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { portfolio } = req.body;
+    const { portfolio, memory, trigger } = req.body;
 
-    const prompt = buildPrompt(portfolio);
+    const prompt = buildPrompt(portfolio, memory, trigger);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -33,14 +33,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 GÖREV: Kullanıcının portföyünü analiz et ve BUGÜN yapması gereken somut aksiyonları listele.
 
 KURALLAR:
-- Her öneri SOMUT olmalı: sembol adı, miktar (TL), neden
-- Sadece BIST değil, ABD (AAPL, MSFT, NVDA, TSLA, AMZN, GOOGL, META) ve Avrupa (ASML, SAP, LVMH, NOVO) hisseleri de öner
+- Her öneri SOMUT olmalı: sembol adı, TL miktar, neden
+- Sadece BIST değil, ABD (AAPL, MSFT, NVDA, TSLA, AMZN, GOOGL, META, PLTR, COIN) ve Avrupa (ASML, SAP, LVMH, NOVO) hisseleri de öner
 - Revolut ile uluslararası hisse alınabilir, bunu belirt
-- Her önerinin NEDEN'ini açıkla (sektör trendi, değerleme, büyüme potansiyeli)
-- Risk seviyesini belirt (düşük/orta/yüksek)
+- Her önerinin NEDEN'ini açıkla (sektör trendi, değerleme, büyüme potansiyeli, makro etki)
+- Risk seviyesini belirt
 - Kısa vadeli (1-3 ay) ve uzun vadeli (1+ yıl) ayrı öner
-- Türkçe yanıtla
-- Emoji kullanma
+- Önceki önerilerinin sonuçlarını analiz et - isabetli olanları güçlendir, hatalı olanlardan ders çıkar
+- Portföy dengesini gözet - eksik sektörlere yönlendir
+- AMACI: Kullanıcıyı KAZANDIRMAK. Somut, uygulanabilir, araştırılmış öneriler ver
+- Türkçe yanıtla, emoji kullanma
 
 YANITINI BU JSON FORMATINDA VER (başka metin ekleme):
 {
@@ -51,14 +53,16 @@ YANITINI BU JSON FORMATINDA VER (başka metin ekleme):
       "symbol": "SEMBOL",
       "market": "BIST|US|EU|CRYPTO",
       "instruction": "Kısa komut (max 60 karakter)",
-      "detail": "Neden ve nasıl (2-3 cümle)",
+      "detail": "Neden ve nasıl (2-3 cümle). Temel analiz ve güncel gelişmelere değin.",
       "amount_try": 0,
       "risk": "low|medium|high",
       "timeframe": "short|long"
     }
   ],
-  "market_outlook": "1-2 cümle genel piyasa görünümü",
-  "top_pick": "Bugün en çok önerdiğin tek varlık ve neden (1 cümle)"
+  "market_outlook": "2-3 cümle: bugün piyasaları etkileyen gelişmeler, Fed/TCMB, sektör trendleri",
+  "top_pick": "Bugün en çok önerdiğin tek varlık ve neden (1 cümle)",
+  "news_alerts": ["Portföyü etkileyen önemli haber/gelişme 1", "Gelişme 2"],
+  "weekly_strategy": "Bu hafta genel strateji önerisi (1-2 cümle)"
 }`,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -92,7 +96,7 @@ YANITINI BU JSON FORMATINDA VER (başka metin ekleme):
   }
 }
 
-function buildPrompt(portfolio: any): string {
+function buildPrompt(portfolio: any, memory?: string, trigger?: string): string {
   if (!portfolio?.holdings?.length) return 'Portföy boş. Yeni başlayan biri için öneriler ver.';
 
   const { holdings, totalValue, totalInvested, totalPnlPct, cashBalance } = portfolio;
@@ -138,5 +142,7 @@ ${topHoldings}
 
 NOT: Kullanıcı Türkiye'de yaşıyor. BIST hisseleri + Revolut üzerinden ABD ve Avrupa hisseleri + Binance üzerinden kripto alabilir.
 
-Portföyü analiz et ve bugün yapılması gereken 5-8 somut aksiyon ver. Her biri için spesifik sembol, TL tutar ve neden belirt. Sadece BIST değil, ABD ve Avrupa hisseleri de öner (Revolut ile alınabilir).`;
+${memory ? `\n${memory}\n` : ''}
+${trigger ? `TETIKLEYICI: ${trigger}\nBu olay bağlamında özel öneriler ver.\n` : ''}
+Portföyü analiz et ve bugün yapılması gereken 5-8 somut aksiyon ver. Her biri için spesifik sembol, TL tutar ve neden belirt. Önceki önerilerin sonuçlarını değerlendir. Portföydeki varlıklarla ilgili güncel haberleri de dikkate al. AMAC: Kullanıcıyı kazandırmak.`;
 }

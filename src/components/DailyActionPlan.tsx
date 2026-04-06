@@ -8,6 +8,7 @@ import {
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
 import { analyzePortfolio } from '../services/smartInvestmentEngine';
+import { buildMemoryContext, saveRecommendations, recordPortfolioValue } from '../services/aiMemoryService';
 
 interface DailyActionPlanProps {
   holdings: Holding[];
@@ -150,16 +151,29 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
         cashBalance: totalCashValue,
       };
 
+      // Build memory context for Claude
+      const memory = buildMemoryContext();
+
+      // Record today's portfolio value
+      recordPortfolioValue(tv + totalCashValue);
+
       const res = await fetch('/api/daily-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ portfolio: portfolioData }),
+        body: JSON.stringify({ portfolio: portfolioData, memory }),
       });
 
       const data = await res.json();
       if (data.success && data.plan) {
         setAiPlan(data.plan);
         cacheAIPlan(data.plan);
+
+        // Save recommendations to memory for future tracking
+        if (data.plan.actions) {
+          const priceMap: Record<string, number> = {};
+          investmentHoldings.forEach(h => { priceMap[h.symbol] = h.current_price; });
+          saveRecommendations(data.plan.actions, priceMap);
+        }
       }
     } catch (e) {
       console.error('AI plan fetch failed:', e);
@@ -478,8 +492,25 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
 
               {aiPlan.top_pick && (
                 <div className="px-3 py-2 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
-                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Günün Tercihi: </span>
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Gunun Tercihi: </span>
                   <span className="text-xs text-purple-600 dark:text-purple-400">{aiPlan.top_pick}</span>
+                </div>
+              )}
+
+              {(aiPlan as any).weekly_strategy && (
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium px-1">
+                  Haftalık strateji: {(aiPlan as any).weekly_strategy}
+                </p>
+              )}
+
+              {(aiPlan as any).news_alerts?.length > 0 && (
+                <div className="space-y-1">
+                  {(aiPlan as any).news_alerts.map((news: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                      <AlertTriangle size={12} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                      <span className="text-xs text-amber-700 dark:text-amber-400">{news}</span>
+                    </div>
+                  ))}
                 </div>
               )}
 
