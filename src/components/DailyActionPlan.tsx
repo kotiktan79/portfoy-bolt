@@ -88,122 +88,125 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
 
     const investmentHoldings = report.holdings;
     const grandTotal = report.grandTotal;
+    const totalValue = report.totalValue;
+
+    // Portfolio type weights
+    const typeWeights: Record<string, number> = {};
+    report.currentAllocation.forEach(a => { typeWeights[a.type] = a.weight; });
+    const ownedSymbols = new Set(investmentHoldings.map(h => h.symbol));
+
+    // Ideal: stock 35%, commodity 15%, crypto 10%, currency 10%, fund 10%
+    const IDEAL: Record<string, number> = { stock: 35, commodity: 15, crypto: 10, currency: 10, fund: 10, eurobond: 10 };
+    const TYPE_NAMES: Record<string, string> = { stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz', commodity: 'Emtia', fund: 'Fon', eurobond: 'Eurobond' };
+    const STOCK_PICKS = ['THYAO', 'ASELS', 'BIMAS', 'TUPRS', 'KCHOL', 'GARAN', 'SISE', 'EREGL'];
 
     // ── HEMEN YAP (Acil) ────────────────────────────────────
 
-    // Kritik zarardakiler
+    // 1. VARLIK TÜRÜ BAZINDA REBALANCE (en önemli)
+    const overweightTypes = Object.entries(typeWeights).filter(([t, w]) => IDEAL[t] && w > IDEAL[t] * 2);
+    const underweightTypes = Object.entries(IDEAL).filter(([t]) => (typeWeights[t] || 0) < IDEAL[t] * 0.5);
+
+    overweightTypes.sort((a, b) => b[1] - a[1]);
+    overweightTypes.forEach(([type, weight]) => {
+      const excess = weight - IDEAL[type];
+      const excessAmount = totalValue * (excess / 100);
+      const holdingsOfType = investmentHoldings.filter(h => h.assetType === type).sort((a, b) => b.value - a.value);
+      const sellSymbol = holdingsOfType[0]?.symbol || type;
+
+      // Ne alacak?
+      const buyParts: string[] = [];
+      underweightTypes.forEach(([buyType]) => {
+        if (buyType === type) return;
+        const buyAmt = excessAmount / Math.max(underweightTypes.length, 1);
+        const pick = buyType === 'stock'
+          ? STOCK_PICKS.filter(s => !ownedSymbols.has(s))[0] || 'THYAO'
+          : buyType === 'crypto' ? 'BTC'
+          : buyType === 'commodity' ? 'ALTIN'
+          : buyType === 'fund' ? 'IPV' : 'THYAO';
+        buyParts.push(`${pick}: ${formatCurrency(buyAmt)} ₺`);
+      });
+
+      s.push({
+        id: `rebal-type-${type}`, order: order++, urgency: 'now',
+        icon: <AlertTriangle size={16} className="text-red-500" />,
+        action: 'DÖNÜŞTÜR',
+        symbol: sellSymbol,
+        instruction: `${TYPE_NAMES[type] || type} azalt (%${weight.toFixed(0)} → %${IDEAL[type]}) → ${buyParts.length > 0 ? buyParts.join(' + ') : 'eksik türlere dağıt'}`,
+        detail: `${TYPE_NAMES[type]} portföyün %${weight.toFixed(0)}'i (ideal: %${IDEAL[type]}). ${formatCurrency(excessAmount)} ₺ çıkarıp eksik türlere aktar.`,
+        amount: excessAmount,
+        completed: completedSteps.has(`rebal-type-${type}`),
+      });
+    });
+
+    // 2. Kritik zarardakiler
     const criticalLosers = investmentHoldings.filter(h => h.pnlPct < -20);
     criticalLosers.forEach(h => {
-      const sellAmount = h.value;
-      const alt = investmentHoldings.find(x => x.assetType !== h.assetType && x.pnlPct > 0);
-      const buySymbol = !report.currentAllocation.find(a => a.type === 'commodity')
-        ? 'ALTIN' : alt ? alt.symbol : 'USD';
-
       s.push({
         id: `sell-${h.symbol}`, order: order++, urgency: 'now',
         icon: <AlertTriangle size={16} className="text-red-500" />,
         action: 'SAT',
         symbol: h.symbol,
-        instruction: `${h.symbol} portföyden çıkar`,
-        detail: `%${Math.abs(h.pnlPct).toFixed(0)} zararda (${formatCurrency(Math.abs(h.pnl))} ₺ kayıp). Tamamını sat ve ${formatCurrency(sellAmount)} ₺'yi ${buySymbol}'a yönlendir.`,
-        amount: sellAmount,
+        instruction: `${h.symbol} sat → ALTIN veya hisseye çevir`,
+        detail: `%${Math.abs(h.pnlPct).toFixed(0)} zararda (${formatCurrency(Math.abs(h.pnl))} ₺ kayıp). Sat ve daha güvenli varlığa yönlendir.`,
+        amount: h.value,
         completed: completedSteps.has(`sell-${h.symbol}`),
-      });
-    });
-
-    // Aşırı yoğunlaşma
-    const overweight = investmentHoldings.filter(h => h.weight > 35);
-    overweight.forEach(h => {
-      if (criticalLosers.find(l => l.symbol === h.symbol)) return; // Zaten satılacak
-      const reduceAmount = h.value * ((h.weight - 20) / 100);
-      const missingTypes = ['commodity', 'stock', 'crypto'].filter(t =>
-        !report.currentAllocation.find(a => a.type === t && a.weight > 5)
-      );
-      const buyTargets = missingTypes.length > 0
-        ? missingTypes.map(t => t === 'commodity' ? 'ALTIN' : t === 'crypto' ? 'BTC' : 'THYAO').join(' + ')
-        : 'farklı varlıklara';
-
-      s.push({
-        id: `reduce-${h.symbol}`, order: order++, urgency: 'now',
-        icon: <TrendingDown size={16} className="text-orange-500" />,
-        action: 'AZALT',
-        symbol: h.symbol,
-        instruction: `${h.symbol}'den ${formatCurrency(reduceAmount)} ₺ azalt`,
-        detail: `Portföyün %${h.weight.toFixed(0)}'i tek varlıkta. ${formatCurrency(reduceAmount)} ₺ satıp ${buyTargets}'a dağıt.`,
-        amount: reduceAmount,
-        completed: completedSteps.has(`reduce-${h.symbol}`),
       });
     });
 
     // ── BUGÜN YAP ───────────────────────────────────────────
 
-    // Kâr realizasyonu
+    // 3. Eksik türler → spesifik alım önerisi
+    underweightTypes.forEach(([type]) => {
+      const current = typeWeights[type] || 0;
+      const deficit = IDEAL[type] - current;
+      const amt = totalValue * (deficit / 100);
+      if (amt < 500) return;
+
+      let pick: string;
+      let pickDetail: string;
+      if (type === 'stock') {
+        const available = STOCK_PICKS.filter(s => !ownedSymbols.has(s));
+        pick = available[0] || 'THYAO';
+        const pick2 = available[1] || 'ASELS';
+        pickDetail = `${pick}: ${formatCurrency(amt * 0.6)} ₺ + ${pick2}: ${formatCurrency(amt * 0.4)} ₺. Likiditesi yüksek, güvenilir BIST hisseleri.`;
+      } else if (type === 'crypto') {
+        pick = 'BTC';
+        pickDetail = `BTC: ${formatCurrency(amt * 0.7)} ₺ + ETH: ${formatCurrency(amt * 0.3)} ₺. En güvenilir kripto paralar.`;
+      } else if (type === 'commodity') {
+        pick = 'ALTIN';
+        pickDetail = `ALTIN: ${formatCurrency(amt)} ₺. Enflasyon koruması + güvenli liman.`;
+      } else {
+        pick = type === 'fund' ? 'IPV' : 'USD';
+        pickDetail = `${pick}: ${formatCurrency(amt)} ₺`;
+      }
+
+      s.push({
+        id: `buy-${type}`, order: order++, urgency: 'today',
+        icon: <Target size={16} className="text-emerald-500" />,
+        action: 'AL',
+        symbol: pick,
+        instruction: `${TYPE_NAMES[type] || type} ekle → ${pick} al (${formatCurrency(amt)} ₺)`,
+        detail: `${TYPE_NAMES[type]} %${current.toFixed(0)} (ideal: %${IDEAL[type]}). ${pickDetail}`,
+        amount: amt,
+        completed: completedSteps.has(`buy-${type}`),
+      });
+    });
+
+    // 4. Kâr realizasyonu (en kârlıdan)
     const bigWinners = investmentHoldings.filter(h => h.pnlPct > 40).sort((a, b) => b.pnlPct - a.pnlPct);
-    if (bigWinners.length > 0) {
-      const w = bigWinners[0];
+    bigWinners.slice(0, 2).forEach(w => {
       const takeAmount = w.pnl * 0.3;
       s.push({
         id: `profit-${w.symbol}`, order: order++, urgency: 'today',
         icon: <TrendingUp size={16} className="text-green-500" />,
         action: 'KÂR AL',
         symbol: w.symbol,
-        instruction: `${w.symbol}'den ${formatCurrency(takeAmount)} ₺ kâr realize et`,
-        detail: `%+${w.pnlPct.toFixed(0)} kârda. Kârın %30'unu sat (${formatCurrency(takeAmount)} ₺). Kalanı tut, stop-loss: ${formatCurrency(w.stopLoss)} ₺`,
+        instruction: `${w.symbol}'den ${formatCurrency(takeAmount)} ₺ kâr al`,
+        detail: `%+${w.pnlPct.toFixed(0)} kârda. Kârın %30'unu realize et. Stop-loss: ${formatCurrency(w.stopLoss)} ₺`,
         amount: takeAmount,
         completed: completedSteps.has(`profit-${w.symbol}`),
       });
-    }
-
-    // Nakit fazlası → yatırıma çevir
-    if (totalCashValue > grandTotal * 0.25 && totalCashValue > 3000) {
-      const investAmount = totalCashValue * 0.4;
-      const plan = report.newMoneyPlan(investAmount);
-      const targets = plan.slice(0, 3).map(p => `${p.symbol}: ${formatCurrency(p.amount)} ₺`).join(', ');
-
-      s.push({
-        id: 'invest-cash', order: order++, urgency: 'today',
-        icon: <DollarSign size={16} className="text-emerald-500" />,
-        action: 'YATIR',
-        instruction: `${formatCurrency(investAmount)} ₺ nakiti yatırıma çevir`,
-        detail: `Nakit %${((totalCashValue / grandTotal) * 100).toFixed(0)} - fazla. Şöyle dağıt: ${targets}`,
-        amount: investAmount,
-        completed: completedSteps.has('invest-cash'),
-      });
-    }
-
-    // Eksik varlık türleri → al
-    const typeWeights: Record<string, number> = {};
-    report.currentAllocation.forEach(a => { typeWeights[a.type] = a.weight; });
-
-    if (!typeWeights['commodity'] || typeWeights['commodity'] < 5) {
-      const amt = Math.max(grandTotal * 0.05, 1000);
-      s.push({
-        id: 'buy-gold', order: order++, urgency: 'today',
-        icon: <Target size={16} className="text-amber-500" />,
-        action: 'AL',
-        symbol: 'ALTIN',
-        instruction: `${formatCurrency(amt)} ₺ ALTIN al`,
-        detail: 'Portföyde emtia/altın yok. Altın enflasyon koruması ve güvenli liman.',
-        amount: amt,
-        completed: completedSteps.has('buy-gold'),
-      });
-    }
-
-    if (!typeWeights['stock'] || typeWeights['stock'] < 10) {
-      const amt = Math.max(grandTotal * 0.1, 2000);
-      const ownedSymbols = new Set(investmentHoldings.map(h => h.symbol));
-      const pick = ['THYAO', 'ASELS', 'BIMAS', 'TUPRS'].find(s => !ownedSymbols.has(s)) || 'THYAO';
-      s.push({
-        id: `buy-${pick}`, order: order++, urgency: 'today',
-        icon: <Target size={16} className="text-blue-500" />,
-        action: 'AL',
-        symbol: pick,
-        instruction: `${formatCurrency(amt)} ₺ ${pick} al`,
-        detail: `Portföyde BIST hisse eksik/az. ${pick} likiditesi yüksek, güvenilir hisse.`,
-        amount: amt,
-        completed: completedSteps.has(`buy-${pick}`),
-      });
-    }
+    });
 
     // ── BU HAFTA ────────────────────────────────────────────
 
