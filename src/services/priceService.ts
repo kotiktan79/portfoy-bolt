@@ -259,7 +259,17 @@ export async function fetchUSDTRYRate(): Promise<number> {
     return usdTryRateCache.rate;
   }
 
-  // Doğrudan API — Edge Function'a gerek yok
+  // Vercel proxy üzerinden (CORS bypass)
+  try {
+    const r = await fetchWithTimeout('/api/price-proxy?type=usd', {}, 8000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.data?.rate) {
+        usdTryRateCache = { rate: d.data.rate, timestamp: Date.now() };
+        return d.data.rate;
+      }
+    }
+  } catch { /* fallback */ }
   return await fetchUSDTRYFromAlternative();
 }
 
@@ -285,7 +295,18 @@ export async function fetchEURTRYRate(): Promise<number> {
     return eurTryRateCache.rate;
   }
 
-  // Doğrudan API — Edge Function'a gerek yok
+  // Vercel proxy üzerinden (CORS bypass)
+  try {
+    const r = await fetchWithTimeout('/api/price-proxy?type=eur', {}, 8000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.data?.rate) {
+        eurTryRateCache = { rate: d.data.rate, timestamp: Date.now() };
+        return d.data.rate;
+      }
+    }
+  } catch { /* fallback */ }
+
   if (!canMakeRequest('exchangerate')) await waitForRateLimit('exchangerate');
 
   const result = await retryFetch(async () => {
@@ -339,8 +360,15 @@ async function fetchCryptoFromBinance(symbol: string): Promise<number | null> {
 }
 
 export async function fetchGoldPrice(): Promise<number> {
+  // Vercel proxy üzerinden (CORS bypass)
+  try {
+    const r = await fetchWithTimeout('/api/price-proxy?type=gold', {}, 8000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.data?.pricePerGramTRY) return d.data.pricePerGramTRY;
+    }
+  } catch { /* fallback */ }
   const usdTryRate = await fetchUSDTRYRate();
-  // Doğrudan metals.live API — Edge Function'a gerek yok
   return await fetchGoldFromAlternative(usdTryRate);
 }
 
@@ -360,8 +388,15 @@ async function fetchGoldFromAlternative(usdTryRate: number): Promise<number> {
 }
 
 export async function fetchSilverPrice(): Promise<number> {
+  // Vercel proxy üzerinden (CORS bypass)
+  try {
+    const r = await fetchWithTimeout('/api/price-proxy?type=silver', {}, 8000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.data?.pricePerGramTRY) return d.data.pricePerGramTRY;
+    }
+  } catch { /* fallback */ }
   const usdTryRate = await fetchUSDTRYRate();
-  // Doğrudan metals.live API — Edge Function'a gerek yok
   return await fetchSilverFromAlternative(usdTryRate);
 }
 
@@ -383,21 +418,14 @@ async function fetchSilverFromAlternative(usdTryRate: number): Promise<number> {
 export async function fetchEuropeanStockPrice(symbol: string): Promise<number | null> {
   if (!EURONEXT_STOCKS[symbol]) return null;
 
-  const ticker = EURONEXT_STOCKS[symbol] || symbol;
-
-  // Yahoo Finance — doğrudan, Edge Function'a gerek yok
+  // Vercel proxy üzerinden (CORS bypass)
   try {
-    const response = await fetchWithTimeout(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } },
-      8000
-    );
-    if (response.ok) {
-      const data = await response.json();
-      const eurPrice = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (eurPrice && eurPrice > 0) {
+    const r = await fetchWithTimeout(`/api/price-proxy?type=european&symbols=${symbol}`, {}, 8000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.data?.[symbol]?.price) {
         const eurTryRate = await fetchEURTRYRate();
-        return eurPrice * eurTryRate;
+        return d.data[symbol].price * eurTryRate;
       }
     }
   } catch { /* fall through */ }
@@ -425,51 +453,16 @@ async function fetchUSStockPrice(symbol: string): Promise<number | null> {
 }
 
 export async function fetchBISTPrice(symbol: string): Promise<number | null> {
-  // Yahoo Finance v8 — doğrudan, Edge Function'a gerek yok
+  // Vercel proxy üzerinden (CORS bypass)
   try {
-    const response = await fetchWithTimeout(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1d&range=1d`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } },
-      8000
-    );
+    const response = await fetchWithTimeout(`/api/price-proxy?type=bist&symbols=${symbol}`, {}, 8000);
     if (response.ok) {
       const data = await response.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (price && price > 0) return price;
-    }
-  } catch { /* try v7 fallback */ }
-
-  // Yahoo Finance v7 fallback
-  try {
-    const response = await fetchWithTimeout(
-      `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbol}.IS&fields=regularMarketPrice`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } },
-      8000
-    );
-    if (response.ok) {
-      const data = await response.json();
-      const price = data?.quoteResponse?.result?.[0]?.regularMarketPrice;
-      if (price && price > 0) return price;
+      if (data.success && data.data?.[symbol]?.price) {
+        return data.data[symbol].price;
+      }
     }
   } catch { /* fall through */ }
-
-  // Supabase Edge Function fallback (eski yöntem)
-  const config = getSupabaseConfig();
-  if (config) {
-    try {
-      const response = await fetchWithTimeout(
-        `${config.url}/functions/v1/bist-live-prices?symbols=${symbol}`,
-        { headers: proxyHeaders(config.key) },
-        8000
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.[symbol]) {
-          return data.data[symbol].price;
-        }
-      }
-    } catch { /* fall through */ }
-  }
 
   return FALLBACK_PRICES[symbol] || null;
 }
@@ -728,26 +721,27 @@ export async function fetchMultiplePrices(symbols: { symbol: string; assetType: 
     const otherAssets = symbols.filter(s => s.assetType !== 'stock' || EURONEXT_STOCKS[s.symbol] || US_STOCKS[s.symbol]);
 
     if (bistStocks.length > 0) {
-      // Yahoo Finance batch — doğrudan, Edge Function'a gerek yok
+      // Vercel proxy üzerinden (CORS bypass)
       try {
-        const symbolList = bistStocks.map(s => s.symbol + '.IS').join(',');
+        const symbolList = bistStocks.map(s => s.symbol).join(',');
         const response = await fetchWithTimeout(
-          `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolList}&fields=regularMarketPrice`,
-          { headers: { 'User-Agent': 'Mozilla/5.0' } },
+          `/api/price-proxy?type=bist&symbols=${symbolList}`,
+          {},
           10000
         );
 
         if (response.ok) {
           const result = await response.json();
-          for (const q of result?.quoteResponse?.result || []) {
-            const sym = q.symbol.replace('.IS', '');
-            const price = q.regularMarketPrice;
-            if (price && price > 0) {
-              prices[sym] = price;
-              priceCache[sym] = { price, timestamp: Date.now(), source: 'api' };
-              setCachedPrice(sym, price);
-              notifyPriceUpdate({ symbol: sym, price, timestamp: Date.now(), source: 'Yahoo Finance' });
-            }
+          if (result.success && result.data) {
+            Object.entries(result.data).forEach(([symbol, priceData]) => {
+              const price = (priceData as { price: number }).price;
+              if (price && price > 0) {
+                prices[symbol] = price;
+                priceCache[symbol] = { price, timestamp: Date.now(), source: 'api' };
+                setCachedPrice(symbol, price);
+                notifyPriceUpdate({ symbol, price, timestamp: Date.now(), source: 'Yahoo Finance' });
+              }
+            });
           }
         }
       } catch {
