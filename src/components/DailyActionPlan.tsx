@@ -562,21 +562,21 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
           )}
 
           {/* Monthly Dynamic Salary - ALWAYS shown */}
-          {grandTotal > 5000 && (
+          {report.grandTotal > 5000 && (
             <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
               <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2">Aylık Dinamik Maaş</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center">
                   <p className="text-[10px] text-emerald-600">Güvenli (%2/yıl)</p>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotal * 0.02 / 12)} ₺</p>
+                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(report.grandTotal * 0.02 / 12)} ₺</p>
                 </div>
                 <div className="text-center">
                   <p className="text-[10px] text-emerald-600">Dengeli (%4/yıl)</p>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotal * 0.04 / 12)} ₺</p>
+                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(report.grandTotal * 0.04 / 12)} ₺</p>
                 </div>
                 <div className="text-center">
                   <p className="text-[10px] text-emerald-600">Büyüme (%6/yıl)</p>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotal * 0.06 / 12)} ₺</p>
+                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(report.grandTotal * 0.06 / 12)} ₺</p>
                 </div>
               </div>
               {(aiPlan as any)?.monthly_income?.description ? (
