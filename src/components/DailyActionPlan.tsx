@@ -423,51 +423,17 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
 
       {expanded && (
         <div className="px-4 pb-4 space-y-1.5">
-          {steps.map(step => (
-            <div
-              key={step.id}
-              className={`flex items-start gap-2.5 p-3 rounded-xl transition-all ${
-                step.completed ? 'opacity-50 bg-gray-50 dark:bg-gray-800/30' : 'bg-white dark:bg-gray-900'
-              }`}
-            >
-              {/* Checkbox */}
-              {step.urgency !== 'watch' ? (
-                <button onClick={() => toggleStep(step.id)} className="mt-0.5 flex-shrink-0">
-                  {step.completed
-                    ? <CheckCircle2 size={18} className="text-green-500" />
-                    : <Circle size={18} className="text-gray-300 dark:text-gray-600 hover:text-amber-500" />}
-                </button>
-              ) : (
-                <div className="mt-0.5 flex-shrink-0">{step.icon}</div>
-              )}
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${urgencyLabels[step.urgency].color}`}>
-                    {urgencyLabels[step.urgency].label}
-                  </span>
-                  <span className={`text-xs font-bold ${actionColors[step.action] || 'text-gray-600'}`}>
-                    {step.action}
-                  </span>
-                  {step.symbol && <span className="text-xs font-bold text-gray-900 dark:text-white">{step.symbol}</span>}
-                </div>
-                <p className={`text-sm font-semibold mt-1 ${step.completed ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'}`}>
-                  {step.instruction}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{step.detail}</p>
-              </div>
-
-              {/* Amount */}
-              {step.amount && step.amount > 0 && !step.completed && (
-                <span className="flex-shrink-0 text-xs font-bold text-gray-900 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
-                  {formatCurrency(step.amount)} ₺
-                </span>
-              )}
+          {/* AI loading or no plan yet */}
+          {!aiPlan && !aiLoading && (
+            <div className="text-center py-4">
+              <p className="text-xs text-gray-400 mb-2">AI analizi henüz yüklenmedi</p>
+              <button onClick={fetchAIPlan} className="text-xs text-purple-600 dark:text-purple-400 font-semibold hover:underline">
+                Analiz Başlat
+              </button>
             </div>
-          ))}
+          )}
 
-          {/* AI Research-Based Recommendations */}
           {aiLoading && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
               <Sparkles size={14} className="text-purple-500 animate-pulse" />
@@ -478,8 +444,8 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
           {aiPlan && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <h4 className="text-[11px] font-bold text-purple-500 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1">
-                  <Sparkles size={10} /> AI Araştırma Önerileri
+                <h4 className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                  AI Portföy Yöneticisi
                 </h4>
                 <button onClick={fetchAIPlan} disabled={aiLoading} className="text-[10px] text-purple-500 hover:text-purple-700 font-medium">
                   {aiLoading ? 'Yükleniyor...' : 'Yenile'}
