@@ -549,6 +549,35 @@ async function fetchUSStockPrice(symbol: string): Promise<number | null> {
 }
 
 export async function fetchBISTPrice(symbol: string): Promise<number | null> {
+  // Yahoo Finance v8 — doğrudan, Edge Function'a gerek yok
+  try {
+    const response = await fetchWithTimeout(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1d&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } },
+      8000
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price && price > 0) return price;
+    }
+  } catch { /* try v7 fallback */ }
+
+  // Yahoo Finance v7 fallback
+  try {
+    const response = await fetchWithTimeout(
+      `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbol}.IS&fields=regularMarketPrice`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } },
+      8000
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const price = data?.quoteResponse?.result?.[0]?.regularMarketPrice;
+      if (price && price > 0) return price;
+    }
+  } catch { /* fall through */ }
+
+  // Supabase Edge Function fallback (eski yöntem)
   const config = getSupabaseConfig();
   if (config) {
     try {
@@ -557,16 +586,13 @@ export async function fetchBISTPrice(symbol: string): Promise<number | null> {
         { headers: proxyHeaders(config.key) },
         8000
       );
-
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data?.[symbol]) {
           return data.data[symbol].price;
         }
       }
-    } catch {
-      // fall through to fallback
-    }
+    } catch { /* fall through */ }
   }
 
   return FALLBACK_PRICES[symbol] || null;
