@@ -125,6 +125,10 @@ export default function HomePage() {
                 totalCashValue={totalCashValue}
                 dailyChange={livePnlData?.daily.change}
                 dailyChangePct={livePnlData?.daily.percentage}
+                weeklyChange={livePnlData?.weekly.change}
+                weeklyChangePct={livePnlData?.weekly.percentage}
+                monthlyChange={livePnlData?.monthly.change}
+                monthlyChangePct={livePnlData?.monthly.percentage}
               />
             )}
 

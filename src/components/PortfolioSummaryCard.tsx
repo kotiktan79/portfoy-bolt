@@ -13,6 +13,10 @@ interface Props {
   totalCashValue: number;
   dailyChange?: number;
   dailyChangePct?: number;
+  weeklyChange?: number;
+  weeklyChangePct?: number;
+  monthlyChange?: number;
+  monthlyChangePct?: number;
 }
 
 export function PortfolioSummaryCard({
@@ -24,6 +28,10 @@ export function PortfolioSummaryCard({
   totalCashValue,
   dailyChange,
   dailyChangePct,
+  weeklyChange,
+  weeklyChangePct,
+  monthlyChange,
+  monthlyChangePct,
 }: Props) {
   const [usdRate, setUsdRate] = useState(DEFAULT_USD_TRY_RATE);
 
@@ -70,46 +78,49 @@ export function PortfolioSummaryCard({
         )}
       </div>
 
-      {/* Row 2: 4 compact stats */}
-      <div className="grid grid-cols-4 gap-3 mt-4 pt-3 border-t border-slate-100 dark:border-gray-700">
+      {/* Row 2: PnL periods */}
+      <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-gray-700">
+        {[
+          { label: 'Günlük', change: dailyChange, pct: dailyChangePct },
+          { label: 'Haftalık', change: weeklyChange, pct: weeklyChangePct },
+          { label: 'Aylık', change: monthlyChange, pct: monthlyChangePct },
+        ].map(p => {
+          const val = p.change ?? 0;
+          const pct = p.pct ?? 0;
+          const pos = val >= 0;
+          return (
+            <div key={p.label} className={`p-2 rounded-lg text-center ${pos ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
+              <p className="text-[10px] text-slate-500 dark:text-gray-400 font-medium">{p.label}</p>
+              <p className={`text-sm font-bold ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {pos ? '+' : ''}{formatCurrency(val, 0)} ₺
+              </p>
+              <p className={`text-[10px] font-semibold ${pos ? 'text-emerald-500' : 'text-red-500'}`}>
+                {pos ? '+' : ''}{pct.toFixed(2)}%
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Row 3: Quick stats */}
+      <div className="grid grid-cols-4 gap-3 mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
         <div>
-          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">
-            Yatirim
-          </p>
-          <p className="text-sm font-bold text-slate-700 dark:text-gray-200 mt-0.5">
-            {formatCurrency(totalInvestment, 0)} ₺
+          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500">Yatırım</p>
+          <p className="text-xs font-bold text-slate-700 dark:text-gray-200">{formatCurrency(totalInvestment, 0)} ₺</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500">Toplam K/Z</p>
+          <p className={`text-xs font-bold ${isPositivePnL ? 'text-emerald-600' : 'text-red-600'}`}>
+            {isPositivePnL ? '+' : ''}{formatCurrency(totalProfitLoss, 0)} ₺
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">
-            Kar/Zarar
-          </p>
-          <p
-            className={`text-sm font-bold mt-0.5 ${
-              isPositivePnL
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-red-600 dark:text-red-400'
-            }`}
-          >
-            {isPositivePnL ? '+' : ''}
-            {formatCurrency(totalProfitLoss, 0)} ₺
-          </p>
+          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500">Nakit</p>
+          <p className="text-xs font-bold text-slate-700 dark:text-gray-200">{formatCurrency(totalCashValue, 0)} ₺</p>
         </div>
         <div>
-          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">
-            Nakit
-          </p>
-          <p className="text-sm font-bold text-slate-700 dark:text-gray-200 mt-0.5">
-            {formatCurrency(totalCashValue, 0)} ₺
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">
-            Varlik
-          </p>
-          <p className="text-sm font-bold text-slate-700 dark:text-gray-200 mt-0.5">
-            {assetCount} adet
-          </p>
+          <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500">Varlık</p>
+          <p className="text-xs font-bold text-slate-700 dark:text-gray-200">{assetCount} adet</p>
         </div>
       </div>
     </div>
