@@ -561,30 +561,59 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
             </div>
           )}
 
-          {/* AI Monthly Income + Wealth Tip */}
-          {aiPlan && (aiPlan as any).monthly_income && (
+          {/* Monthly Dynamic Salary - ALWAYS shown */}
+          {grandTotal > 5000 && (
             <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Aylık Dinamik Maaş</p>
-              <div className="flex items-baseline gap-3">
-                <div>
-                  <span className="text-xs text-emerald-600">Güvenli: </span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency((aiPlan as any).monthly_income.safe)} ₺</span>
+              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2">Aylık Dinamik Maaş</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center">
+                  <p className="text-[10px] text-emerald-600">Güvenli (%2/yıl)</p>
+                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotal * 0.02 / 12)} ₺</p>
                 </div>
-                <div>
-                  <span className="text-xs text-emerald-600">Dengeli: </span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency((aiPlan as any).monthly_income.moderate)} ₺</span>
+                <div className="text-center">
+                  <p className="text-[10px] text-emerald-600">Dengeli (%4/yıl)</p>
+                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotal * 0.04 / 12)} ₺</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-emerald-600">Büyüme (%6/yıl)</p>
+                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotal * 0.06 / 12)} ₺</p>
                 </div>
               </div>
-              {(aiPlan as any).monthly_income.description && (
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">{(aiPlan as any).monthly_income.description}</p>
+              {(aiPlan as any)?.monthly_income?.description ? (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2">{(aiPlan as any).monthly_income.description}</p>
+              ) : (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2">
+                  Güvenli: portföy büyümeye devam eder. Dengeli: 25 yıl sürdürülebilir. Büyüme: kârdan çekim, anapara korunur.
+                </p>
               )}
             </div>
           )}
 
+          {/* AI Wealth Building Tip */}
           {aiPlan && (aiPlan as any).wealth_building_tip && (
             <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium px-1 italic">
               {(aiPlan as any).wealth_building_tip}
             </p>
+          )}
+
+          {/* AI action details: expected return + dividend */}
+          {aiPlan?.actions?.some((a: any) => a.expected_annual_return || a.dividend_yield) && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Beklenen Getiriler</p>
+              {aiPlan.actions.filter((a: any) => a.expected_annual_return || a.dividend_yield).map((a: any, i: number) => (
+                <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-gray-50 dark:bg-gray-800/50 text-xs">
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">{a.symbol}</span>
+                  <div className="flex gap-3">
+                    {a.expected_annual_return && (
+                      <span className="text-emerald-600 dark:text-emerald-400">Yıllık: %{a.expected_annual_return}</span>
+                    )}
+                    {a.dividend_yield && (
+                      <span className="text-blue-600 dark:text-blue-400">Temettü: %{a.dividend_yield}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Quick nav */}
