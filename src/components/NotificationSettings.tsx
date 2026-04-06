@@ -76,7 +76,8 @@ export function NotificationSettings() {
     setTestingId(config.id);
 
     try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`;
+      // Edge Function yeni projede mevcut değil — Vercel API kullan
+      const apiUrl = `/api/chat`; // TODO: Bildirim endpoint'i eklenecek
 
       const response = await fetch(apiUrl, {
         method: 'POST',

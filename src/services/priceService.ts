@@ -259,30 +259,7 @@ export async function fetchUSDTRYRate(): Promise<number> {
     return usdTryRateCache.rate;
   }
 
-  if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
-
-  const config = getSupabaseConfig();
-  if (config && shouldUseService('usd-proxy')) {
-    try {
-      const result = await trackAPICall('usd-proxy', async () => {
-        const response = await fetchWithTimeout(
-          `${config.url}/functions/v1/price-proxy?type=usd`,
-          { headers: proxyHeaders(config.key) },
-          8000
-        );
-        if (!response.ok) throw new Error(`USD proxy: ${response.status}`);
-        return response.json();
-      });
-
-      if (result?.success && result.data?.rate) {
-        usdTryRateCache = { rate: result.data.rate, timestamp: Date.now() };
-        return result.data.rate;
-      }
-    } catch {
-      // fall through to alternative
-    }
-  }
-
+  // Doğrudan API — Edge Function'a gerek yok
   return await fetchUSDTRYFromAlternative();
 }
 
@@ -308,30 +285,7 @@ export async function fetchEURTRYRate(): Promise<number> {
     return eurTryRateCache.rate;
   }
 
-  if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
-
-  const config = getSupabaseConfig();
-  if (config && shouldUseService('eur-proxy')) {
-    try {
-      const result = await trackAPICall('eur-proxy', async () => {
-        const response = await fetchWithTimeout(
-          `${config.url}/functions/v1/price-proxy?type=eur`,
-          { headers: proxyHeaders(config.key) },
-          8000
-        );
-        if (!response.ok) throw new Error(`EUR proxy: ${response.status}`);
-        return response.json();
-      });
-
-      if (result?.success && result.data?.rate) {
-        eurTryRateCache = { rate: result.data.rate, timestamp: Date.now() };
-        return result.data.rate;
-      }
-    } catch {
-      // fall through to alternative
-    }
-  }
-
+  // Doğrudan API — Edge Function'a gerek yok
   if (!canMakeRequest('exchangerate')) await waitForRateLimit('exchangerate');
 
   const result = await retryFetch(async () => {
@@ -349,31 +303,7 @@ export async function fetchEURTRYRate(): Promise<number> {
 }
 
 export async function fetchCryptoPrice(symbol: string): Promise<number | null> {
-  if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
-
-  const config = getSupabaseConfig();
-  if (config && shouldUseService('crypto-proxy')) {
-    try {
-      const result = await trackAPICall('crypto-proxy', async () => {
-        const response = await fetchWithTimeout(
-          `${config.url}/functions/v1/price-proxy?type=crypto&symbols=${symbol}`,
-          { headers: proxyHeaders(config.key) },
-          8000
-        );
-        if (!response.ok) throw new Error('Proxy request failed');
-        return response.json();
-      });
-
-      if (result?.success && result.data?.[symbol]) {
-        const usdPrice = result.data[symbol];
-        const usdTryRate = await fetchUSDTRYRate();
-        return usdPrice * usdTryRate;
-      }
-    } catch {
-      // fall through to direct Binance
-    }
-  }
-
+  // Doğrudan Binance — Edge Function'a gerek yok
   return await fetchCryptoFromBinance(symbol);
 }
 
@@ -409,34 +339,8 @@ async function fetchCryptoFromBinance(symbol: string): Promise<number | null> {
 }
 
 export async function fetchGoldPrice(): Promise<number> {
-  if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
-
-  // Cache USD rate once upfront to avoid redundant fetches in this call chain
   const usdTryRate = await fetchUSDTRYRate();
-
-  const config = getSupabaseConfig();
-  if (config) {
-    try {
-      const response = await fetchWithTimeout(
-        `${config.url}/functions/v1/price-proxy?type=gold`,
-        { headers: proxyHeaders(config.key) },
-        8000
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data?.pricePerGramTRY) {
-          return result.data.pricePerGramTRY;
-        }
-        if (result.success && result.data?.pricePerOz) {
-          return (result.data.pricePerOz / 31.1035) * usdTryRate;
-        }
-      }
-    } catch {
-      // fall through
-    }
-  }
-
+  // Doğrudan metals.live API — Edge Function'a gerek yok
   return await fetchGoldFromAlternative(usdTryRate);
 }
 
@@ -456,34 +360,8 @@ async function fetchGoldFromAlternative(usdTryRate: number): Promise<number> {
 }
 
 export async function fetchSilverPrice(): Promise<number> {
-  if (!canMakeRequest('proxy')) await waitForRateLimit('proxy');
-
-  // Cache USD rate once upfront to avoid redundant fetches in this call chain
   const usdTryRate = await fetchUSDTRYRate();
-
-  const config = getSupabaseConfig();
-  if (config) {
-    try {
-      const response = await fetchWithTimeout(
-        `${config.url}/functions/v1/price-proxy?type=silver`,
-        { headers: proxyHeaders(config.key) },
-        8000
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data?.pricePerGramTRY) {
-          return result.data.pricePerGramTRY;
-        }
-        if (result.success && result.data?.pricePerOz) {
-          return (result.data.pricePerOz / 31.1035) * usdTryRate;
-        }
-      }
-    } catch {
-      // fall through
-    }
-  }
-
+  // Doğrudan metals.live API — Edge Function'a gerek yok
   return await fetchSilverFromAlternative(usdTryRate);
 }
 
@@ -505,26 +383,24 @@ async function fetchSilverFromAlternative(usdTryRate: number): Promise<number> {
 export async function fetchEuropeanStockPrice(symbol: string): Promise<number | null> {
   if (!EURONEXT_STOCKS[symbol]) return null;
 
-  const config = getSupabaseConfig();
-  if (config) {
-    try {
-      const response = await fetchWithTimeout(
-        `${config.url}/functions/v1/price-proxy?type=european&symbols=${symbol}`,
-        { headers: proxyHeaders(config.key) },
-        8000
-      );
+  const ticker = EURONEXT_STOCKS[symbol] || symbol;
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data?.price) {
-          const eurTryRate = await fetchEURTRYRate();
-          return result.data.price * eurTryRate;
-        }
+  // Yahoo Finance — doğrudan, Edge Function'a gerek yok
+  try {
+    const response = await fetchWithTimeout(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } },
+      8000
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const eurPrice = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (eurPrice && eurPrice > 0) {
+        const eurTryRate = await fetchEURTRYRate();
+        return eurPrice * eurTryRate;
       }
-    } catch {
-      // fall through
     }
-  }
+  } catch { /* fall through */ }
 
   return null;
 }
@@ -852,39 +728,30 @@ export async function fetchMultiplePrices(symbols: { symbol: string; assetType: 
     const otherAssets = symbols.filter(s => s.assetType !== 'stock' || EURONEXT_STOCKS[s.symbol] || US_STOCKS[s.symbol]);
 
     if (bistStocks.length > 0) {
-      const config = getSupabaseConfig();
-      if (config) {
-        try {
-          const symbolList = bistStocks.map(s => s.symbol).join(',');
-          const response = await fetchWithTimeout(
-            `${config.url}/functions/v1/price-proxy?type=bist&symbols=${symbolList}`,
-            { headers: proxyHeaders(config.key) },
-            10000
-          );
+      // Yahoo Finance batch — doğrudan, Edge Function'a gerek yok
+      try {
+        const symbolList = bistStocks.map(s => s.symbol + '.IS').join(',');
+        const response = await fetchWithTimeout(
+          `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolList}&fields=regularMarketPrice`,
+          { headers: { 'User-Agent': 'Mozilla/5.0' } },
+          10000
+        );
 
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data) {
-              Object.entries(result.data).forEach(([symbol, priceData]) => {
-                const price = (priceData as { price: number }).price;
-                if (price && price > 0) {
-                  prices[symbol] = price;
-                  priceCache[symbol] = { price, timestamp: Date.now(), source: 'api' };
-                  setCachedPrice(symbol, price);
-
-                  notifyPriceUpdate({
-                    symbol,
-                    price,
-                    timestamp: Date.now(),
-                    source: 'Price Proxy',
-                  });
-                }
-              });
+        if (response.ok) {
+          const result = await response.json();
+          for (const q of result?.quoteResponse?.result || []) {
+            const sym = q.symbol.replace('.IS', '');
+            const price = q.regularMarketPrice;
+            if (price && price > 0) {
+              prices[sym] = price;
+              priceCache[sym] = { price, timestamp: Date.now(), source: 'api' };
+              setCachedPrice(sym, price);
+              notifyPriceUpdate({ symbol: sym, price, timestamp: Date.now(), source: 'Yahoo Finance' });
             }
           }
-        } catch {
-          // fall through to individual
         }
+      } catch {
+        // fall through to individual
       }
 
       const missingSymbols = bistStocks.filter(s => !prices[s.symbol]);

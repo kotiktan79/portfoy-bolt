@@ -58,21 +58,17 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
       portfolioData.total_profit_loss_percent =
         (portfolioData.total_profit_loss / portfolioData.total_invested) * 100;
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
+      // Vercel API endpoint kullan — Edge Function yeni projede mevcut değil
       const response = await fetch(
-        `${supabaseUrl}/functions/v1/ai-portfolio-advisor`,
+        `/api/chat`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             portfolio: portfolioData,
-            analysisType,
-            riskProfile: 'moderate',
+            question: `Portföy analizi yap. Analiz tipi: ${analysisType}. Risk profili: moderate. Detaylı öneri ver.`,
           }),
         }
       );
