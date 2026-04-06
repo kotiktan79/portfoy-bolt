@@ -149,10 +149,10 @@ export default function HomePage() {
           {/* Dashboard Content - Clean, minimal */}
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-3">
 
-            {/* Alerts - only when critical */}
+            {/* Alerts */}
             {holdings.length > 0 && <SmartAlerts />}
 
-            {/* AI Action Plan - the core feature */}
+            {/* AI Action Plan */}
             {holdings.length > 0 && (
               <DailyActionPlan
                 holdings={holdings}
@@ -164,7 +164,19 @@ export default function HomePage() {
               />
             )}
 
-            {/* PnL Cards - compact row */}
+            {/* Financial Coach - totals, withdrawal, new money */}
+            {holdings.length > 0 && (
+              <FinancialCoach
+                holdings={holdings}
+                totalValue={totalCurrentValue}
+                totalInvestment={totalInvestment}
+                totalProfitLoss={totalProfitLoss}
+                totalProfitLossPercent={totalProfitLossPercent}
+                totalCashValue={totalCashValue}
+              />
+            )}
+
+            {/* PnL Cards */}
             {livePnlData && (
               <div className="grid grid-cols-3 gap-2">
                 <PnLCard data={livePnlData.daily} />
