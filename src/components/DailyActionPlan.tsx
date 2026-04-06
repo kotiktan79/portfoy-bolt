@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2, Circle, ArrowRight, Brain, ChevronDown, ChevronUp,
   AlertTriangle, TrendingUp, TrendingDown, DollarSign, Shield,
-  Clock, Zap, Target, RefreshCw, Wallet
+  Clock, Zap, Target, RefreshCw, Wallet, Globe, Sparkles
 } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
@@ -73,13 +73,99 @@ function getMarketStatus(): { isOpen: boolean; label: string } {
   return { isOpen: false, label: 'Borsa kapandı. Kripto 7/24 aktif.' };
 }
 
+interface AIAction {
+  urgency: string;
+  type: string;
+  symbol: string;
+  market: string;
+  instruction: string;
+  detail: string;
+  amount_try: number;
+  risk: string;
+  timeframe: string;
+}
+
+interface AIPlan {
+  actions: AIAction[];
+  market_outlook: string;
+  top_pick: string;
+}
+
+const AI_CACHE_KEY = 'tandor_ai_daily_plan';
+
+function getCachedAIPlan(): AIPlan | null {
+  try {
+    const raw = localStorage.getItem(AI_CACHE_KEY);
+    if (!raw) return null;
+    const { date, plan } = JSON.parse(raw);
+    if (date !== getTodayKey()) return null;
+    return plan;
+  } catch { return null; }
+}
+
+function cacheAIPlan(plan: AIPlan) {
+  localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ date: getTodayKey(), plan }));
+}
+
 export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalProfitLoss, totalProfitLossPercent, totalCashValue }: DailyActionPlanProps) {
   const navigate = useNavigate();
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(loadCompletedSteps);
   const [expanded, setExpanded] = useState(true);
+  const [aiPlan, setAiPlan] = useState<AIPlan | null>(getCachedAIPlan);
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiLoadedRef = useRef(false);
 
   const report = useMemo(() => analyzePortfolio(holdings, totalCashValue), [holdings, totalCashValue]);
   const market = getMarketStatus();
+
+  // Fetch AI plan once per day
+  useEffect(() => {
+    if (aiLoadedRef.current || aiPlan || holdings.filter(h => h.asset_type !== 'cash').length === 0) return;
+    aiLoadedRef.current = true;
+    fetchAIPlan();
+  }, [holdings.length]);
+
+  async function fetchAIPlan() {
+    setAiLoading(true);
+    try {
+      const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
+      const tv = investmentHoldings.reduce((s, h) => s + h.current_price * h.quantity, 0);
+      const ti = investmentHoldings.reduce((s, h) => s + h.purchase_price * h.quantity, 0);
+
+      const portfolioData = {
+        holdings: investmentHoldings.map(h => {
+          const value = h.current_price * h.quantity;
+          const invested = h.purchase_price * h.quantity;
+          const pnl = value - invested;
+          return {
+            symbol: h.symbol, asset_type: h.asset_type,
+            quantity: h.quantity, purchase_price: h.purchase_price,
+            current_price: h.current_price, total_value: value, pnl,
+            pnl_percent: invested > 0 ? (pnl / invested) * 100 : 0,
+            weight: tv > 0 ? (value / tv) * 100 : 0,
+          };
+        }),
+        totalValue: tv, totalInvested: ti,
+        totalPnlPct: ti > 0 ? ((tv - ti) / ti) * 100 : 0,
+        cashBalance: totalCashValue,
+      };
+
+      const res = await fetch('/api/daily-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portfolio: portfolioData }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.plan) {
+        setAiPlan(data.plan);
+        cacheAIPlan(data.plan);
+      }
+    } catch (e) {
+      console.error('AI plan fetch failed:', e);
+    }
+    setAiLoading(false);
+  }
 
   const steps = useMemo((): Step[] => {
     if (report.holdings.length === 0) return [];
@@ -367,16 +453,93 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
             </div>
           ))}
 
+          {/* AI Research-Based Recommendations */}
+          {aiLoading && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
+              <Sparkles size={14} className="text-purple-500 animate-pulse" />
+              <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">Claude portföyünüzü analiz ediyor...</span>
+            </div>
+          )}
+
+          {aiPlan && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[11px] font-bold text-purple-500 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1">
+                  <Sparkles size={10} /> AI Araştırma Önerileri
+                </h4>
+                <button onClick={fetchAIPlan} disabled={aiLoading} className="text-[10px] text-purple-500 hover:text-purple-700 font-medium">
+                  {aiLoading ? 'Yükleniyor...' : 'Yenile'}
+                </button>
+              </div>
+
+              {aiPlan.market_outlook && (
+                <p className="text-xs text-gray-600 dark:text-gray-400 italic px-1">{aiPlan.market_outlook}</p>
+              )}
+
+              {aiPlan.top_pick && (
+                <div className="px-3 py-2 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Günün Tercihi: </span>
+                  <span className="text-xs text-purple-600 dark:text-purple-400">{aiPlan.top_pick}</span>
+                </div>
+              )}
+
+              {aiPlan.actions?.map((action, i) => {
+                const marketBadge: Record<string, string> = {
+                  BIST: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                  US: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                  EU: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                  CRYPTO: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                };
+                const typeIcon = action.type === 'buy' ? <TrendingUp size={14} className="text-green-500" /> :
+                  action.type === 'sell' || action.type === 'reduce' ? <TrendingDown size={14} className="text-red-500" /> :
+                  <Shield size={14} className="text-blue-500" />;
+
+                return (
+                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-purple-50/50 dark:bg-purple-950/10 border border-purple-100 dark:border-purple-900/50">
+                    <div className="mt-0.5 flex-shrink-0">{typeIcon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${marketBadge[action.market] || marketBadge.BIST}`}>
+                          {action.market}
+                        </span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">{action.symbol}</span>
+                        {action.risk && (
+                          <span className={`text-[9px] px-1 py-0.5 rounded ${
+                            action.risk === 'low' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
+                            action.risk === 'high' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
+                            'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          }`}>
+                            {action.risk === 'low' ? 'düşük risk' : action.risk === 'high' ? 'yüksek risk' : 'orta risk'}
+                          </span>
+                        )}
+                        {action.timeframe && (
+                          <span className="text-[9px] text-gray-400">{action.timeframe === 'short' ? 'kısa vade' : 'uzun vade'}</span>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1">{action.instruction}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{action.detail}</p>
+                    </div>
+                    {action.amount_try > 0 && (
+                      <span className="flex-shrink-0 text-xs font-bold text-gray-900 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
+                        {formatCurrency(action.amount_try)} ₺
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* Quick nav */}
           <div className="flex gap-2 pt-2 overflow-x-auto">
             <button onClick={() => navigate('/ai-advisor')} className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-[11px] font-semibold whitespace-nowrap">
-              <Brain size={11} /> Detaylı Analiz
+              <Brain size={11} /> AI Sohbet
             </button>
             <button onClick={() => navigate('/performance')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
               <TrendingUp size={11} /> Performans
             </button>
             <button onClick={() => navigate('/market')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
-              <RefreshCw size={11} /> Piyasa
+              <Globe size={11} /> Piyasa
             </button>
             <button onClick={() => navigate('/binance')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
               <Wallet size={11} /> Binance
