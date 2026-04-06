@@ -561,6 +561,32 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
             </div>
           )}
 
+          {/* AI Monthly Income + Wealth Tip */}
+          {aiPlan && (aiPlan as any).monthly_income && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Aylık Dinamik Maaş</p>
+              <div className="flex items-baseline gap-3">
+                <div>
+                  <span className="text-xs text-emerald-600">Güvenli: </span>
+                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency((aiPlan as any).monthly_income.safe)} ₺</span>
+                </div>
+                <div>
+                  <span className="text-xs text-emerald-600">Dengeli: </span>
+                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency((aiPlan as any).monthly_income.moderate)} ₺</span>
+                </div>
+              </div>
+              {(aiPlan as any).monthly_income.description && (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">{(aiPlan as any).monthly_income.description}</p>
+              )}
+            </div>
+          )}
+
+          {aiPlan && (aiPlan as any).wealth_building_tip && (
+            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium px-1 italic">
+              {(aiPlan as any).wealth_building_tip}
+            </p>
+          )}
+
           {/* Quick nav */}
           <div className="flex gap-2 pt-2 overflow-x-auto">
             <button onClick={() => navigate('/ai-advisor')} className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-[11px] font-semibold whitespace-nowrap">

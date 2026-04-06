@@ -115,41 +115,62 @@ const TYPE_NAMES: Record<string, string> = {
   fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia', cash: 'Nakit',
 };
 
-// İdeal portföy dağılımı (dengeli yatırımcı)
+// İdeal portföy dağılımı (uzun vadeli büyüme + gelir)
+// %60 büyüme (hisse + kripto) + %40 gelir/koruma (temettü + altın + döviz + tahvil)
 const IDEAL_ALLOCATION: Record<string, { min: number; max: number; target: number }> = {
-  stock:     { min: 25, max: 50, target: 35 },
-  commodity: { min: 10, max: 25, target: 15 },
-  crypto:    { min: 5,  max: 20, target: 10 },
-  currency:  { min: 5,  max: 20, target: 10 },
-  fund:      { min: 0,  max: 20, target: 10 },
-  eurobond:  { min: 0,  max: 15, target: 10 },
+  stock:     { min: 30, max: 55, target: 45 },  // büyüme + temettü hisseleri
+  commodity: { min: 10, max: 25, target: 15 },  // altın - enflasyon koruması
+  crypto:    { min: 5,  max: 15, target: 10 },  // BTC/ETH uzun vadeli
+  currency:  { min: 5,  max: 15, target: 10 },  // kur koruması
+  fund:      { min: 0,  max: 15, target: 10 },  // fon/tahvil - sabit gelir
+  eurobond:  { min: 0,  max: 15, target: 10 },  // eurobond - döviz gelir
 };
 
-// BIST favori hisseler (likiditesi yüksek, güvenilir)
+// BIST hisseler - büyüme + temettü
 const BIST_PICKS = [
-  { symbol: 'THYAO', name: 'Türk Hava Yolları', sector: 'Havacılık' },
-  { symbol: 'ASELS', name: 'Aselsan', sector: 'Savunma' },
-  { symbol: 'BIMAS', name: 'BİM', sector: 'Perakende' },
-  { symbol: 'TUPRS', name: 'Tüpraş', sector: 'Enerji' },
-  { symbol: 'KCHOL', name: 'Koç Holding', sector: 'Holding' },
-  { symbol: 'SISE', name: 'Şişecam', sector: 'Cam' },
-  { symbol: 'GARAN', name: 'Garanti BBVA', sector: 'Banka' },
-  { symbol: 'EREGL', name: 'Ereğli Demir Çelik', sector: 'Metal' },
-  { symbol: 'TOASO', name: 'Tofaş', sector: 'Otomotiv' },
-  { symbol: 'SAHOL', name: 'Sabancı Holding', sector: 'Holding' },
-  { symbol: 'AKBNK', name: 'Akbank', sector: 'Banka' },
-  { symbol: 'TCELL', name: 'Turkcell', sector: 'Telekomünikasyon' },
-  { symbol: 'PGSUS', name: 'Pegasus', sector: 'Havacılık' },
-  { symbol: 'EKGYO', name: 'Emlak Konut GYO', sector: 'Gayrimenkul' },
-  { symbol: 'KOZAL', name: 'Koza Altın', sector: 'Madencilik' },
+  { symbol: 'THYAO', name: 'Türk Hava Yolları', sector: 'Havacılık', type: 'growth' as const },
+  { symbol: 'ASELS', name: 'Aselsan', sector: 'Savunma', type: 'growth' as const },
+  { symbol: 'BIMAS', name: 'BİM', sector: 'Perakende', type: 'growth' as const },
+  { symbol: 'TUPRS', name: 'Tüpraş', sector: 'Enerji', type: 'dividend' as const },
+  { symbol: 'KCHOL', name: 'Koç Holding', sector: 'Holding', type: 'growth' as const },
+  { symbol: 'GARAN', name: 'Garanti BBVA', sector: 'Banka', type: 'dividend' as const },
+  { symbol: 'AKBNK', name: 'Akbank', sector: 'Banka', type: 'dividend' as const },
+  { symbol: 'ENKAI', name: 'Enka İnşaat', sector: 'İnşaat', type: 'dividend' as const },
+  { symbol: 'TCELL', name: 'Turkcell', sector: 'Telekomünikasyon', type: 'dividend' as const },
+  { symbol: 'TOASO', name: 'Tofaş', sector: 'Otomotiv', type: 'growth' as const },
+  { symbol: 'SAHOL', name: 'Sabancı Holding', sector: 'Holding', type: 'growth' as const },
+  { symbol: 'SISE', name: 'Şişecam', sector: 'Cam', type: 'growth' as const },
+  { symbol: 'EREGL', name: 'Ereğli Demir Çelik', sector: 'Metal', type: 'dividend' as const },
+  { symbol: 'PGSUS', name: 'Pegasus', sector: 'Havacılık', type: 'growth' as const },
+  { symbol: 'KOZAL', name: 'Koza Altın', sector: 'Madencilik', type: 'growth' as const },
+];
+
+// ABD + Avrupa büyüme + temettü hisseleri (Revolut ile alınabilir)
+const GLOBAL_PICKS = [
+  // ABD Büyüme
+  { symbol: 'NVDA', name: 'Nvidia', sector: 'AI/Chip', type: 'growth' as const, market: 'US' },
+  { symbol: 'MSFT', name: 'Microsoft', sector: 'Teknoloji', type: 'growth' as const, market: 'US' },
+  { symbol: 'GOOGL', name: 'Alphabet', sector: 'Teknoloji', type: 'growth' as const, market: 'US' },
+  { symbol: 'AMZN', name: 'Amazon', sector: 'E-ticaret/Bulut', type: 'growth' as const, market: 'US' },
+  { symbol: 'META', name: 'Meta', sector: 'Sosyal Medya/AI', type: 'growth' as const, market: 'US' },
+  { symbol: 'AAPL', name: 'Apple', sector: 'Teknoloji', type: 'growth' as const, market: 'US' },
+  { symbol: 'PLTR', name: 'Palantir', sector: 'AI/Veri', type: 'growth' as const, market: 'US' },
+  // ABD Temettü
+  { symbol: 'JNJ', name: 'Johnson & Johnson', sector: 'Sağlık', type: 'dividend' as const, market: 'US' },
+  { symbol: 'KO', name: 'Coca-Cola', sector: 'Tüketim', type: 'dividend' as const, market: 'US' },
+  { symbol: 'PG', name: 'Procter & Gamble', sector: 'Tüketim', type: 'dividend' as const, market: 'US' },
+  { symbol: 'PEP', name: 'PepsiCo', sector: 'Tüketim', type: 'dividend' as const, market: 'US' },
+  // Avrupa
+  { symbol: 'ASML', name: 'ASML', sector: 'Chip Ekipman', type: 'growth' as const, market: 'EU' },
+  { symbol: 'NOVO', name: 'Novo Nordisk', sector: 'İlaç', type: 'growth' as const, market: 'EU' },
+  { symbol: 'SAP', name: 'SAP', sector: 'Yazılım', type: 'growth' as const, market: 'EU' },
 ];
 
 const CRYPTO_PICKS = [
   { symbol: 'BTC', name: 'Bitcoin', tier: 1 },
   { symbol: 'ETH', name: 'Ethereum', tier: 1 },
-  { symbol: 'BNB', name: 'BNB', tier: 2 },
   { symbol: 'SOL', name: 'Solana', tier: 2 },
-  { symbol: 'AVAX', name: 'Avalanche', tier: 2 },
+  { symbol: 'BNB', name: 'BNB', tier: 2 },
 ];
 
 // ── Main Engine ──────────────────────────────────────────────
