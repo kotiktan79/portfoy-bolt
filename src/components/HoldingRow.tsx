@@ -138,6 +138,13 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
           <div className="flex flex-col">
             <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white">{holding.symbol}</span>
             <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">{getAssetTypeLabel(holding.asset_type)}</span>
+            {holding.price_notes && (
+              <span className="text-[9px] text-gray-400 dark:text-gray-500">
+                {holding.price_notes.includes('Binance') ? '\u2B21 Binance' :
+                 holding.price_notes.includes('Revolut') ? '\u25C8 Revolut' :
+                 ''}
+              </span>
+            )}
           </div>
         </td>
         {/* Alis Fiyati - hidden on mobile */}

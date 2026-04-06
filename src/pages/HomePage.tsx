@@ -21,6 +21,7 @@ import { PerformanceDashboard } from '../components/PerformanceDashboard';
 import { FinancialCoach } from '../components/FinancialCoach';
 import { DailyActionPlan } from '../components/DailyActionPlan';
 import { SmartAlerts } from '../components/SmartAlerts';
+import { PortfolioSummaryCard } from '../components/PortfolioSummaryCard';
 import { AssetBreakdownWidget } from '../components/AssetBreakdownWidget';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { PortfolioMetricsBar } from '../components/PortfolioMetricsBar';
@@ -148,6 +149,20 @@ export default function HomePage() {
 
           {/* Dashboard Content - Clean, minimal */}
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-3">
+
+            {/* Grand Total */}
+            {holdings.length > 0 && (
+              <PortfolioSummaryCard
+                holdings={holdings}
+                totalValue={totalCurrentValue}
+                totalInvestment={totalInvestment}
+                totalProfitLoss={totalProfitLoss}
+                totalProfitLossPercent={totalProfitLossPercent}
+                totalCashValue={totalCashValue}
+                dailyChange={livePnlData?.daily.change}
+                dailyChangePct={livePnlData?.daily.percentage}
+              />
+            )}
 
             {/* Alerts */}
             {holdings.length > 0 && <SmartAlerts />}

@@ -132,6 +132,37 @@ const EURONEXT_STOCKS: { [key: string]: string } = {
   'PROSUS': 'PRX.AS',
 };
 
+const US_STOCKS: Record<string, string> = {
+  'AAPL': 'AAPL',
+  'MSFT': 'MSFT',
+  'GOOGL': 'GOOGL',
+  'AMZN': 'AMZN',
+  'NVDA': 'NVDA',
+  'TSLA': 'TSLA',
+  'META': 'META',
+  'NFLX': 'NFLX',
+  'AMD': 'AMD',
+  'INTC': 'INTC',
+  'CRM': 'CRM',
+  'ORCL': 'ORCL',
+  'PYPL': 'PYPL',
+  'DIS': 'DIS',
+  'NKE': 'NKE',
+  'KO': 'KO',
+  'PEP': 'PEP',
+  'JNJ': 'JNJ',
+  'V': 'V',
+  'MA': 'MA',
+  'JPM': 'JPM',
+  'BAC': 'BAC',
+  'WMT': 'WMT',
+  'PG': 'PG',
+  'NOVO': 'NOVO-B.CO',
+  'PLTR': 'PLTR',
+  'COIN': 'COIN',
+  'MSTR': 'MSTR',
+};
+
 const FALLBACK_PRICES: PriceData = {
   'AKSEN': 55.00,
   'ALTIN': 3200,
@@ -498,6 +529,25 @@ export async function fetchEuropeanStockPrice(symbol: string): Promise<number | 
   return null;
 }
 
+async function fetchUSStockPrice(symbol: string): Promise<number | null> {
+  const ticker = US_STOCKS[symbol] || symbol;
+  try {
+    const response = await fetchWithTimeout(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } },
+      8000
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const usdPrice = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    if (!usdPrice) return null;
+    const usdRate = await fetchUSDTRYRate();
+    return usdPrice * usdRate;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBISTPrice(symbol: string): Promise<number | null> {
   const config = getSupabaseConfig();
   if (config) {
@@ -724,7 +774,11 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
         else if (symbol === 'XAG' || symbol === 'SILVER' || symbol === 'GUMUS') price = await fetchSilverPrice();
         break;
       case 'stock':
-        price = await fetchEuropeanStockPrice(symbol);
+        if (US_STOCKS[symbol]) {
+          price = await fetchUSStockPrice(symbol);
+        } else if (EURONEXT_STOCKS[symbol]) {
+          price = await fetchEuropeanStockPrice(symbol);
+        }
         if (!price) price = await fetchBISTPrice(symbol);
         break;
       case 'fund':
@@ -768,8 +822,8 @@ export async function fetchMultiplePrices(symbols: { symbol: string; assetType: 
 
   const batchWork = async (): Promise<PriceData> => {
     const prices: PriceData = {};
-    const bistStocks = symbols.filter(s => s.assetType === 'stock' && !EURONEXT_STOCKS[s.symbol]);
-    const otherAssets = symbols.filter(s => s.assetType !== 'stock' || EURONEXT_STOCKS[s.symbol]);
+    const bistStocks = symbols.filter(s => s.assetType === 'stock' && !EURONEXT_STOCKS[s.symbol] && !US_STOCKS[s.symbol]);
+    const otherAssets = symbols.filter(s => s.assetType !== 'stock' || EURONEXT_STOCKS[s.symbol] || US_STOCKS[s.symbol]);
 
     if (bistStocks.length > 0) {
       const config = getSupabaseConfig();
