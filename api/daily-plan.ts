@@ -16,7 +16,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { portfolio, memory, trigger } = req.body;
 
-    const prompt = buildPrompt(portfolio, memory, trigger);
+    // Fetch real-time market data to give Claude current context
+    const marketData = await fetchMarketData();
+
+    const prompt = buildPrompt(portfolio, memory, trigger, marketData);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -29,6 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
         system: `Sen uzun vadeli yatırım ve pasif gelir konusunda uzman bir finansal danışmansın.
+
+ÖNEMLİ: Bilgi kesim tarihin Mayıs 2025. Bugün Nisan 2026. Bu yüzden sana GÜNCEL PİYASA VERİLERİ sağlanıyor. Önerilerini bu gerçek zamanlı verilere dayandır, eski bilgilerine değil. Bir varlık hakkında güncel bilgin yoksa, bunu belirt ve sadece verilen verilere göre yorum yap.
 
 KULLANICININ AMACI:
 - UZUN VADELİ yatırım (1-10+ yıl) ile servet BÜYÜTMEK
@@ -120,7 +125,110 @@ YANITINI BU JSON FORMATINDA VER (başka metin ekleme):
   }
 }
 
-function buildPrompt(portfolio: any, memory?: string, trigger?: string): string {
+async function fetchMarketData(): Promise<string> {
+  const lines: string[] = ['GÜNCEL PİYASA VERİLERİ (canlı):'];
+
+  try {
+    // USD/TRY
+    const fxRes = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (fxRes.ok) {
+      const fxData = await fxRes.json();
+      const usdTry = fxData.rates?.TRY || 0;
+      const eurTry = (fxData.rates?.TRY || 0) / (fxData.rates?.EUR ? 1 / fxData.rates.EUR * fxData.rates.TRY / fxData.rates.TRY : 1);
+      lines.push(`USD/TRY: ${usdTry.toFixed(2)}`);
+
+      // EUR/TRY
+      try {
+        const eurRes = await fetch('https://open.er-api.com/v6/latest/EUR');
+        if (eurRes.ok) {
+          const eurData = await eurRes.json();
+          lines.push(`EUR/TRY: ${(eurData.rates?.TRY || 0).toFixed(2)}`);
+        }
+      } catch { /* skip */ }
+
+      // Crypto prices
+      try {
+        const cryptoRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT"]');
+        if (cryptoRes.ok) {
+          const cryptoData = await cryptoRes.json();
+          cryptoData.forEach((c: any) => {
+            const usdPrice = parseFloat(c.price);
+            const name = c.symbol.replace('USDT', '');
+            lines.push(`${name}: $${usdPrice.toFixed(2)} (${(usdPrice * usdTry).toFixed(0)} TL)`);
+          });
+        }
+      } catch { /* skip */ }
+
+      // Gold price
+      try {
+        const goldRes = await fetch('https://api.metals.live/v1/spot/gold');
+        if (goldRes.ok) {
+          const goldData = await goldRes.json();
+          const ozPrice = goldData[0]?.price || goldData.price;
+          if (ozPrice) {
+            const gramTry = (ozPrice / 31.1035) * usdTry;
+            lines.push(`ALTIN: $${ozPrice.toFixed(0)}/oz = ${gramTry.toFixed(0)} TL/gram`);
+          }
+        }
+      } catch { /* skip */ }
+
+      // Major US stock prices
+      try {
+        const symbols = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JNJ', 'KO', 'PG'];
+        const yahooRes = await fetch(
+          `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent`,
+          { headers: { 'User-Agent': 'Mozilla/5.0' } }
+        );
+        if (yahooRes.ok) {
+          const yahooData = await yahooRes.json();
+          const quotes = yahooData?.quoteResponse?.result || [];
+          if (quotes.length > 0) {
+            lines.push('');
+            lines.push('ABD HİSSELERİ (canlı):');
+            quotes.forEach((q: any) => {
+              const price = q.regularMarketPrice;
+              const changePct = q.regularMarketChangePercent;
+              if (price) {
+                lines.push(`${q.symbol}: $${price.toFixed(2)} (${changePct >= 0 ? '+' : ''}${changePct?.toFixed(1) || '0'}%) = ${(price * usdTry).toFixed(0)} TL`);
+              }
+            });
+          }
+        }
+      } catch { /* skip */ }
+
+      // BIST stocks
+      try {
+        const bistSymbols = ['THYAO.IS', 'ASELS.IS', 'TUPRS.IS', 'GARAN.IS', 'AKBNK.IS', 'BIMAS.IS', 'KCHOL.IS', 'SISE.IS'];
+        const bistRes = await fetch(
+          `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${bistSymbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent`,
+          { headers: { 'User-Agent': 'Mozilla/5.0' } }
+        );
+        if (bistRes.ok) {
+          const bistData = await bistRes.json();
+          const quotes = bistData?.quoteResponse?.result || [];
+          if (quotes.length > 0) {
+            lines.push('');
+            lines.push('BIST HİSSELERİ (canlı):');
+            quotes.forEach((q: any) => {
+              const price = q.regularMarketPrice;
+              const changePct = q.regularMarketChangePercent;
+              const sym = q.symbol.replace('.IS', '');
+              if (price) {
+                lines.push(`${sym}: ${price.toFixed(2)} TL (${changePct >= 0 ? '+' : ''}${changePct?.toFixed(1) || '0'}%)`);
+              }
+            });
+          }
+        }
+      } catch { /* skip */ }
+    }
+  } catch (e) {
+    lines.push('Piyasa verileri alınamadı: ' + (e instanceof Error ? e.message : 'bilinmeyen hata'));
+  }
+
+  return lines.join('\n');
+}
+
+function buildPrompt(portfolio: any, memory?: string, trigger?: string, marketData?: string): string {
   if (!portfolio?.holdings?.length) return 'Portföy boş. Yeni başlayan biri için öneriler ver.';
 
   const { holdings, totalValue, totalInvested, totalPnlPct, cashBalance } = portfolio;
@@ -166,9 +274,11 @@ ${topHoldings}
 
 NOT: Kullanıcı Türkiye'de yaşıyor. BIST hisseleri + Revolut üzerinden ABD ve Avrupa hisseleri + Binance üzerinden kripto alabilir.
 
+${marketData || ''}
+
 ${memory ? `\n${memory}\n` : ''}
 ${trigger ? `TETIKLEYICI: ${trigger}\nBu olay bağlamında özel öneriler ver.\n` : ''}
-UZUN VADELİ yatırım analizi yap:
+Yukarıdaki GÜNCEL PİYASA VERİLERİNE dayanarak uzun vadeli yatırım analizi yap:
 1. Portföyün mevcut durumunu değerlendir (dağılım, risk, getiri)
 2. Temettü odaklı 4-6 somut yatırım önerisi ver (BIST + ABD + Avrupa)
 3. Her öneri için: sembol, TL tutar, beklenen yıllık getiri, temettü verimi
