@@ -3,12 +3,15 @@ import MobileBottomNav from './MobileBottomNav';
 
 const pageMap: Record<string, string> = {
   home: '/',
-  analytics: '/analytics',
-  watchlist: '/watchlist',
-  allocation: '/allocation',
   market: '/market',
+  analytics: '/analytics',
+  ai: '/ai-advisor',
+  allocation: '/allocation',
+  watchlist: '/watchlist',
   rebalance: '/rebalancing',
   scenario: '/scenario',
+  performance: '/performance',
+  binance: '/binance',
 };
 
 const reverseMap: Record<string, string> = Object.fromEntries(

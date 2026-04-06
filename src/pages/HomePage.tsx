@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, TrendingUp, BarChart3, Activity, PieChart, RefreshCw } from 'lucide-react';
+import { Plus, BarChart3, PieChart } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { useTheme } from '../hooks/useTheme';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -11,48 +11,26 @@ import { Holding } from '../lib/supabase';
 import { AddHoldingModal } from '../components/AddHoldingModal';
 import { EditHoldingModal } from '../components/EditHoldingModal';
 import { HoldingRow } from '../components/HoldingRow';
-import { PnLCard } from '../components/PnLCard';
-import { DailyGainPanel } from '../components/DailyGainPanel';
-import { ProfitSummary } from '../components/ProfitSummary';
 import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
-import { CashDashboard } from '../components/CashDashboard';
-import { PerformanceDashboard } from '../components/PerformanceDashboard';
-import { FinancialCoach } from '../components/FinancialCoach';
 import { DailyActionPlan } from '../components/DailyActionPlan';
 import { SmartAlerts } from '../components/SmartAlerts';
 import { PortfolioSummaryCard } from '../components/PortfolioSummaryCard';
-import { AssetBreakdownWidget } from '../components/AssetBreakdownWidget';
 import { DashboardHeader } from '../components/DashboardHeader';
-import { PortfolioMetricsBar } from '../components/PortfolioMetricsBar';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import InstallPWA from '../components/InstallPWA';
 import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
 
-// Lazy loaded components (charts, modals, analytics - loaded on demand)
+// Lazy loaded components (charts, modals - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
 const PortfolioChart = lazy(() => import('../components/PortfolioChart').then(m => ({ default: m.PortfolioChart })));
 const AllocationChart = lazy(() => import('../components/AllocationChart').then(m => ({ default: m.AllocationChart })));
 const TransactionHistory = lazy(() => import('../components/TransactionHistory').then(m => ({ default: m.TransactionHistory })));
-const AchievementBadges = lazy(() => import('../components/AchievementBadges').then(m => ({ default: m.AchievementBadges })));
 const PriceAlertModal = lazy(() => import('../components/PriceAlertModal').then(m => ({ default: m.PriceAlertModal })));
-const RiskMetrics = lazy(() => import('../components/RiskMetrics').then(m => ({ default: m.RiskMetrics })));
-const ScenarioAnalysis = lazy(() => import('../components/ScenarioAnalysis').then(m => ({ default: m.ScenarioAnalysis })));
-const WithdrawalCalculator = lazy(() => import('../components/WithdrawalCalculator').then(m => ({ default: m.WithdrawalCalculator })));
-const QuickProfitWithdrawal = lazy(() => import('../components/QuickProfitWithdrawal').then(m => ({ default: m.QuickProfitWithdrawal })));
 const ExportImportModal = lazy(() => import('../components/ExportImportModal').then(m => ({ default: m.ExportImportModal })));
-const TradingSignals = lazy(() => import('../components/TradingSignals').then(m => ({ default: m.TradingSignals })));
-const AdvancedChart = lazy(() => import('../components/AdvancedChart').then(m => ({ default: m.AdvancedChart })));
 const BackupRestore = lazy(() => import('../components/BackupRestore').then(m => ({ default: m.BackupRestore })));
-const AIPortfolioSuggestions = lazy(() => import('../components/AIPortfolioSuggestions').then(m => ({ default: m.AIPortfolioSuggestions })));
-const MultiBenchmark = lazy(() => import('../components/MultiBenchmark').then(m => ({ default: m.MultiBenchmark })));
-const AdvancedAnalytics = lazy(() => import('../components/AdvancedAnalytics').then(m => ({ default: m.AdvancedAnalytics })));
 const Security2FA = lazy(() => import('../components/Security2FA').then(m => ({ default: m.Security2FA })));
 const AutoRebalanceSettings = lazy(() => import('../components/AutoRebalanceSettings').then(m => ({ default: m.AutoRebalanceSettings })));
-const TaxCalculator = lazy(() => import('../components/TaxCalculator').then(m => ({ default: m.TaxCalculator })));
-const InvestmentGoals = lazy(() => import('../components/InvestmentGoals').then(m => ({ default: m.InvestmentGoals })));
-const DCAPlanner = lazy(() => import('../components/DCAPlanner').then(m => ({ default: m.DCAPlanner })));
 
 function ChartLoader() {
   return (
@@ -99,7 +77,6 @@ export default function HomePage() {
   const {
     totalInvestment, totalCurrentValue,
     totalProfitLoss, totalProfitLossPercent,
-    totalInvestmentUSD, totalCurrentValueUSD, grandTotalUSD,
   } = portfolioMetrics;
 
   return (
@@ -134,19 +111,6 @@ export default function HomePage() {
             }}
           />
 
-          <PortfolioMetricsBar
-            holdings={holdings}
-            totalInvestment={totalInvestment}
-            totalCurrentValue={totalCurrentValue}
-            totalProfitLoss={totalProfitLoss}
-            totalProfitLossPercent={totalProfitLossPercent}
-            totalInvestmentUSD={totalInvestmentUSD}
-            totalCurrentValueUSD={totalCurrentValueUSD}
-            grandTotalUSD={grandTotalUSD}
-            livePnlData={livePnlData}
-            totalCashValue={totalCashValue}
-          />
-
           {/* Dashboard Content - Clean, minimal */}
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-3">
 
@@ -179,26 +143,6 @@ export default function HomePage() {
               />
             )}
 
-            {/* Financial Coach - totals, withdrawal, new money */}
-            {holdings.length > 0 && (
-              <FinancialCoach
-                holdings={holdings}
-                totalValue={totalCurrentValue}
-                totalInvestment={totalInvestment}
-                totalProfitLoss={totalProfitLoss}
-                totalProfitLossPercent={totalProfitLossPercent}
-                totalCashValue={totalCashValue}
-              />
-            )}
-
-            {/* PnL Cards */}
-            {livePnlData && (
-              <div className="grid grid-cols-3 gap-2">
-                <PnLCard data={livePnlData.daily} />
-                <PnLCard data={livePnlData.weekly} />
-                <PnLCard data={livePnlData.monthly} />
-              </div>
-            )}
           </div>
 
           {/* Holdings Table */}

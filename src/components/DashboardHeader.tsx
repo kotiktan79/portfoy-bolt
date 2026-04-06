@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Plus, RefreshCw, Moon, Sun, Bell, BarChart3,
   Wifi, WifiOff, Activity, Download, Tv, Shield, Palette,
   PieChart, Scale, Zap, Database, ChevronDown, Settings,
-  Target, Menu, X, Trash2, MoreHorizontal
+  Target, Menu, X, Trash2, MoreHorizontal, Wallet, Eye, Globe
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -53,6 +54,7 @@ export function DashboardHeader({
   onEnableNotifications,
   onThemeCycle,
 }: DashboardHeaderProps) {
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const { language, setLanguage } = useLanguage();
@@ -111,11 +113,10 @@ export function DashboardHeader({
 
   const navItems = [
     { label: 'AI Danışman', onClick: onShowAIAdvisor, icon: Activity },
+    { label: 'Piyasa', onClick: () => navigate('/market'), icon: Globe },
     { label: 'Analitik', onClick: onShowAnalytics, icon: BarChart3 },
-    { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
-    { label: 'Rebalance', onClick: onShowRebalancing, icon: Scale },
     { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
-    { label: 'Senaryo', onClick: onShowScenario, icon: Zap },
+    { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
   ];
 
   return (
@@ -436,14 +437,24 @@ export function DashboardHeader({
               <TrendingUp size={18} className="flex-shrink-0" /> Performans
             </button>
             <button
-              onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }}
+              onClick={() => { navigate('/binance'); setMobileMenuOpen(false); }}
               className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   : 'text-gray-700 hover:bg-white hover:text-gray-900'
               }`}
             >
-              <Target size={18} className="flex-shrink-0" /> Hızlı Rebalance
+              <Wallet size={18} className="flex-shrink-0" /> Binance
+            </button>
+            <button
+              onClick={() => { navigate('/watchlist'); setMobileMenuOpen(false); }}
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                isDark
+                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
+              }`}
+            >
+              <Eye size={18} className="flex-shrink-0" /> İzleme
             </button>
 
             {/* Divider */}
@@ -463,6 +474,16 @@ export function DashboardHeader({
               }`}
             >
               <Bell size={18} className="flex-shrink-0" /> Alarmlar
+            </button>
+            <button
+              onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }}
+              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                isDark
+                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
+              }`}
+            >
+              <Target size={18} className="flex-shrink-0" /> Hızlı Rebalance
             </button>
             <button
               onClick={() => { onShowExport(); setMobileMenuOpen(false); }}
