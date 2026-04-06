@@ -20,6 +20,7 @@ import { DashboardHeader } from '../components/DashboardHeader';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import InstallPWA from '../components/InstallPWA';
 import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
+import IncomeWidget from '../components/IncomeWidget';
 
 // Lazy loaded components (charts, modals - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
@@ -146,6 +147,9 @@ export default function HomePage() {
                 totalCashValue={totalCashValue}
               />
             )}
+
+            {/* Gelir Widget */}
+            <IncomeWidget />
 
           </div>
 

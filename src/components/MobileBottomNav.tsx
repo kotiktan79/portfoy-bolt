@@ -1,4 +1,4 @@
-import { Home, BarChart3, PieChart, Brain, Globe } from 'lucide-react';
+import { Home, BarChart3, PieChart, Brain, FileText } from 'lucide-react';
 
 interface MobileBottomNavProps {
   onNavigate: (page: string) => void;
@@ -8,7 +8,7 @@ interface MobileBottomNavProps {
 export default function MobileBottomNav({ onNavigate, currentPage = 'home' }: MobileBottomNavProps) {
   const navItems = [
     { id: 'home', icon: Home, label: 'Ana Sayfa' },
-    { id: 'market', icon: Globe, label: 'Piyasa' },
+    { id: 'report', icon: FileText, label: 'Rapor' },
     { id: 'analytics', icon: BarChart3, label: 'Analitik' },
     { id: 'ai', icon: Brain, label: 'AI' },
     { id: 'allocation', icon: PieChart, label: 'Dağılım' },

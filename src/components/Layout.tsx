@@ -12,6 +12,7 @@ const pageMap: Record<string, string> = {
   scenario: '/scenario',
   performance: '/performance',
   binance: '/binance',
+  report: '/daily-report',
 };
 
 const reverseMap: Record<string, string> = Object.fromEntries(

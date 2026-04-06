@@ -1,0 +1,625 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabase() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error('Supabase credentials missing');
+  return createClient(url, key);
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const startTime = Date.now();
+  const log: string[] = [];
+
+  try {
+    const supabase = getSupabase();
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicKey) {
+      return res.status(200).json({ success: false, error: 'ANTHROPIC_API_KEY missing' });
+    }
+
+    // ========================================
+    // 1. Portföy verilerini topla
+    // ========================================
+    const [holdingsRes, snapshotsRes, cashRes, dividendsRes, incomeRes] = await Promise.all([
+      supabase.from('holdings').select('*'),
+      supabase.from('portfolio_snapshots').select('*').order('snapshot_date', { ascending: false }).limit(30),
+      supabase.from('cash_balances').select('*'),
+      supabase.from('dividends').select('*').order('payment_date', { ascending: false }).limit(50),
+      supabase.from('income_records').select('*').order('income_date', { ascending: false }).limit(30),
+    ]);
+
+    const holdings = holdingsRes.data || [];
+    const snapshots = snapshotsRes.data || [];
+    const cashBalances = cashRes.data || [];
+    const dividends = dividendsRes.data || [];
+    const incomeRecords = incomeRes.data || [];
+
+    log.push(`Veri: ${holdings.length} holding, ${snapshots.length} snapshot, ${cashBalances.length} cüzdan`);
+
+    // Portföy özeti hesapla
+    const totalValue = holdings.reduce((sum, h) => sum + (h.current_price || 0) * (h.quantity || 0), 0);
+    const totalInvestment = holdings.reduce((sum, h) => sum + (h.purchase_price || 0) * (h.quantity || 0), 0);
+    const totalPnl = totalValue - totalInvestment;
+    const totalPnlPct = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
+    const totalCash = cashBalances.reduce((sum, c) => sum + (c.balance || 0), 0);
+
+    // Dünkü snapshot ile karşılaştır
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdaySnapshot = snapshots.find(s => s.snapshot_date !== todayStr);
+    const dailyChange = yesterdaySnapshot ? totalValue - yesterdaySnapshot.total_value : 0;
+    const dailyChangePct = yesterdaySnapshot && yesterdaySnapshot.total_value > 0
+      ? (dailyChange / yesterdaySnapshot.total_value) * 100 : 0;
+
+    // ========================================
+    // 2. Piyasa verilerini çek (kapsamlı)
+    // ========================================
+    log.push('Piyasa verileri çekiliyor...');
+    const marketData = await fetchComprehensiveMarketData(log);
+
+    // ========================================
+    // 3. Piyasa haberleri araştır
+    // ========================================
+    log.push('Piyasa haberleri araştırılıyor...');
+    const newsData = await fetchMarketNews(log);
+
+    // ========================================
+    // 4. Claude AI ile kapsamlı analiz
+    // ========================================
+    log.push('AI analizi başlatılıyor...');
+
+    const portfolioContext = buildPortfolioContext(holdings, totalValue, totalInvestment, totalPnlPct, totalCash, snapshots, dividends, incomeRecords, dailyChange, dailyChangePct);
+    const marketContext = buildMarketContext(marketData, newsData);
+
+    const aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
+    log.push('AI analizi tamamlandı');
+
+    // ========================================
+    // 5. Raporu veritabanına kaydet
+    // ========================================
+    const reportData = {
+      report_date: todayStr,
+      portfolio_value: totalValue,
+      portfolio_investment: totalInvestment,
+      portfolio_pnl: totalPnl,
+      portfolio_pnl_pct: totalPnlPct,
+      market_data: marketData,
+      actions: aiResponse.actions || [],
+      monthly_income: aiResponse.monthly_income || {},
+      market_outlook: aiResponse.market_outlook || '',
+      portfolio_diagnosis: aiResponse.portfolio_diagnosis || '',
+      top_pick: aiResponse.top_pick || '',
+      news_alerts: aiResponse.news_alerts || [],
+      wealth_building_tip: aiResponse.wealth_building_tip || '',
+      safe_monthly_income: aiResponse.monthly_income?.safe || 0,
+      moderate_monthly_income: aiResponse.monthly_income?.moderate || 0,
+      ai_model: 'claude-sonnet-4-20250514',
+      generation_time_ms: Date.now() - startTime,
+    };
+
+    const { error: reportError } = await supabase
+      .from('daily_reports')
+      .upsert([reportData], { onConflict: 'report_date' });
+
+    if (reportError) {
+      log.push(`Rapor kayıt hatası: ${reportError.message}`);
+    } else {
+      log.push('Rapor veritabanına kaydedildi');
+    }
+
+    // ========================================
+    // 6. Aylık maaş hesaplamasını güncelle
+    // ========================================
+    const monthStart = `${todayStr.substring(0, 7)}-01`;
+    const safeMonthly = totalValue * 0.003; // %0.3/ay = %3.6/yıl
+    const moderateMonthly = totalValue * 0.005; // %0.5/ay = %6/yıl
+
+    // Bu ayki toplam geliri hesapla
+    const thisMonthIncome = (incomeRecords || [])
+      .filter(r => r.income_date >= monthStart && !r.is_projected)
+      .reduce((sum, r) => sum + (r.amount_try || 0), 0);
+
+    const { error: salaryError } = await supabase
+      .from('monthly_salary')
+      .upsert([{
+        salary_month: monthStart,
+        portfolio_value: totalValue,
+        safe_amount: safeMonthly,
+        moderate_amount: moderateMonthly,
+        actual_income: thisMonthIncome,
+        ai_recommendation: aiResponse.monthly_income?.description || '',
+      }], { onConflict: 'salary_month' });
+
+    if (salaryError) {
+      log.push(`Maaş hesap hatası: ${salaryError.message}`);
+    } else {
+      log.push(`Aylık maaş: güvenli=${safeMonthly.toFixed(0)} TL, dengeli=${moderateMonthly.toFixed(0)} TL`);
+    }
+
+    const elapsed = Date.now() - startTime;
+    log.push(`Toplam süre: ${elapsed}ms`);
+
+    return res.status(200).json({
+      success: true,
+      report: {
+        date: todayStr,
+        portfolio: {
+          value: totalValue,
+          pnl: totalPnl,
+          pnl_pct: totalPnlPct,
+          daily_change: dailyChange,
+          daily_change_pct: dailyChangePct,
+        },
+        monthly_salary: {
+          safe: safeMonthly,
+          moderate: moderateMonthly,
+          actual_income: thisMonthIncome,
+        },
+        ai_analysis: aiResponse,
+        market_summary: {
+          usd_try: marketData.usd_try,
+          eur_try: marketData.eur_try,
+          btc_usd: marketData.btc_usd,
+          gold_usd: marketData.gold_usd,
+          bist_summary: marketData.bist_summary,
+        },
+      },
+      elapsed_ms: elapsed,
+      log,
+    });
+  } catch (error: any) {
+    log.push(`HATA: ${error.message}`);
+    return res.status(500).json({ success: false, error: error.message, log });
+  }
+}
+
+// ================================================
+// Kapsamlı piyasa verileri
+// ================================================
+
+interface MarketData {
+  usd_try: number;
+  eur_try: number;
+  btc_usd: number;
+  eth_usd: number;
+  gold_usd: number;
+  silver_usd: number;
+  bist_summary: string;
+  us_stocks: Record<string, { price: number; change_pct: number }>;
+  bist_stocks: Record<string, { price: number; change_pct: number }>;
+  crypto: Record<string, { price: number; change_pct: number }>;
+  indices: Record<string, any>;
+  raw_text: string;
+}
+
+async function fetchComprehensiveMarketData(log: string[]): Promise<MarketData> {
+  const data: MarketData = {
+    usd_try: 0, eur_try: 0, btc_usd: 0, eth_usd: 0,
+    gold_usd: 0, silver_usd: 0, bist_summary: '',
+    us_stocks: {}, bist_stocks: {}, crypto: {}, indices: {},
+    raw_text: '',
+  };
+
+  const lines: string[] = [];
+
+  // Döviz kurları
+  try {
+    const [usdRes, eurRes] = await Promise.all([
+      fetch('https://open.er-api.com/v6/latest/USD'),
+      fetch('https://open.er-api.com/v6/latest/EUR'),
+    ]);
+    if (usdRes.ok) {
+      const usdData = await usdRes.json();
+      data.usd_try = usdData.rates?.TRY || 0;
+      lines.push(`USD/TRY: ${data.usd_try.toFixed(2)}`);
+    }
+    if (eurRes.ok) {
+      const eurData = await eurRes.json();
+      data.eur_try = eurData.rates?.TRY || 0;
+      lines.push(`EUR/TRY: ${data.eur_try.toFixed(2)}`);
+    }
+  } catch (e: any) { log.push(`Döviz hatası: ${e.message}`); }
+
+  // Kripto fiyatları (top 10)
+  try {
+    const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT', 'DOTUSDT'];
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(cryptoSymbols)}`);
+    if (res.ok) {
+      const cryptoData = await res.json();
+      lines.push('\nKRİPTO (24 saat):');
+      for (const c of cryptoData) {
+        const sym = c.symbol.replace('USDT', '');
+        const price = parseFloat(c.lastPrice);
+        const changePct = parseFloat(c.priceChangePercent);
+        data.crypto[sym] = { price, change_pct: changePct };
+        if (sym === 'BTC') data.btc_usd = price;
+        if (sym === 'ETH') data.eth_usd = price;
+        lines.push(`${sym}: $${price.toFixed(2)} (${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%) = ${(price * data.usd_try).toFixed(0)} TL`);
+      }
+    }
+  } catch (e: any) { log.push(`Kripto hatası: ${e.message}`); }
+
+  // Altın & Gümüş
+  try {
+    const [goldRes, silverRes] = await Promise.all([
+      fetch('https://api.metals.live/v1/spot/gold'),
+      fetch('https://api.metals.live/v1/spot/silver'),
+    ]);
+    if (goldRes.ok) {
+      const goldData = await goldRes.json();
+      data.gold_usd = goldData[0]?.price || 0;
+      const gramTry = (data.gold_usd / 31.1035) * data.usd_try;
+      lines.push(`\nEMTİA:\nALTIN: $${data.gold_usd.toFixed(0)}/oz = ${gramTry.toFixed(0)} TL/gram`);
+    }
+    if (silverRes.ok) {
+      const silverData = await silverRes.json();
+      data.silver_usd = silverData[0]?.price || 0;
+      const gramTry = (data.silver_usd / 31.1035) * data.usd_try;
+      lines.push(`GÜMÜŞ: $${data.silver_usd.toFixed(2)}/oz = ${gramTry.toFixed(2)} TL/gram`);
+    }
+  } catch (e: any) { log.push(`Emtia hatası: ${e.message}`); }
+
+  // ABD Hisseleri
+  try {
+    const usSymbols = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JNJ', 'KO', 'PG', 'JPM', 'V', 'WMT', 'ASML', 'O', 'SCHD'];
+    const yahooRes = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${usSymbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent,fiftyTwoWeekLow,fiftyTwoWeekHigh`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    if (yahooRes.ok) {
+      const yahooData = await yahooRes.json();
+      const quotes = yahooData?.quoteResponse?.result || [];
+      if (quotes.length > 0) {
+        lines.push('\nABD HİSSELERİ:');
+        for (const q of quotes) {
+          const price = q.regularMarketPrice;
+          const changePct = q.regularMarketChangePercent || 0;
+          const low52 = q.fiftyTwoWeekLow || 0;
+          const high52 = q.fiftyTwoWeekHigh || 0;
+          if (price) {
+            data.us_stocks[q.symbol] = { price, change_pct: changePct };
+            const posInRange = high52 > low52 ? ((price - low52) / (high52 - low52) * 100).toFixed(0) : '?';
+            lines.push(`${q.symbol}: $${price.toFixed(2)} (${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%) [52h aralık: %${posInRange}] = ${(price * data.usd_try).toFixed(0)} TL`);
+          }
+        }
+      }
+    }
+  } catch (e: any) { log.push(`ABD hisse hatası: ${e.message}`); }
+
+  // BIST Hisseleri
+  try {
+    const bistSymbols = ['THYAO.IS', 'ASELS.IS', 'TUPRS.IS', 'GARAN.IS', 'AKBNK.IS', 'BIMAS.IS', 'KCHOL.IS', 'SISE.IS', 'SAHOL.IS', 'EREGL.IS', 'FROTO.IS', 'TOASO.IS', 'PGSUS.IS', 'TCELL.IS'];
+    const bistRes = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${bistSymbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    if (bistRes.ok) {
+      const bistData = await bistRes.json();
+      const quotes = bistData?.quoteResponse?.result || [];
+      if (quotes.length > 0) {
+        lines.push('\nBIST HİSSELERİ:');
+        for (const q of quotes) {
+          const sym = q.symbol.replace('.IS', '');
+          const price = q.regularMarketPrice;
+          const changePct = q.regularMarketChangePercent || 0;
+          if (price) {
+            data.bist_stocks[sym] = { price, change_pct: changePct };
+            lines.push(`${sym}: ${price.toFixed(2)} TL (${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%)`);
+          }
+        }
+        // BIST genel durum özeti
+        const avgChange = quotes.reduce((sum: number, q: any) => sum + (q.regularMarketChangePercent || 0), 0) / quotes.length;
+        data.bist_summary = `BIST ortalama: ${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(1)}%`;
+      }
+    }
+  } catch (e: any) { log.push(`BIST hatası: ${e.message}`); }
+
+  // Global endeksler
+  try {
+    const indexSymbols = ['^GSPC', '^DJI', '^IXIC', '^XU100.IS', '^VIX'];
+    const indexRes = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${indexSymbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    if (indexRes.ok) {
+      const indexData = await indexRes.json();
+      const quotes = indexData?.quoteResponse?.result || [];
+      if (quotes.length > 0) {
+        lines.push('\nGLOBAL ENDEKSLER:');
+        const nameMap: Record<string, string> = {
+          '^GSPC': 'S&P 500', '^DJI': 'Dow Jones', '^IXIC': 'NASDAQ',
+          '^XU100.IS': 'BIST 100', '^VIX': 'VIX (Korku)',
+        };
+        for (const q of quotes) {
+          const name = nameMap[q.symbol] || q.symbol;
+          const price = q.regularMarketPrice;
+          const changePct = q.regularMarketChangePercent || 0;
+          if (price) {
+            data.indices[q.symbol] = { name, price, change_pct: changePct };
+            lines.push(`${name}: ${price.toFixed(2)} (${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%)`);
+          }
+        }
+      }
+    }
+  } catch (e: any) { log.push(`Endeks hatası: ${e.message}`); }
+
+  data.raw_text = lines.join('\n');
+  log.push(`Piyasa verisi toplandı: ${lines.length} satır`);
+  return data;
+}
+
+// ================================================
+// Piyasa haberleri (RSS + News API)
+// ================================================
+
+async function fetchMarketNews(log: string[]): Promise<string[]> {
+  const news: string[] = [];
+
+  // Yahoo Finance RSS - Türkiye + Global
+  const rssFeeds = [
+    'https://finance.yahoo.com/news/rssindex',
+    'https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US',
+  ];
+
+  for (const feedUrl of rssFeeds) {
+    try {
+      const res = await fetch(feedUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const text = await res.text();
+        // Basit RSS parse - title taglarını çek
+        const titles = text.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g)
+          || text.match(/<title>(.*?)<\/title>/g)
+          || [];
+        for (const t of titles.slice(0, 5)) {
+          const clean = t.replace(/<\/?title>/g, '').replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim();
+          if (clean && clean.length > 10 && !clean.includes('Yahoo')) {
+            news.push(clean);
+          }
+        }
+      }
+    } catch { /* skip feed */ }
+  }
+
+  // Eğer NewsAPI key varsa (opsiyonel)
+  const newsApiKey = process.env.NEWS_API_KEY;
+  if (newsApiKey) {
+    try {
+      const res = await fetch(
+        `https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=5&apiKey=${newsApiKey}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        for (const article of (data.articles || [])) {
+          if (article.title) news.push(article.title);
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  log.push(`${news.length} haber başlığı toplandı`);
+  return [...new Set(news)].slice(0, 10); // Tekrarları kaldır, max 10
+}
+
+// ================================================
+// Portföy bağlam metni oluştur
+// ================================================
+
+function buildPortfolioContext(
+  holdings: any[], totalValue: number, totalInvestment: number,
+  totalPnlPct: number, totalCash: number, snapshots: any[],
+  dividends: any[], incomeRecords: any[],
+  dailyChange: number, dailyChangePct: number,
+): string {
+  const typeNames: Record<string, string> = {
+    stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
+    fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia',
+  };
+
+  // Tip dağılımı
+  const byType: Record<string, { value: number; count: number; pnl: number }> = {};
+  for (const h of holdings) {
+    const type = h.asset_type || 'other';
+    if (!byType[type]) byType[type] = { value: 0, count: 0, pnl: 0 };
+    const value = (h.current_price || 0) * (h.quantity || 0);
+    const cost = (h.purchase_price || 0) * (h.quantity || 0);
+    byType[type].value += value;
+    byType[type].count++;
+    byType[type].pnl += value - cost;
+  }
+
+  const dist = Object.entries(byType)
+    .sort(([, a], [, b]) => b.value - a.value)
+    .map(([type, d]) => `${typeNames[type] || type}: %${(d.value / totalValue * 100).toFixed(1)} (${d.count} adet, KZ: ${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(0)} TL)`)
+    .join('\n');
+
+  // Top 20 pozisyon
+  const topHoldings = [...holdings]
+    .sort((a, b) => (b.current_price * b.quantity) - (a.current_price * a.quantity))
+    .slice(0, 20)
+    .map(h => {
+      const value = (h.current_price || 0) * (h.quantity || 0);
+      const cost = (h.purchase_price || 0) * (h.quantity || 0);
+      const pnlPct = cost > 0 ? ((value - cost) / cost * 100) : 0;
+      const weight = totalValue > 0 ? (value / totalValue * 100) : 0;
+      return `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}): ${value.toFixed(0)} TL, KZ: %${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}, ağırlık: %${weight.toFixed(1)}`;
+    })
+    .join('\n');
+
+  // Performans trendi (son 7 gün)
+  const recentSnapshots = snapshots.slice(0, 7);
+  const perfTrend = recentSnapshots
+    .map(s => `${s.snapshot_date}: ${Number(s.total_value).toFixed(0)} TL`)
+    .join(', ');
+
+  // Temettü özeti
+  const totalDividends = dividends.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const recentDivs = dividends.slice(0, 5).map(d =>
+    `${d.payment_date}: ${d.amount} TL`
+  ).join(', ');
+
+  // Gelir özeti
+  const monthlyIncomeTotal = incomeRecords
+    .filter(r => !r.is_projected)
+    .reduce((sum, r) => sum + (r.amount_try || 0), 0);
+
+  return `PORTFÖY DURUMU (${new Date().toISOString().split('T')[0]}):
+Toplam Değer: ${totalValue.toFixed(0)} TL
+Toplam Yatırım: ${totalInvestment.toFixed(0)} TL
+Toplam K/Z: %${totalPnlPct.toFixed(1)} (${(totalValue - totalInvestment).toFixed(0)} TL)
+Nakit: ${totalCash.toFixed(0)} TL
+Günlük Değişim: ${dailyChange >= 0 ? '+' : ''}${dailyChange.toFixed(0)} TL (%${dailyChangePct.toFixed(1)})
+Pozisyon Sayısı: ${holdings.length}
+
+DAĞILIM:
+${dist}
+
+POZİSYONLAR (Top 20):
+${topHoldings}
+
+SON 7 GÜN PERFORMANSI:
+${perfTrend}
+
+TEMETTÜ GEÇMİŞİ:
+Toplam: ${totalDividends.toFixed(0)} TL
+Son: ${recentDivs || 'Henüz temettü yok'}
+
+GELİR ÖZETİ:
+Son kaydedilen gelir toplamı: ${monthlyIncomeTotal.toFixed(0)} TL`;
+}
+
+function buildMarketContext(marketData: MarketData, news: string[]): string {
+  let context = `GÜNCEL PİYASA VERİLERİ (canlı):
+${marketData.raw_text}`;
+
+  if (news.length > 0) {
+    context += `\n\nSON PİYASA HABERLERİ:
+${news.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
+  }
+
+  return context;
+}
+
+// ================================================
+// Claude AI çağrısı
+// ================================================
+
+async function callClaudeForDailyReport(apiKey: string, portfolioContext: string, marketContext: string): Promise<any> {
+  const systemPrompt = `Sen profesyonel bir portföy yöneticisisin. Her sabah müşterine kapsamlı günlük brifing hazırlıyorsun.
+
+GÖREVIN:
+1. Portföy durumunu analiz et
+2. Piyasa verilerini değerlendir (SADECE sana verilen CANLI verileri kullan)
+3. Haberlerin portföye etkisini yorumla
+4. Somut, uygulanabilir günlük aksiyon planı hazırla
+5. Dinamik maaş hesapla (portföyün %0.3-0.5/ay sürdürülebilir çekim)
+6. Rebalance ihtiyacını değerlendir
+
+KURALLAR:
+- Bilgi kesim tarihin Mayıs 2025. Sadece CANLI VERİLERE dayan.
+- Uydurma yapma. Veri olmayan hakkında yorum yapma.
+- Müşteri Türkiye'de. BIST + Revolut (ABD/AB) + Binance (kripto) kullanıyor.
+- Her öneri: NEDEN, NE KADAR, HANGİ PLATFORM, CANLI FİYAT içermeli.
+- Portföy maaşı hesaplarken: temettü + faiz + staking + kupon gelirlerini ayrı ayrı belirt.
+- Riskleri somut belirt: "kripto %22 ama hedefiniz %15" gibi.
+
+PİYASA ARAŞTIRMASI YAPMAN GEREKENLER:
+- Verilen piyasa verilerindeki trendleri analiz et (yükselen/düşen sektörler)
+- VIX seviyesine göre risk ortamını değerlendir
+- 52 haftalık aralıkta pozisyonu düşük olan hisseleri fırsat olarak belirt
+- Kripto 24 saatlik değişimlere göre momentum analizi yap
+- Döviz kurlarının portföye etkisini hesapla
+
+JSON FORMATI (başka metin ekleme):
+{
+  "actions": [
+    {
+      "urgency": "today|this_week|this_month",
+      "type": "buy|accumulate|hold|rebalance|protect|take_profit",
+      "symbol": "SEMBOL",
+      "market": "BIST|US|EU|CRYPTO",
+      "instruction": "Somut komut",
+      "detail": "Neden, risk, beklenti. Canlı fiyat referansı. 3-4 cümle.",
+      "amount_try": 0,
+      "risk": "low|medium|high",
+      "expected_annual_return": 0,
+      "dividend_yield": 0,
+      "platform": "Revolut|Binance|BIST|Mevcut"
+    }
+  ],
+  "monthly_income": {
+    "safe": 0,
+    "moderate": 0,
+    "dividend_estimate": 0,
+    "interest_estimate": 0,
+    "staking_estimate": 0,
+    "description": "Detaylı aylık gelir hesaplaması"
+  },
+  "portfolio_diagnosis": "Güçlü/zayıf yönler, en büyük risk, fırsat — 4-5 cümle",
+  "market_outlook": "Bugünkü canlı verilere dayalı piyasa değerlendirmesi — 3-4 cümle",
+  "market_research": {
+    "global_trend": "Küresel piyasa trendi ve Türkiye'ye etkisi",
+    "sector_analysis": "Yükselen ve düşen sektörler",
+    "risk_environment": "VIX ve risk değerlendirmesi",
+    "fx_impact": "Döviz kurlarının portföye etkisi",
+    "opportunities": "Fırsat olarak görülen varlıklar ve neden"
+  },
+  "rebalance_alert": {
+    "needed": true,
+    "deviations": [{"type": "kripto", "current_pct": 22, "target_pct": 15, "action": "azalt"}],
+    "summary": "Kısa rebalance özeti"
+  },
+  "top_pick": "En çok önerilen varlık ve neden — canlı fiyat ile",
+  "news_alerts": ["Portföyü etkileyen haber/gelişme 1", "Gelişme 2"],
+  "wealth_building_tip": "Bu portföye özel servet büyütme stratejisi"
+}`;
+
+  const userPrompt = `${portfolioContext}
+
+${marketContext}
+
+Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Piyasa araştırması yap, trendleri analiz et, portföye özel somut öneriler ver.`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Claude API error: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  const text = data.content[0].text;
+
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+  } catch { /* fallback */ }
+
+  return { raw: text, actions: [], monthly_income: {}, market_outlook: text };
+}

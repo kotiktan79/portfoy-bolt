@@ -115,7 +115,7 @@ export async function convertAmount(
 }
 
 export async function updateExchangeRates(): Promise<void> {
-  const currencies = ['USD', 'EUR', 'GBP', 'TRY'];
+  const currencies = ['USD', 'EUR', 'GBP', 'TRY', 'RON', 'RUB', 'CHF'];
   const rates: Array<{ from: string; to: string; rate: number }> = [];
 
   for (const from of currencies) {

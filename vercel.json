@@ -5,5 +5,39 @@
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/((?!assets|dashboard|sw|manifest|favicon).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-snapshot",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/daily-report",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/risk-monitor",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/risk-monitor",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/risk-monitor",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/opportunity-scanner",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/opportunity-scanner",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/dividend-tracker",
+      "schedule": "0 6 * * 1"
+    }
   ]
 }

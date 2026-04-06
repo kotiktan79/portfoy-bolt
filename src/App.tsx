@@ -15,6 +15,7 @@ const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const MarketPage = lazy(() => import('./pages/MarketPage'));
 const PerformancePage = lazy(() => import('./pages/PerformancePage'));
 const BinancePage = lazy(() => import('./pages/BinancePage'));
+const DailyReportPage = lazy(() => import('./pages/DailyReportPage'));
 
 function PageLoader() {
   return (
@@ -44,6 +45,7 @@ function App() {
             <Route path="/market" element={<Suspense fallback={<PageLoader />}><MarketPage /></Suspense>} />
             <Route path="/performance" element={<Suspense fallback={<PageLoader />}><PerformancePage /></Suspense>} />
             <Route path="/binance" element={<Suspense fallback={<PageLoader />}><BinancePage /></Suspense>} />
+            <Route path="/daily-report" element={<Suspense fallback={<PageLoader />}><DailyReportPage /></Suspense>} />
           </Route>
         </Routes>
       </PortfolioProvider>
