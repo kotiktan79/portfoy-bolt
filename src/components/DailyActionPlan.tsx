@@ -486,8 +486,20 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
                 </button>
               </div>
 
+              {/* Portfolio Diagnosis */}
+              {(aiPlan as any).portfolio_diagnosis && (
+                <div className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Portföy Teşhisi</p>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{(aiPlan as any).portfolio_diagnosis}</p>
+                </div>
+              )}
+
+              {/* Market Outlook */}
               {aiPlan.market_outlook && (
-                <p className="text-xs text-gray-600 dark:text-gray-400 italic px-1">{aiPlan.market_outlook}</p>
+                <div className="px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Piyasa Görünümü</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{aiPlan.market_outlook}</p>
+                </div>
               )}
 
               {aiPlan.top_pick && (
@@ -542,6 +554,9 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
                           }`}>
                             {action.risk === 'low' ? 'düşük risk' : action.risk === 'high' ? 'yüksek risk' : 'orta risk'}
                           </span>
+                        )}
+                        {(action as any).platform && (
+                          <span className="text-[9px] font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1 rounded">{(action as any).platform}</span>
                         )}
                         {action.timeframe && (
                           <span className="text-[9px] text-gray-400">{action.timeframe === 'short' ? 'kısa vade' : 'uzun vade'}</span>
