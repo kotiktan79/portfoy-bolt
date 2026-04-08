@@ -152,6 +152,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ============================================
     try {
       const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'LINKUSDT', 'ADAUSDT', 'AVAXUSDT', 'DOTUSDT', 'SUIUSDT'];
+      let cryptoEntries: Array<{ sym: string; price: number; changePct: number; lowPrice: number; highPrice: number }> = [];
+
+      // Binance dene
       const cryptoRes = await fetch(
         `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(cryptoSymbols)}`,
         { signal: AbortSignal.timeout(5000) }
@@ -159,37 +162,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (cryptoRes.ok) {
         const data = await cryptoRes.json();
         for (const c of data) {
-          const sym = c.symbol.replace('USDT', '');
-          const price = parseFloat(c.lastPrice);
-          const changePct = parseFloat(c.priceChangePercent);
-          const lowPrice = parseFloat(c.lowPrice);
-          const highPrice = parseFloat(c.highPrice);
-
-          // %8+ düşüş = flash dip
-          if (changePct <= -8) {
-            opportunities.push({
-              type: 'crypto_dip',
-              symbol: sym,
-              market: 'CRYPTO',
-              price,
-              signal: `24s düşüş: %${changePct.toFixed(1)} — flash dip!`,
-              detail: `$${price.toFixed(2)} (24s aralık: $${lowPrice.toFixed(2)}-$${highPrice.toFixed(2)}).${userSymbols.has(sym) ? ' [PORTFÖYÜNDE]' : ''}`,
-              confidence: changePct <= -15 ? 'high' : 'medium',
-            });
+          cryptoEntries.push({
+            sym: c.symbol.replace('USDT', ''),
+            price: parseFloat(c.lastPrice),
+            changePct: parseFloat(c.priceChangePercent),
+            lowPrice: parseFloat(c.lowPrice),
+            highPrice: parseFloat(c.highPrice),
+          });
+        }
+      } else {
+        // CoinGecko fallback
+        const cgIds: Record<string, string> = {
+          BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin',
+          XRP: 'ripple', LINK: 'chainlink', ADA: 'cardano', AVAX: 'avalanche-2',
+          DOT: 'polkadot', SUI: 'sui',
+        };
+        const ids = Object.values(cgIds).join(',');
+        const cgRes = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`,
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (cgRes.ok) {
+          const cgData = await cgRes.json();
+          const idToSym: Record<string, string> = {};
+          for (const [sym, id] of Object.entries(cgIds)) idToSym[id] = sym;
+          for (const [id, info] of Object.entries(cgData)) {
+            const sym = idToSym[id];
+            if (sym) {
+              const p = (info as any).usd || 0;
+              cryptoEntries.push({
+                sym,
+                price: p,
+                changePct: (info as any).usd_24h_change || 0,
+                lowPrice: p,
+                highPrice: p,
+              });
+            }
           }
+        }
+      }
 
-          // %5-8 düşüş = ilginç
-          if (changePct <= -5 && changePct > -8) {
-            opportunities.push({
-              type: 'crypto_dip',
-              symbol: sym,
-              market: 'CRYPTO',
-              price,
-              signal: `24s düşüş: %${changePct.toFixed(1)}`,
-              detail: `$${price.toFixed(2)}. Kademeli alım fırsatı olabilir.${userSymbols.has(sym) ? ' [PORTFÖYÜNDE]' : ''}`,
-              confidence: 'low',
-            });
-          }
+      for (const { sym, price, changePct, lowPrice, highPrice } of cryptoEntries) {
+        // %8+ düşüş = flash dip
+        if (changePct <= -8) {
+          opportunities.push({
+            type: 'crypto_dip',
+            symbol: sym,
+            market: 'CRYPTO',
+            price,
+            signal: `24s düşüş: %${changePct.toFixed(1)} — flash dip!`,
+            detail: `$${price.toFixed(2)} (24s aralık: $${lowPrice.toFixed(2)}-$${highPrice.toFixed(2)}).${userSymbols.has(sym) ? ' [PORTFÖYÜNDE]' : ''}`,
+            confidence: changePct <= -15 ? 'high' : 'medium',
+          });
+        }
+
+        // %5-8 düşüş = ilginç
+        if (changePct <= -5 && changePct > -8) {
+          opportunities.push({
+            type: 'crypto_dip',
+            symbol: sym,
+            market: 'CRYPTO',
+            price,
+            signal: `24s düşüş: %${changePct.toFixed(1)}`,
+            detail: `$${price.toFixed(2)}. Kademeli alım fırsatı olabilir.${userSymbols.has(sym) ? ' [PORTFÖYÜNDE]' : ''}`,
+            confidence: 'low',
+          });
         }
       }
     } catch { /* skip */ }

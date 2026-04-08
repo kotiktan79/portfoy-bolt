@@ -233,10 +233,45 @@ async function fetchComprehensiveMarketData(log: string[]): Promise<MarketData> 
   // Kripto fiyatları (top 10)
   try {
     const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT', 'DOTUSDT'];
+    let cryptoData: any[] = [];
+    let cryptoSource = 'Binance';
+
+    // Binance dene
     const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(cryptoSymbols)}`);
     if (res.ok) {
-      const cryptoData = await res.json();
-      lines.push('\nKRİPTO (24 saat):');
+      cryptoData = await res.json();
+    } else {
+      // CoinGecko fallback
+      cryptoSource = 'CoinGecko';
+      log.push(`Binance 24hr hata (${res.status}), CoinGecko'ya geçiliyor...`);
+      const cgIds: Record<string, string> = {
+        BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin',
+        XRP: 'ripple', ADA: 'cardano', DOGE: 'dogecoin', LINK: 'chainlink',
+        AVAX: 'avalanche-2', DOT: 'polkadot',
+      };
+      const ids = Object.values(cgIds).join(',');
+      const cgRes = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+      );
+      if (cgRes.ok) {
+        const cgData = await cgRes.json();
+        const idToSym: Record<string, string> = {};
+        for (const [sym, id] of Object.entries(cgIds)) idToSym[id] = sym;
+        for (const [id, info] of Object.entries(cgData)) {
+          const sym = idToSym[id];
+          if (sym) {
+            cryptoData.push({
+              symbol: `${sym}USDT`,
+              lastPrice: String((info as any).usd || 0),
+              priceChangePercent: String((info as any).usd_24h_change?.toFixed(2) || '0'),
+            });
+          }
+        }
+      }
+    }
+
+    if (cryptoData.length > 0) {
+      lines.push(`\nKRİPTO (${cryptoSource}, 24 saat):`);
       for (const c of cryptoData) {
         const sym = c.symbol.replace('USDT', '');
         const price = parseFloat(c.lastPrice);

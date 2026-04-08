@@ -61,21 +61,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const pnlPercentage = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
 
     const today = new Date().toISOString().split('T')[0];
+    const snapshotData = {
+      snapshot_date: today,
+      total_value: totalValue,
+      total_investment: totalInvestment,
+      total_pnl: totalPnl,
+      pnl_percentage: pnlPercentage,
+    };
+
+    // Upsert dene, constraint yoksa delete+insert fallback
     const { error: snapshotError } = await supabase
       .from('portfolio_snapshots')
-      .upsert(
-        [{
-          snapshot_date: today,
-          total_value: totalValue,
-          total_investment: totalInvestment,
-          total_pnl: totalPnl,
-          pnl_percentage: pnlPercentage,
-        }],
-        { onConflict: 'snapshot_date' }
-      );
+      .upsert([snapshotData], { onConflict: 'snapshot_date' });
 
     if (snapshotError) {
-      log.push(`Snapshot kayıt hatası: ${snapshotError.message}`);
+      // Constraint hatası → delete+insert fallback
+      log.push(`Upsert hata (${snapshotError.message}), delete+insert deneniyor...`);
+      await supabase.from('portfolio_snapshots').delete().eq('snapshot_date', today);
+      const { error: insertError } = await supabase.from('portfolio_snapshots').insert([snapshotData]);
+      if (insertError) {
+        log.push(`Snapshot kayıt hatası: ${insertError.message}`);
+      } else {
+        log.push(`Snapshot kaydedildi (fallback): ${totalValue.toFixed(0)} TL`);
+      }
     } else {
       log.push(`Snapshot kaydedildi: ${totalValue.toFixed(0)} TL`);
     }
@@ -173,20 +181,72 @@ async function updateAllPrices(supabase: any, holdings: any[], log: string[]): P
   return result;
 }
 
+// CoinGecko ID mapping
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin',
+  XRP: 'ripple', ADA: 'cardano', DOGE: 'dogecoin', LINK: 'chainlink',
+  AVAX: 'avalanche-2', DOT: 'polkadot', NEAR: 'near', ATOM: 'cosmos',
+  FIL: 'filecoin', AAVE: 'aave', UNI: 'uniswap', MATIC: 'matic-network',
+  ALGO: 'algorand', FTM: 'fantom', SAND: 'the-sandbox', MANA: 'decentraland',
+  APT: 'aptos', ARB: 'arbitrum', OP: 'optimism', SUI: 'sui',
+  SEI: 'sei-network', TIA: 'celestia', INJ: 'injective-protocol',
+  RUNE: 'thorchain', LTC: 'litecoin', BCH: 'bitcoin-cash',
+};
+
+async function fetchCryptoPricesCoinGecko(symbols: string[]): Promise<Record<string, number>> {
+  const priceMap: Record<string, number> = {};
+  const ids = symbols.map(s => COINGECKO_IDS[s]).filter(Boolean);
+  if (ids.length === 0) return priceMap;
+
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`
+  );
+  if (!res.ok) throw new Error(`CoinGecko API: ${res.status}`);
+
+  const data = await res.json();
+  const idToSymbol: Record<string, string> = {};
+  for (const [sym, id] of Object.entries(COINGECKO_IDS)) {
+    idToSymbol[id] = sym;
+  }
+  for (const [id, prices] of Object.entries(data)) {
+    const sym = idToSymbol[id];
+    if (sym && (prices as any).usd) {
+      priceMap[sym] = (prices as any).usd;
+    }
+  }
+  return priceMap;
+}
+
 async function updateCryptoPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
+  let priceMap: Record<string, number> = {};
+  let source = 'Binance';
+
+  // Binance dene
   try {
     const symbols = holdings.map(h => `"${h.symbol.toUpperCase()}USDT"`).join(',');
     const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=[${symbols}]`);
     if (!res.ok) throw new Error(`Binance API: ${res.status}`);
 
     const data = await res.json();
-    const priceMap: Record<string, number> = {};
     for (const item of data) {
       const sym = item.symbol.replace('USDT', '');
       priceMap[sym] = parseFloat(item.price);
     }
+  } catch (binanceErr: any) {
+    // CoinGecko fallback
+    log.push(`Binance hata (${binanceErr.message}), CoinGecko'ya geçiliyor...`);
+    try {
+      const symbolList = holdings.map(h => h.symbol.toUpperCase());
+      priceMap = await fetchCryptoPricesCoinGecko(symbolList);
+      source = 'CoinGecko';
+    } catch (cgErr: any) {
+      log.push(`CoinGecko da başarısız: ${cgErr.message}`);
+      result.failed += holdings.length;
+      return;
+    }
+  }
 
-    // USD/TRY kuru al
+  try {
     const usdTry = await fetchUsdTry();
 
     for (const h of holdings) {
@@ -200,7 +260,7 @@ async function updateCryptoPrices(supabase: any, holdings: any[], result: PriceR
         result.failed++;
       }
     }
-    log.push(`Kripto: ${Object.keys(priceMap).length} fiyat alındı (USD/TRY: ${usdTry.toFixed(2)})`);
+    log.push(`Kripto (${source}): ${Object.keys(priceMap).length} fiyat alındı (USD/TRY: ${usdTry.toFixed(2)})`);
   } catch (e: any) {
     log.push(`Kripto fiyat hatası: ${e.message}`);
     result.failed += holdings.length;
