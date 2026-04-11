@@ -37,6 +37,30 @@ export default function AIAdvisor() {
   const [chatInput, setChatInput] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'signals' | 'suggestions' | 'chat'>('overview');
 
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('ai_chat_history');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setChatHistory(parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Save chat history to localStorage on change
+  useEffect(() => {
+    if (chatHistory.length > 0) {
+      const toStore = chatHistory.slice(-50);
+      localStorage.setItem('ai_chat_history', JSON.stringify(toStore));
+    }
+  }, [chatHistory]);
+
+  const clearChatHistory = () => {
+    setChatHistory([]);
+    localStorage.removeItem('ai_chat_history');
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -696,9 +720,20 @@ export default function AIAdvisor() {
 
       {activeTab === 'chat' && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <MessageSquare className="w-6 h-6 text-purple-600" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Sohbet</h3>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <MessageSquare className="w-6 h-6 text-purple-600" />
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Sohbet</h3>
+            </div>
+            {chatHistory.length > 0 && (
+              <button
+                onClick={clearChatHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors font-medium"
+              >
+                <X className="w-4 h-4" />
+                Sohbeti Temizle
+              </button>
+            )}
           </div>
 
           <div className="space-y-4 mb-6 max-h-[500px] overflow-y-auto">

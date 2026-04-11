@@ -26,6 +26,7 @@ import { requestNotificationPermission, notifyAchievementUnlocked, getNotificati
 import { registerServiceWorker, setupInstallPrompt, setupConnectionListener } from '../services/pwaService';
 import { startExchangeRateUpdates, stopExchangeRateUpdates, normalizeToBaseCurrency } from '../services/currencyService';
 import { startHealthMonitoring, stopHealthMonitoring } from '../services/priceMonitor';
+import { startPriceAlertMonitor, stopPriceAlertMonitor } from '../services/priceAlertMonitor';
 import { stopCacheCleanup } from '../services/cacheService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
 import { useToast } from '../hooks/useToast';
@@ -155,6 +156,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     setupConnectionListener(() => {});
     startExchangeRateUpdates();
     startHealthMonitoring();
+    startPriceAlertMonitor(() => holdingsRef.current);
 
     const unsubscribeStatus = subscribeToConnectionStatus((status) => {
       setConnectionStatus(status);
@@ -182,6 +184,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       unsubscribePrices();
       closeWebSocketConnection();
       stopHealthMonitoring();
+      stopPriceAlertMonitor();
       stopExchangeRateUpdates();
       stopCacheCleanup();
     };
@@ -315,7 +318,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
         const newPrice = prices[holding.symbol];
         if (newPrice && Math.abs(newPrice - holding.current_price) > 0.01) {
-          await supabase
+          const { error } = await supabase
             .from('holdings')
             .update({
               current_price: newPrice,
@@ -323,6 +326,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
             })
             .eq('id', holding.id);
 
+          if (error) {
+            console.error(`DB update failed for ${holding.symbol}:`, error.message);
+            return holding; // keep original price if DB update fails
+          }
           return { ...holding, current_price: newPrice };
         }
         return holding;

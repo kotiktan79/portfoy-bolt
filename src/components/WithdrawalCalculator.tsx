@@ -89,13 +89,14 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
       let canWithdraw = false;
 
       switch (strategy) {
-        case 'sustainable':
+        case 'sustainable': {
           const annualSafeForAsset = currentValue * 0.04;
           const monthlySafeForAsset = annualSafeForAsset / 12;
           maxWithdrawable = Math.max(0, realHoldingProfit > 0 ? monthlySafeForAsset : 0);
           recommendedWithdraw = maxWithdrawable;
           canWithdraw = realHoldingProfit > 0;
           break;
+        }
 
         case 'profit-only':
           if (profit > 0) {

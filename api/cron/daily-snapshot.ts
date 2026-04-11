@@ -49,12 +49,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Portfolio snapshot hesapla ve kaydet
     const totalValue = allHoldings.reduce((sum, h) => {
-      const price = h.current_price || h.purchase_price || 0;
-      return sum + (price * (h.quantity || 0));
+      const price = Number(h.current_price) || Number(h.purchase_price) || 0;
+      const qty = Number(h.quantity) || 0;
+      const value = price * qty;
+      return sum + (isFinite(value) ? value : 0);
     }, 0);
 
     const totalInvestment = allHoldings.reduce((sum, h) => {
-      return sum + ((h.purchase_price || 0) * (h.quantity || 0));
+      const price = Number(h.purchase_price) || 0;
+      const qty = Number(h.quantity) || 0;
+      const value = price * qty;
+      return sum + (isFinite(value) ? value : 0);
     }, 0);
 
     const totalPnl = totalValue - totalInvestment;

@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...Array.from(holdingMap.keys()).filter(s => !['BTC', 'ETH', 'SOL', 'BNB', 'LINK', 'XRP', 'ADA', 'AVAX', 'DOT', 'DOGE', 'SUI'].includes(s)),
       'KO', 'JNJ', 'PG', 'O', 'SCHD', 'VZ', 'T', 'ABBV', 'MCD', 'JPM',
     ];
-    const uniqueUS = [...new Set(usDividendStocks)].filter(s => !s.match(/^[A-Z]{2,5}$/) === false);
+    const uniqueUS = [...new Set(usDividendStocks)].filter(s => /^[A-Z]{2,5}$/.test(s));
 
     try {
       const symbols = uniqueUS.slice(0, 20).join(',');

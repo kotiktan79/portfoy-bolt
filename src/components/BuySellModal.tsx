@@ -111,8 +111,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
           .update({
             realized_profit: realizedProfit,
           })
-          .eq('holding_id', holding.id)
-          .eq('transaction_date', transactionData.transaction_date);
+          .eq('id', transactionResult.id);
 
         if (profitError) {
           console.warn('Realized profit update failed:', profitError);

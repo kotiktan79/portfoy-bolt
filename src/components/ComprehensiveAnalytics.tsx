@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
-import { getAdvancedMetrics, type AdvancedMetrics } from '../services/analyticsService';
-import { Activity, TrendingUp, AlertTriangle, Target, Award, BarChart3 } from 'lucide-react';
+import { getAdvancedMetrics, getHistoricalSnapshots, type AdvancedMetrics } from '../services/analyticsService';
+import { calculateRSI, calculateMACD, calculateBollingerBands } from '../services/technicalIndicators';
+import { Activity, TrendingUp, TrendingDown, AlertTriangle, Target, Award, BarChart3 } from 'lucide-react';
 import SectorAnalysis from './SectorAnalysis';
 import PeriodicReturns from './PeriodicReturns';
 
+interface TechIndicatorSummary {
+  rsi: number;
+  rsiSignal: 'oversold' | 'neutral' | 'overbought';
+  macdSignal: 'bullish' | 'neutral' | 'bearish';
+  macdHistogram: number;
+  bollingerPosition: 'below_lower' | 'near_lower' | 'middle' | 'near_upper' | 'above_upper';
+  bollingerPctB: number;
+}
+
 export default function ComprehensiveAnalytics() {
   const [metrics, setMetrics] = useState<AdvancedMetrics | null>(null);
+  const [techIndicators, setTechIndicators] = useState<TechIndicatorSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,8 +25,43 @@ export default function ComprehensiveAnalytics() {
 
   async function loadMetrics() {
     try {
-      const data = await getAdvancedMetrics();
+      const [data, snapshots] = await Promise.all([
+        getAdvancedMetrics(),
+        getHistoricalSnapshots(60),
+      ]);
       setMetrics(data);
+
+      if (snapshots.length >= 14) {
+        const prices = snapshots.map(s => s.total_value);
+        const rsiValues = calculateRSI(prices, 14);
+        const rsi = rsiValues[rsiValues.length - 1] || 50;
+
+        const macd = calculateMACD(prices);
+        const lastHist = macd.histogram[macd.histogram.length - 1] || 0;
+        const prevHist = macd.histogram[macd.histogram.length - 2] || 0;
+
+        const bb = calculateBollingerBands(prices, 20);
+        const lastPrice = prices[prices.length - 1];
+        const upper = bb.upper[bb.upper.length - 1] || lastPrice;
+        const lower = bb.lower[bb.lower.length - 1] || lastPrice;
+        const bbRange = upper - lower;
+        const pctB = bbRange > 0 ? ((lastPrice - lower) / bbRange) * 100 : 50;
+
+        let bollingerPosition: TechIndicatorSummary['bollingerPosition'] = 'middle';
+        if (pctB <= 5) bollingerPosition = 'below_lower';
+        else if (pctB <= 25) bollingerPosition = 'near_lower';
+        else if (pctB >= 95) bollingerPosition = 'above_upper';
+        else if (pctB >= 75) bollingerPosition = 'near_upper';
+
+        setTechIndicators({
+          rsi: isFinite(rsi) ? rsi : 50,
+          rsiSignal: rsi <= 30 ? 'oversold' : rsi >= 70 ? 'overbought' : 'neutral',
+          macdSignal: lastHist > 0 && lastHist > prevHist ? 'bullish' : lastHist < 0 && lastHist < prevHist ? 'bearish' : 'neutral',
+          macdHistogram: lastHist,
+          bollingerPosition,
+          bollingerPctB: isFinite(pctB) ? pctB : 50,
+        });
+      }
     } catch (error) {
       console.error('Error loading metrics:', error);
     } finally {
@@ -177,6 +223,112 @@ export default function ComprehensiveAnalytics() {
           </>
         )}
       </div>
+
+      {techIndicators && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Activity className="w-6 h-6 text-purple-600" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Teknik Göstergeler</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* RSI */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-5 border border-purple-200 dark:border-purple-800">
+              <h3 className="text-sm font-medium text-purple-700 dark:text-purple-400 mb-2">RSI (14)</h3>
+              <p className="text-3xl font-bold text-purple-900 dark:text-purple-300 mb-2">
+                {techIndicators.rsi.toFixed(1)}
+              </p>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+                <div
+                  className={`h-2.5 rounded-full transition-all ${
+                    techIndicators.rsi <= 30 ? 'bg-green-500' : techIndicators.rsi >= 70 ? 'bg-red-500' : 'bg-purple-500'
+                  }`}
+                  style={{ width: `${Math.min(techIndicators.rsi, 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-gray-500">
+                <span>Aşırı Satım (30)</span>
+                <span>Aşırı Alım (70)</span>
+              </div>
+              <div className={`mt-2 text-xs font-semibold px-2 py-1 rounded-full inline-block ${
+                techIndicators.rsiSignal === 'oversold' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                techIndicators.rsiSignal === 'overbought' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {techIndicators.rsiSignal === 'oversold' ? 'Aşırı Satım - Alım Fırsatı' :
+                 techIndicators.rsiSignal === 'overbought' ? 'Aşırı Alım - Dikkat' : 'Nötr Bölge'}
+              </div>
+            </div>
+
+            {/* MACD */}
+            <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 rounded-xl p-5 border border-cyan-200 dark:border-cyan-800">
+              <h3 className="text-sm font-medium text-cyan-700 dark:text-cyan-400 mb-2">MACD</h3>
+              <div className="flex items-center gap-2 mb-2">
+                {techIndicators.macdSignal === 'bullish' ? (
+                  <TrendingUp className="w-8 h-8 text-green-600" />
+                ) : techIndicators.macdSignal === 'bearish' ? (
+                  <TrendingDown className="w-8 h-8 text-red-600" />
+                ) : (
+                  <Activity className="w-8 h-8 text-gray-500" />
+                )}
+                <p className={`text-2xl font-bold ${
+                  techIndicators.macdSignal === 'bullish' ? 'text-green-600' :
+                  techIndicators.macdSignal === 'bearish' ? 'text-red-600' : 'text-gray-600'
+                }`}>
+                  {techIndicators.macdSignal === 'bullish' ? 'Yükseliş' :
+                   techIndicators.macdSignal === 'bearish' ? 'Düşüş' : 'Nötr'}
+                </p>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                Histogram: {techIndicators.macdHistogram >= 0 ? '+' : ''}{techIndicators.macdHistogram.toFixed(0)}
+              </p>
+              <p className="text-xs text-cyan-600 dark:text-cyan-500">
+                {techIndicators.macdSignal === 'bullish'
+                  ? 'MACD sinyal çizgisinin üzerinde ve yükseliyor'
+                  : techIndicators.macdSignal === 'bearish'
+                  ? 'MACD sinyal çizgisinin altında ve düşüyor'
+                  : 'MACD sinyal çizgisine yakın, belirgin yön yok'}
+              </p>
+            </div>
+
+            {/* Bollinger Bands */}
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-xl p-5 border border-amber-200 dark:border-amber-800">
+              <h3 className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-2">Bollinger Bantları</h3>
+              <p className="text-3xl font-bold text-amber-900 dark:text-amber-300 mb-2">
+                %{techIndicators.bollingerPctB.toFixed(0)}
+              </p>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2 relative">
+                <div className="absolute left-[20%] top-0 w-px h-2.5 bg-gray-400" />
+                <div className="absolute left-[80%] top-0 w-px h-2.5 bg-gray-400" />
+                <div
+                  className={`h-2.5 rounded-full transition-all ${
+                    techIndicators.bollingerPctB <= 20 ? 'bg-green-500' :
+                    techIndicators.bollingerPctB >= 80 ? 'bg-red-500' : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${Math.min(Math.max(techIndicators.bollingerPctB, 2), 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-gray-500">
+                <span>Alt Bant</span>
+                <span>Orta</span>
+                <span>Üst Bant</span>
+              </div>
+              <div className={`mt-2 text-xs font-semibold px-2 py-1 rounded-full inline-block ${
+                techIndicators.bollingerPosition === 'below_lower' || techIndicators.bollingerPosition === 'near_lower'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : techIndicators.bollingerPosition === 'above_upper' || techIndicators.bollingerPosition === 'near_upper'
+                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {techIndicators.bollingerPosition === 'below_lower' ? 'Alt Bandın Altında - Güçlü Alım'
+                  : techIndicators.bollingerPosition === 'near_lower' ? 'Alt Banda Yakın - Alım Fırsatı'
+                  : techIndicators.bollingerPosition === 'above_upper' ? 'Üst Bandın Üstünde - Aşırı Alım'
+                  : techIndicators.bollingerPosition === 'near_upper' ? 'Üst Banda Yakın - Dikkat'
+                  : 'Orta Bölge - Nötr'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <PeriodicReturns />
       <SectorAnalysis />

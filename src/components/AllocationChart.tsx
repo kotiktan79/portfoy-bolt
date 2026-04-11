@@ -45,7 +45,7 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
 
   const chartData = allocationData.map((item) => ({
     ...item,
-    percentage: ((item.value / totalValue) * 100).toFixed(1),
+    percentage: totalValue > 0 ? ((item.value / totalValue) * 100).toFixed(1) : '0.0',
   }));
 
   const CustomTooltip = ({ active, payload }: any) => {

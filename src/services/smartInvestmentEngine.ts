@@ -145,26 +145,6 @@ const BIST_PICKS = [
   { symbol: 'KOZAL', name: 'Koza Altın', sector: 'Madencilik', type: 'growth' as const },
 ];
 
-// ABD + Avrupa büyüme + temettü hisseleri (Revolut ile alınabilir)
-const GLOBAL_PICKS = [
-  // ABD Büyüme
-  { symbol: 'NVDA', name: 'Nvidia', sector: 'AI/Chip', type: 'growth' as const, market: 'US' },
-  { symbol: 'MSFT', name: 'Microsoft', sector: 'Teknoloji', type: 'growth' as const, market: 'US' },
-  { symbol: 'GOOGL', name: 'Alphabet', sector: 'Teknoloji', type: 'growth' as const, market: 'US' },
-  { symbol: 'AMZN', name: 'Amazon', sector: 'E-ticaret/Bulut', type: 'growth' as const, market: 'US' },
-  { symbol: 'META', name: 'Meta', sector: 'Sosyal Medya/AI', type: 'growth' as const, market: 'US' },
-  { symbol: 'AAPL', name: 'Apple', sector: 'Teknoloji', type: 'growth' as const, market: 'US' },
-  { symbol: 'PLTR', name: 'Palantir', sector: 'AI/Veri', type: 'growth' as const, market: 'US' },
-  // ABD Temettü
-  { symbol: 'JNJ', name: 'Johnson & Johnson', sector: 'Sağlık', type: 'dividend' as const, market: 'US' },
-  { symbol: 'KO', name: 'Coca-Cola', sector: 'Tüketim', type: 'dividend' as const, market: 'US' },
-  { symbol: 'PG', name: 'Procter & Gamble', sector: 'Tüketim', type: 'dividend' as const, market: 'US' },
-  { symbol: 'PEP', name: 'PepsiCo', sector: 'Tüketim', type: 'dividend' as const, market: 'US' },
-  // Avrupa
-  { symbol: 'ASML', name: 'ASML', sector: 'Chip Ekipman', type: 'growth' as const, market: 'EU' },
-  { symbol: 'NOVO', name: 'Novo Nordisk', sector: 'İlaç', type: 'growth' as const, market: 'EU' },
-  { symbol: 'SAP', name: 'SAP', sector: 'Yazılım', type: 'growth' as const, market: 'EU' },
-];
 
 const CRYPTO_PICKS = [
   { symbol: 'BTC', name: 'Bitcoin', tier: 1 },

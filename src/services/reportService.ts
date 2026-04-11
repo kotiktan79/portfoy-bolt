@@ -20,6 +20,13 @@ export interface DailyReport {
   ai_model: string;
   generation_time_ms: number;
   created_at: string;
+  market_research?: {
+    global_trend?: string;
+    sector_analysis?: string;
+    risk_environment?: string;
+    fx_impact?: string;
+    opportunities?: string;
+  };
 }
 
 export interface MonthlySalary {

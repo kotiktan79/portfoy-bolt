@@ -211,7 +211,7 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 dark:divide-gray-800/50">
-                      {filteredAndSortedHoldings.map((holding, idx) => (
+                      {filteredAndSortedHoldings.map((holding) => (
                         <HoldingRow
                           key={holding.id}
                           holding={holding}

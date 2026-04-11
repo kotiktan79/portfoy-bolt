@@ -157,11 +157,17 @@ export async function getTotalCashValue(): Promise<number> {
     if (error) throw error;
     if (!data || data.length === 0) return 0;
 
-    let totalTRY = 0;
+    // Fetch all exchange rates in parallel instead of sequentially
+    const ratePromises = data.map(balance =>
+      balance.currency === 'TRY'
+        ? Promise.resolve(1)
+        : getExchangeRate(balance.currency, 'TRY').then(r => r || 1)
+    );
+    const rates = await Promise.all(ratePromises);
 
-    for (const balance of data) {
-      const rate = balance.currency === 'TRY' ? 1 : await getExchangeRate(balance.currency, 'TRY');
-      const convertedValue = balance.balance * (rate || 1);
+    let totalTRY = 0;
+    for (let i = 0; i < data.length; i++) {
+      const convertedValue = data[i].balance * rates[i];
       if (isFinite(convertedValue)) {
         totalTRY += convertedValue;
       }

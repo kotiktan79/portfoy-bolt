@@ -52,7 +52,7 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
         quantity: qty,
       });
       onClose();
-    } catch (err) {
+    } catch {
       setError('Güncelleme sırasında bir hata oluştu');
     } finally {
       setSubmitting(false);

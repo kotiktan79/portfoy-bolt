@@ -5,7 +5,8 @@ const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/dashboard.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/offline.html'
 ];
 
 const API_CACHE_DURATION = 5 * 60 * 1000;
@@ -52,7 +53,7 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
           }
           return response;
-        }).catch(() => caches.match(request))
+        }).catch(() => caches.match(request).then(r => r || caches.match('/offline.html')))
       );
     } else if (isAsset) {
       event.respondWith(

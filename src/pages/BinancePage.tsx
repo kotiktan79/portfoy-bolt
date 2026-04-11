@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, RefreshCw, Download, TrendingUp, TrendingDown,
-  Wallet, AlertCircle, Check
+  ArrowLeft, RefreshCw, Download,
+  AlertCircle, Check
 } from 'lucide-react';
 import { formatCurrency } from '../services/priceService';
 import { usePortfolio } from '../contexts/PortfolioContext';
@@ -49,7 +49,7 @@ export default function BinancePage() {
       } else {
         setError(data.error || 'Binance bağlantısı başarısız');
       }
-    } catch (err) {
+    } catch {
       setError('Binance API bağlantı hatası');
     }
     setLoading(false);

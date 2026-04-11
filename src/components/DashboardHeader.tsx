@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Plus, RefreshCw, Moon, Sun, Bell, BarChart3,
-  Wifi, WifiOff, Activity, Download, Tv, Shield, Palette,
-  PieChart, Scale, Zap, Database, ChevronDown, Settings,
+  Activity, Download, Shield, Palette,
+  PieChart, Scale, Zap, Database,
   Target, Menu, X, Trash2, MoreHorizontal, Wallet, Eye, Globe
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';

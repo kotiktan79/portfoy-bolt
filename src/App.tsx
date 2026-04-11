@@ -1,11 +1,12 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, ReactNode } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { PortfolioProvider } from './contexts/PortfolioContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Layout from './components/Layout';
 
-// Lazy load pages - only HomePage loads eagerly
-import HomePage from './pages/HomePage';
+// Lazy load all pages for optimal bundle splitting
+const HomePage = lazy(() => import('./pages/HomePage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 const RebalancingPage = lazy(() => import('./pages/RebalancingPage'));
 const ScenarioPage = lazy(() => import('./pages/ScenarioPage'));
@@ -28,6 +29,16 @@ function PageLoader() {
   );
 }
 
+function SafePage({ children }: { children: ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -35,17 +46,17 @@ function App() {
       <PortfolioProvider>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/analytics" element={<Suspense fallback={<PageLoader />}><AnalyticsPage /></Suspense>} />
-            <Route path="/rebalancing" element={<Suspense fallback={<PageLoader />}><RebalancingPage /></Suspense>} />
-            <Route path="/scenario" element={<Suspense fallback={<PageLoader />}><ScenarioPage /></Suspense>} />
-            <Route path="/ai-advisor" element={<Suspense fallback={<PageLoader />}><AIAdvisorPage /></Suspense>} />
-            <Route path="/allocation" element={<Suspense fallback={<PageLoader />}><AllocationPage /></Suspense>} />
-            <Route path="/watchlist" element={<Suspense fallback={<PageLoader />}><WatchlistPage /></Suspense>} />
-            <Route path="/market" element={<Suspense fallback={<PageLoader />}><MarketPage /></Suspense>} />
-            <Route path="/performance" element={<Suspense fallback={<PageLoader />}><PerformancePage /></Suspense>} />
-            <Route path="/binance" element={<Suspense fallback={<PageLoader />}><BinancePage /></Suspense>} />
-            <Route path="/daily-report" element={<Suspense fallback={<PageLoader />}><DailyReportPage /></Suspense>} />
+            <Route path="/" element={<SafePage><HomePage /></SafePage>} />
+            <Route path="/analytics" element={<SafePage><AnalyticsPage /></SafePage>} />
+            <Route path="/rebalancing" element={<SafePage><RebalancingPage /></SafePage>} />
+            <Route path="/scenario" element={<SafePage><ScenarioPage /></SafePage>} />
+            <Route path="/ai-advisor" element={<SafePage><AIAdvisorPage /></SafePage>} />
+            <Route path="/allocation" element={<SafePage><AllocationPage /></SafePage>} />
+            <Route path="/watchlist" element={<SafePage><WatchlistPage /></SafePage>} />
+            <Route path="/market" element={<SafePage><MarketPage /></SafePage>} />
+            <Route path="/performance" element={<SafePage><PerformancePage /></SafePage>} />
+            <Route path="/binance" element={<SafePage><BinancePage /></SafePage>} />
+            <Route path="/daily-report" element={<SafePage><DailyReportPage /></SafePage>} />
           </Route>
         </Routes>
       </PortfolioProvider>

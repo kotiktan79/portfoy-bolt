@@ -1,4 +1,3 @@
-import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowUp, ArrowDown, Layers, Wallet } from 'lucide-react';
 import { formatCurrency } from '../services/priceService';
 import { Holding } from '../lib/supabase';
 
@@ -26,12 +25,10 @@ interface PortfolioMetricsBarProps {
 }
 
 export function PortfolioMetricsBar({
-  holdings,
   totalInvestment,
   totalCurrentValue,
   totalProfitLoss,
   totalProfitLossPercent,
-  totalInvestmentUSD,
   grandTotalUSD = 0,
   livePnlData,
   totalCashValue = 0,

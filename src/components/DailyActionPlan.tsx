@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  CheckCircle2, Circle, ArrowRight, Brain, ChevronDown, ChevronUp,
-  AlertTriangle, TrendingUp, TrendingDown, DollarSign, Shield,
-  Clock, Zap, Target, RefreshCw, Wallet, Globe, Sparkles
+  CheckCircle2, Brain, ChevronDown, ChevronUp,
+  AlertTriangle, TrendingUp, TrendingDown, Shield,
+  Clock, Zap, Target, Wallet, Globe, Sparkles
 } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
@@ -49,12 +49,6 @@ function loadCompletedSteps(): Set<string> {
   } catch { return new Set(); }
 }
 
-function saveCompletedSteps(completed: Set<string>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    date: getTodayKey(),
-    completed: Array.from(completed),
-  }));
-}
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -108,9 +102,9 @@ function cacheAIPlan(plan: AIPlan) {
   localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ date: getTodayKey(), plan }));
 }
 
-export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalProfitLoss, totalProfitLossPercent, totalCashValue }: DailyActionPlanProps) {
+export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanProps) {
   const navigate = useNavigate();
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(loadCompletedSteps);
+  const [completedSteps] = useState<Set<string>>(loadCompletedSteps);
   const [expanded, setExpanded] = useState(true);
   const [aiPlan, setAiPlan] = useState<AIPlan | null>(getCachedAIPlan);
   const [aiLoading, setAiLoading] = useState(false);
@@ -187,7 +181,6 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
     let order = 0;
 
     const investmentHoldings = report.holdings;
-    const grandTotal = report.grandTotal;
     const totalValue = report.totalValue;
 
     // Portfolio type weights
@@ -360,39 +353,11 @@ export function DailyActionPlan({ holdings, totalValue, totalInvestment, totalPr
     return s;
   }, [report, totalCashValue, completedSteps]);
 
-  function toggleStep(id: string) {
-    setCompletedSteps(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      saveCompletedSteps(next);
-      return next;
-    });
-  }
-
   if (holdings.filter(h => h.asset_type !== 'cash').length === 0) return null;
 
   const completedCount = steps.filter(s => s.completed).length;
   const totalSteps = steps.filter(s => s.urgency !== 'watch').length;
   const progress = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
-
-  const urgencyLabels: Record<string, { label: string; color: string }> = {
-    now: { label: 'HEMEN', color: 'text-red-600 bg-red-50 dark:bg-red-950/30' },
-    today: { label: 'BUGÜN', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
-    this_week: { label: 'BU HAFTA', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30' },
-    watch: { label: 'İZLE', color: 'text-gray-500 bg-gray-50 dark:bg-gray-800' },
-  };
-
-  const actionColors: Record<string, string> = {
-    SAT: 'text-red-700 dark:text-red-400',
-    AZALT: 'text-orange-700 dark:text-orange-400',
-    'KÂR AL': 'text-green-700 dark:text-green-400',
-    AL: 'text-emerald-700 dark:text-emerald-400',
-    'EK ALIM': 'text-purple-700 dark:text-purple-400',
-    YATIR: 'text-emerald-700 dark:text-emerald-400',
-    KORU: 'text-indigo-700 dark:text-indigo-400',
-    TUT: 'text-gray-500 dark:text-gray-400',
-  };
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-gray-900">

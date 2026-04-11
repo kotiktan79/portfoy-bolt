@@ -2,19 +2,15 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, Calendar } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  Legend,
   Area,
   AreaChart,
 } from 'recharts';
 import { getHistoricalSnapshots, PortfolioSnapshot } from '../services/analyticsService';
-import { usePortfolio } from '../contexts/PortfolioContext';
 import { formatCurrency } from '../services/priceService';
 
 type Period = 7 | 30 | 90 | 9999;
@@ -43,7 +39,6 @@ function formatTooltipDate(dateStr: string): string {
 
 export default function PerformancePage() {
   const navigate = useNavigate();
-  const { holdings } = usePortfolio();
   const [period, setPeriod] = useState<Period>(30);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [loading, setLoading] = useState(true);

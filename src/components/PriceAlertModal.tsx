@@ -25,6 +25,9 @@ export function PriceAlertModal({ onClose, onAdd }: PriceAlertModalProps) {
 
     notifyPriceAlert(symbol.toUpperCase(), parseFloat(targetPrice), parseFloat(targetPrice), condition);
 
+    setSymbol('');
+    setTargetPrice('');
+    setCondition('above');
     onAdd();
     onClose();
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency, getCachedUSDRate } from '../services/priceService';
@@ -24,7 +24,6 @@ export function PortfolioSummaryCard({
   totalValue,
   totalInvestment,
   totalProfitLoss,
-  totalProfitLossPercent,
   totalCashValue,
   dailyChange,
   dailyChangePct,

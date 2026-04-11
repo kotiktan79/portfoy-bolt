@@ -30,8 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const data = await fetchYahoo(yahooSymbols);
         const result: Record<string, any> = {};
         for (const q of data) {
+          if (q.regularMarketPrice == null) continue;
           const sym = q.symbol.replace('.IS', '');
-          result[sym] = { price: q.regularMarketPrice, change: q.regularMarketChangePercent };
+          result[sym] = { price: q.regularMarketPrice, change: q.regularMarketChangePercent || 0 };
         }
         return res.json({ success: true, data: result });
       }
@@ -40,7 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const data = await fetchYahoo(symbols.join(','));
         const result: Record<string, any> = {};
         for (const q of data) {
-          result[q.symbol] = { price: q.regularMarketPrice, change: q.regularMarketChangePercent };
+          if (q.regularMarketPrice == null) continue;
+          result[q.symbol] = { price: q.regularMarketPrice, change: q.regularMarketChangePercent || 0 };
         }
         return res.json({ success: true, data: result });
       }
@@ -56,8 +58,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const data = await fetchYahoo(tickers);
         const result: Record<string, any> = {};
         for (const q of data) {
+          if (q.regularMarketPrice == null) continue;
           const origSymbol = Object.entries(euroTickers).find(([, v]) => v === q.symbol)?.[0] || q.symbol;
-          result[origSymbol] = { price: q.regularMarketPrice, change: q.regularMarketChangePercent };
+          result[origSymbol] = { price: q.regularMarketPrice, change: q.regularMarketChangePercent || 0 };
         }
         return res.json({ success: true, data: result });
       }

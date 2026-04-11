@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, DollarSign, TrendingUp } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface IncomeRecord {

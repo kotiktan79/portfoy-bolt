@@ -1,59 +1,103 @@
-import { useState } from 'react';
-import { Shield, Key, Smartphone, CheckCircle, Copy } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Shield, Key, Lock, CheckCircle, Copy } from 'lucide-react';
 
 interface Security2FAProps {
   onClose: () => void;
   onEnable: () => void;
 }
 
+const LS_PIN_HASH = 'portfolio_pin_hash';
+const LS_BACKUP_CODES_HASH = 'portfolio_backup_codes_hash';
+
+async function sha256(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateRandomCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+  return Array.from(array)
+    .map((b) => chars[b % chars.length])
+    .join('');
+}
+
+export async function verifyPin(pin: string): Promise<boolean> {
+  const storedHash = localStorage.getItem(LS_PIN_HASH);
+  if (!storedHash) return false;
+  const inputHash = await sha256(pin);
+  return inputHash === storedHash;
+}
+
+export function isPinEnabled(): boolean {
+  return localStorage.getItem(LS_PIN_HASH) !== null;
+}
+
+export function clearPin(): void {
+  localStorage.removeItem(LS_PIN_HASH);
+  localStorage.removeItem(LS_BACKUP_CODES_HASH);
+}
+
 export function Security2FA({ onClose, onEnable }: Security2FAProps) {
-  const [step, setStep] = useState<'intro' | 'setup' | 'verify' | 'complete'>('intro');
-  const [qrCode, setQrCode] = useState('');
+  const [step, setStep] = useState<'intro' | 'set_pin' | 'confirm_pin' | 'complete'>('intro');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
-  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
 
-  function generateQRCode() {
-    const secret = 'JBSWY3DPEHPK3PXP';
-    const issuer = 'PortfolioTracker';
-    const user = 'user@example.com';
-    const otpauthUrl = `otpauth://totp/${issuer}:${user}?secret=${secret}&issuer=${issuer}`;
-    setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`);
-  }
+  const handleStartSetup = useCallback(() => {
+    setPin('');
+    setConfirmPin('');
+    setError('');
+    setStep('set_pin');
+  }, []);
 
-  function generateBackupCodes() {
-    const codes = Array.from({ length: 10 }, () => {
-      return Math.random().toString(36).substring(2, 10).toUpperCase();
-    });
-    setBackupCodes(codes);
-  }
+  const handlePinSet = useCallback(() => {
+    if (pin.length !== 6) {
+      setError('PIN 6 haneli olmalıdır');
+      return;
+    }
+    setError('');
+    setStep('confirm_pin');
+  }, [pin]);
 
-  function handleSetup() {
-    generateQRCode();
-    generateBackupCodes();
-    setStep('setup');
-  }
-
-  function handleVerify() {
-    if (verificationCode.length !== 6) {
-      setError('Lütfen 6 haneli kodu girin');
+  const handleConfirmPin = useCallback(async () => {
+    if (confirmPin !== pin) {
+      setError('PIN\'ler eşleşmiyor. Tekrar deneyin.');
+      setConfirmPin('');
       return;
     }
 
-    if (verificationCode === '123456') {
+    try {
+      const pinHash = await sha256(pin);
+      localStorage.setItem(LS_PIN_HASH, pinHash);
+
+      const codes = Array.from({ length: 5 }, () => generateRandomCode());
+      setBackupCodes(codes);
+
+      const codeHashes = await Promise.all(codes.map((c) => sha256(c)));
+      localStorage.setItem(LS_BACKUP_CODES_HASH, JSON.stringify(codeHashes));
+
       setStep('complete');
       setTimeout(() => {
         onEnable();
         onClose();
-      }, 2000);
-    } else {
-      setError('Geçersiz kod. Demo için 123456 kullanın.');
+      }, 3000);
+    } catch {
+      setError('PIN kaydedilirken bir hata oluştu.');
     }
-  }
+  }, [confirmPin, pin, onEnable, onClose]);
 
-  function copyBackupCodes() {
+  const copyBackupCodes = useCallback(() => {
     navigator.clipboard.writeText(backupCodes.join('\n'));
-  }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [backupCodes]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -61,7 +105,7 @@ export function Security2FA({ onClose, onEnable }: Security2FAProps) {
         <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Shield className="text-white" size={24} />
-            <h2 className="text-xl font-bold text-white">İki Faktörlü Doğrulama</h2>
+            <h2 className="text-xl font-bold text-white">PIN Güvenlik Kilidi</h2>
           </div>
           <button
             onClick={onClose}
@@ -75,25 +119,25 @@ export function Security2FA({ onClose, onEnable }: Security2FAProps) {
           {step === 'intro' && (
             <div className="space-y-6">
               <div className="text-center">
-                <Shield className="mx-auto text-green-600 mb-4" size={64} />
+                <Lock className="mx-auto text-green-600 mb-4" size={64} />
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                  Hesabınızı Güvende Tutun
+                  Portföyünüzü Koruyun
                 </h3>
                 <p className="text-sm text-slate-600 dark:text-gray-400">
-                  2FA, hesabınıza ekstra bir güvenlik katmanı ekler. Giriş yaparken şifrenizin
-                  yanı sıra telefonunuzdaki bir kod da gerekir.
+                  6 haneli bir güvenlik PIN'i belirleyerek portföy verilerinize yetkisiz
+                  erişimi engelleyin.
                 </p>
               </div>
 
               <div className="space-y-3">
                 <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <Smartphone className="text-blue-600 flex-shrink-0 mt-1" size={20} />
+                  <Lock className="text-blue-600 flex-shrink-0 mt-1" size={20} />
                   <div>
                     <h4 className="font-semibold text-slate-900 dark:text-white text-sm">
-                      Authenticator Uygulaması
+                      Yerel PIN Koruması
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-gray-400">
-                      Google Authenticator veya Authy gibi bir uygulama kullanın
+                      6 haneli güvenlik PIN'inizi belirleyin, verileriniz cihazınızda güvende kalsın
                     </p>
                   </div>
                 </div>
@@ -105,46 +149,141 @@ export function Security2FA({ onClose, onEnable }: Security2FAProps) {
                       Yedek Kodlar
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-gray-400">
-                      Telefonunuzu kaybetmeniz durumunda kullanabileceğiniz kodlar
+                      PIN'inizi unutmanız durumunda kullanabileceğiniz 5 adet yedek kod
                     </p>
                   </div>
                 </div>
               </div>
 
               <button
-                onClick={handleSetup}
+                onClick={handleStartSetup}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl"
               >
                 <Shield size={20} />
-                2FA'yı Etkinleştir
+                PIN Belirle
               </button>
             </div>
           )}
 
-          {step === 'setup' && (
+          {step === 'set_pin' && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
-                  1. QR Kodu Tarayın
+              <div className="text-center">
+                <Lock className="mx-auto text-green-600 mb-4" size={48} />
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                  PIN Belirleyin
                 </h3>
-                <div className="flex justify-center mb-4">
-                  <img
-                    src={qrCode}
-                    alt="QR Code"
-                    className="w-48 h-48 rounded-lg border-4 border-slate-200 dark:border-gray-700"
-                  />
-                </div>
-                <p className="text-sm text-slate-600 dark:text-gray-400 text-center">
-                  Authenticator uygulamanızla bu QR kodu tarayın
+                <p className="text-sm text-slate-600 dark:text-gray-400">
+                  6 haneli güvenlik PIN'inizi belirleyin
                 </p>
               </div>
 
               <div>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={pin}
+                  onChange={(e) => {
+                    setError('');
+                    setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  }}
+                  placeholder="------"
+                  className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest rounded-lg border-2 border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:border-green-500 focus:ring-2 focus:ring-green-500"
+                  maxLength={6}
+                  autoFocus
+                />
+                {error && (
+                  <p className="text-sm text-red-600 mt-2 text-center">{error}</p>
+                )}
+                <p className="text-xs text-slate-500 dark:text-gray-400 mt-2 text-center">
+                  Sadece rakam, 6 haneli
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setStep('intro'); setPin(''); setError(''); }}
+                  className="flex-1 px-6 py-3 border border-slate-300 dark:border-gray-600 text-slate-700 dark:text-gray-300 rounded-lg font-semibold transition-all hover:bg-slate-50 dark:hover:bg-gray-700"
+                >
+                  Geri
+                </button>
+                <button
+                  onClick={handlePinSet}
+                  disabled={pin.length !== 6}
+                  className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Devam
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 'confirm_pin' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <Key className="mx-auto text-green-600 mb-4" size={48} />
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
-                  2. Yedek Kodlarınız
+                  PIN'i Onaylayın
                 </h3>
+                <p className="text-sm text-slate-600 dark:text-gray-400">
+                  Güvenlik PIN'inizi tekrar girin
+                </p>
+              </div>
+
+              <div>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={confirmPin}
+                  onChange={(e) => {
+                    setError('');
+                    setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  }}
+                  placeholder="------"
+                  className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest rounded-lg border-2 border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:border-green-500 focus:ring-2 focus:ring-green-500"
+                  maxLength={6}
+                  autoFocus
+                />
+                {error && (
+                  <p className="text-sm text-red-600 mt-2 text-center">{error}</p>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setStep('set_pin'); setConfirmPin(''); setError(''); }}
+                  className="flex-1 px-6 py-3 border border-slate-300 dark:border-gray-600 text-slate-700 dark:text-gray-300 rounded-lg font-semibold transition-all hover:bg-slate-50 dark:hover:bg-gray-700"
+                >
+                  Geri
+                </button>
+                <button
+                  onClick={handleConfirmPin}
+                  disabled={confirmPin.length !== 6}
+                  className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Onayla ve Etkinleştir
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 'complete' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <CheckCircle className="mx-auto text-green-600 mb-4" size={64} />
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                  PIN Güvenlik Kilidi Etkinleştirildi!
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-gray-400">
+                  Portföyünüz artık PIN ile korunuyor
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">
+                  Yedek Kodlarınız
+                </h4>
                 <div className="p-4 bg-slate-50 dark:bg-gray-900 rounded-lg border border-slate-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-slate-600 dark:text-gray-400">
                       Bu kodları güvenli bir yerde saklayın
                     </p>
@@ -153,82 +292,24 @@ export function Security2FA({ onClose, onEnable }: Security2FAProps) {
                       className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
                     >
                       <Copy size={14} />
-                      Kopyala
+                      {copied ? 'Kopyalandı!' : 'Kopyala'}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 font-mono text-sm">
                     {backupCodes.map((code, idx) => (
                       <div
                         key={idx}
-                        className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-slate-200 dark:border-gray-700 text-center"
+                        className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-slate-200 dark:border-gray-700 text-center text-slate-900 dark:text-white"
                       >
                         {code}
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
-
-              <button
-                onClick={() => setStep('verify')}
-                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-all"
-              >
-                Devam Et
-              </button>
-            </div>
-          )}
-
-          {step === 'verify' && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <Key className="mx-auto text-green-600 mb-4" size={48} />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
-                  Kodu Doğrulayın
-                </h3>
-                <p className="text-sm text-slate-600 dark:text-gray-400">
-                  Authenticator uygulamanızdaki 6 haneli kodu girin
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center font-medium">
+                  Bu kodlar bir daha gösterilmeyecek!
                 </p>
               </div>
-
-              <div>
-                <input
-                  type="text"
-                  value={verificationCode}
-                  onChange={(e) => {
-                    setError('');
-                    setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  }}
-                  placeholder="000000"
-                  className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest rounded-lg border-2 border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:border-green-500 focus:ring-2 focus:ring-green-500"
-                  maxLength={6}
-                />
-                {error && (
-                  <p className="text-sm text-red-600 mt-2 text-center">{error}</p>
-                )}
-                <p className="text-xs text-slate-500 dark:text-gray-400 mt-2 text-center">
-                  Demo: 123456 kodunu kullanın
-                </p>
-              </div>
-
-              <button
-                onClick={handleVerify}
-                disabled={verificationCode.length !== 6}
-                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Doğrula ve Etkinleştir
-              </button>
-            </div>
-          )}
-
-          {step === 'complete' && (
-            <div className="text-center py-8">
-              <CheckCircle className="mx-auto text-green-600 mb-4" size={64} />
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                2FA Etkinleştirildi!
-              </h3>
-              <p className="text-sm text-slate-600 dark:text-gray-400">
-                Hesabınız artık iki faktörlü doğrulama ile korunuyor
-              </p>
             </div>
           )}
         </div>

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Brain, TrendingUp, TrendingDown, AlertTriangle,
-  Target, ArrowRight, ChevronDown, ChevronUp, Sparkles,
+  Brain, TrendingUp, TrendingDown,
+  Target, ChevronDown, ChevronUp,
   RefreshCw, DollarSign, PiggyBank,
   ArrowUpRight, ArrowDownRight, ShieldCheck, Crosshair
 } from 'lucide-react';
@@ -41,7 +41,7 @@ const priorityStyles: Record<string, string> = {
   low: 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800',
 };
 
-export function FinancialCoach({ holdings, totalValue, totalInvestment, totalProfitLoss, totalProfitLossPercent, totalCashValue }: FinancialCoachProps) {
+export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(true);
   const [showAddMoney, setShowAddMoney] = useState(false);

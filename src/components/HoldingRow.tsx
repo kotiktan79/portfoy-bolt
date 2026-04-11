@@ -26,34 +26,29 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
   const isCash = holding.asset_type === 'cash';
 
   useEffect(() => {
-    getCachedUSDRate().then(setUsdRate);
+    let cancelled = false;
+    getCachedUSDRate().then(rate => { if (!cancelled) setUsdRate(rate); });
     if (isCash && holding.symbol !== 'TRY') {
-      getExchangeRate(holding.symbol, 'TRY').then(rate => setCashTRYRate(rate || 1));
+      getExchangeRate(holding.symbol, 'TRY').then(rate => { if (!cancelled) setCashTRYRate(rate || 1); });
     } else {
       setCashTRYRate(1);
     }
-    calculatePnL();
+
+    (async () => {
+      const currency = (holding as any).currency || detectCurrency(holding.symbol, holding.asset_type);
+      const purchaseCurrency = (holding as any).purchase_currency || currency;
+      const result = await calculatePnLWithCurrency(
+        holding.purchase_price, purchaseCurrency,
+        holding.current_price, currency,
+        holding.quantity, 'TRY'
+      );
+      if (!cancelled) {
+        setPnlData({ pnl: result.pnl, pnlPercent: result.pnlPercent, currentValue: result.currentValue });
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [holding]);
-
-  async function calculatePnL() {
-    const currency = (holding as any).currency || detectCurrency(holding.symbol, holding.asset_type);
-    const purchaseCurrency = (holding as any).purchase_currency || currency;
-
-    const result = await calculatePnLWithCurrency(
-      holding.purchase_price,
-      purchaseCurrency,
-      holding.current_price,
-      currency,
-      holding.quantity,
-      'TRY'
-    );
-
-    setPnlData({
-      pnl: result.pnl,
-      pnlPercent: result.pnlPercent,
-      currentValue: result.currentValue,
-    });
-  }
 
   const isPositive = pnlData.pnl >= 0;
 

@@ -243,17 +243,6 @@ const USD_RATE_CACHE_MS = 60000;
 let eurTryRateCache: { rate: number; timestamp: number } | null = null;
 const EUR_RATE_CACHE_MS = 60000;
 
-function getSupabaseConfig() {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return { url, key };
-}
-
-function proxyHeaders(key: string): HeadersInit {
-  return { 'Authorization': `Bearer ${key}` };
-}
-
 export async function fetchUSDTRYRate(): Promise<number> {
   if (usdTryRateCache && Date.now() - usdTryRateCache.timestamp < USD_RATE_CACHE_MS) {
     return usdTryRateCache.rate;
@@ -552,9 +541,12 @@ export function initializeWebSocketConnection(symbols: string[]) {
       const usdPrice = parseFloat(data.c);
       if (!usdPrice || isNaN(usdPrice)) return;
 
-      // Don't convert with a stale fallback rate — wait until we have a real cached rate
-      // to avoid showing misleading TRY prices from the default config value
-      if (!usdTryRateCache) return;
+      // If USD/TRY rate is not cached yet, trigger async fetch and skip this message.
+      // The rate will be ready for the next WS message.
+      if (!usdTryRateCache) {
+        fetchUSDTRYRate().catch(() => {});
+        return;
+      }
       const cachedRate = usdTryRateCache.rate;
       const tryPrice = usdPrice * cachedRate;
 
@@ -690,8 +682,8 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
     // will use fallback
   }
 
-  const finalPrice = (price != null && price > 0) ? price : (FALLBACK_PRICES[symbol] || null);
-  if (!finalPrice) return null as unknown as number;
+  const finalPrice = (price != null && price > 0) ? price : (FALLBACK_PRICES[symbol] || 0);
+  if (!finalPrice) return 0;
   // Mark as 'fallback' when no API price was fetched, or when the returned
   // price matches the hardcoded fallback (sub-functions may return fallback values directly)
   const source = (price && price !== FALLBACK_PRICES[symbol]) ? 'api' : 'fallback';

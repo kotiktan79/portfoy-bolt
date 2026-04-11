@@ -222,7 +222,13 @@ export function generateRebalancingTrades(
   });
 
   trades.forEach((trade) => {
-    trade.amount = trade.amount * (1 + feePercent / 100);
+    if (trade.action === 'buy') {
+      // Buy: total cost increases with fee
+      trade.amount = trade.amount * (1 + feePercent / 100);
+    } else {
+      // Sell: net proceeds decrease with fee
+      trade.amount = trade.amount * (1 - feePercent / 100);
+    }
   });
 
   return trades;

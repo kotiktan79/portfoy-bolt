@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  FileText, TrendingUp, TrendingDown, AlertTriangle, Target, DollarSign,
+  FileText, TrendingUp, AlertTriangle, Target, DollarSign,
   RefreshCw, ChevronLeft, ChevronRight, Wallet, BarChart3, Globe, Newspaper,
-  ArrowUpRight, ArrowDownRight, Clock, Zap, Shield, PiggyBank
+  ArrowUpRight, Clock, Zap, Shield, PiggyBank
 } from 'lucide-react';
 import { getLatestReport, getReportHistory, getMonthlySalaryHistory, triggerDailyReport, triggerDailySnapshot, type DailyReport, type MonthlySalary } from '../services/reportService';
 import IncomeRecordModal from '../components/IncomeRecordModal';
@@ -178,14 +178,14 @@ export default function DailyReportPage() {
             </div>
 
             {/* Piyasa Araştırması */}
-            {report.actions?.length > 0 && (report as any).market_research && (
+            {report.actions?.length > 0 && report.market_research && (
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Globe className="w-4 h-4 text-indigo-600" />
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Piyasa Araştırması</span>
                 </div>
                 <div className="space-y-2">
-                  {Object.entries((report as any).market_research || {}).map(([key, value]) => {
+                  {Object.entries(report.market_research || {}).map(([key, value]) => {
                     if (!value) return null;
                     const labels: Record<string, string> = {
                       global_trend: 'Küresel Trend',
