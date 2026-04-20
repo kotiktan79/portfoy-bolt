@@ -284,16 +284,28 @@ export default function HomePage() {
                   </div>
                   {viewMode === 'grid' ? (
                     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                      {filteredAndSortedHoldings.map((holding) => (
-                        <HoldingCard
-                          key={holding.id}
-                          holding={holding}
-                          sparklineData={sparklines[holding.symbol]}
-                          onEdit={setEditingHolding}
-                          onDelete={handleDeleteHolding}
-                          onTransactionComplete={handleRefresh}
-                        />
-                      ))}
+                      {(() => {
+                        const topByPnl = [...holdings]
+                          .filter(h => h.purchase_price > 0)
+                          .map(h => ({
+                            id: h.id,
+                            pnlPct: ((h.current_price - h.purchase_price) / h.purchase_price) * 100,
+                          }))
+                          .sort((a, b) => b.pnlPct - a.pnlPct)
+                          .slice(0, 3);
+                        const rankMap = new Map(topByPnl.map((h, i) => [h.id, i + 1]));
+                        return filteredAndSortedHoldings.map((holding) => (
+                          <HoldingCard
+                            key={holding.id}
+                            holding={holding}
+                            sparklineData={sparklines[holding.symbol]}
+                            rank={rankMap.get(holding.id)}
+                            onEdit={setEditingHolding}
+                            onDelete={handleDeleteHolding}
+                            onTransactionComplete={handleRefresh}
+                          />
+                        ));
+                      })()}
                     </div>
                   ) : (
                     <table className="w-full">

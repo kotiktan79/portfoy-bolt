@@ -26,12 +26,14 @@ export default function Layout() {
 
   return (
     <>
-      <Outlet />
+      <div key={location.pathname} className="animate-page-enter">
+        <Outlet />
+      </div>
       <MobileBottomNav
         currentPage={currentPage}
         onNavigate={(page) => navigate(pageMap[page] || '/')}
       />
-      <div className="md:hidden h-20 safe-area-inset-bottom" /> {/* Spacer for bottom nav */}
+      <div className="md:hidden h-20 safe-area-inset-bottom" />
     </>
   );
 }

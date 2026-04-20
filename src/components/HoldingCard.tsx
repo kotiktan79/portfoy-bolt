@@ -10,10 +10,17 @@ import { Sparkline } from './ui/Sparkline';
 interface Props {
   holding: Holding;
   sparklineData?: number[];
+  rank?: number; // 1-3 = top performers get gold/silver/bronze badge
   onEdit: (holding: Holding) => void;
   onDelete: (id: string) => void;
   onTransactionComplete: () => void;
 }
+
+const RANK_STYLES: Record<number, { bg: string; text: string; label: string }> = {
+  1: { bg: 'bg-gradient-to-br from-yellow-400 to-yellow-500', text: 'text-white', label: '#1' },
+  2: { bg: 'bg-gradient-to-br from-slate-300 to-slate-400', text: 'text-white', label: '#2' },
+  3: { bg: 'bg-gradient-to-br from-amber-600 to-amber-700', text: 'text-white', label: '#3' },
+};
 
 const ASSET_ICONS: Record<string, LucideIcon> = {
   stock: PieChart,
@@ -35,7 +42,7 @@ const ASSET_TONES: Record<string, string> = {
   cash: 'bg-slate-100 text-slate-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
-export function HoldingCard({ holding, sparklineData, onEdit, onDelete, onTransactionComplete }: Props) {
+export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, onTransactionComplete }: Props) {
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
   const [pnlData, setPnlData] = useState({ pnl: 0, pnlPercent: 0, currentValue: 0 });
@@ -62,9 +69,16 @@ export function HoldingCard({ holding, sparklineData, onEdit, onDelete, onTransa
   const toneClass = ASSET_TONES[holding.asset_type] || ASSET_TONES.stock;
   const typeLabel = ASSET_TYPE_LABELS[holding.asset_type] || holding.asset_type;
 
+  const rankStyle = rank && rank >= 1 && rank <= 3 ? RANK_STYLES[rank] : null;
+
   return (
     <>
-      <div className="card-secondary p-4 hover-lift group">
+      <div className="card-secondary p-4 hover-lift group relative">
+        {rankStyle && (
+          <div className={`absolute top-2 right-2 ${rankStyle.bg} ${rankStyle.text} text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm tabular-nums`}>
+            {rankStyle.label}
+          </div>
+        )}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">

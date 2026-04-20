@@ -284,10 +284,16 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
       const prices = await fetchYahooPrices(symbols);
       for (const h of bistHoldings) {
         const price = prices[`${h.symbol}.IS`];
-        if (price) {
+        // Sanity guard: eski fiyattan %80+ düşüş anomali sayılır (Yahoo stale data)
+        const oldPrice = Number(h.current_price) || 0;
+        const isAnomalous = oldPrice > 0 && price && (price < oldPrice * 0.2 || price > oldPrice * 5);
+        if (price && !isAnomalous) {
           await supabase.from('holdings').update({ current_price: price, updated_at: new Date().toISOString() }).eq('id', h.id);
           result.updated++;
           result.details[h.symbol] = price;
+        } else if (isAnomalous) {
+          log.push(`${h.symbol}: anomali reddedildi (${oldPrice} → ${price})`);
+          result.failed++;
         } else {
           result.failed++;
         }
@@ -322,9 +328,17 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
         if (price) {
           const isEuropean = yahooTicker in EURO_YAHOO || yahooTicker !== sym;
           const tryPrice = price * (isEuropean ? eurTry : usdTry);
-          await supabase.from('holdings').update({ current_price: tryPrice, updated_at: new Date().toISOString() }).eq('id', h.id);
-          result.updated++;
-          result.details[h.symbol] = tryPrice;
+          // Sanity guard
+          const oldPrice = Number(h.current_price) || 0;
+          const isAnomalous = oldPrice > 0 && (tryPrice < oldPrice * 0.2 || tryPrice > oldPrice * 5);
+          if (!isAnomalous) {
+            await supabase.from('holdings').update({ current_price: tryPrice, updated_at: new Date().toISOString() }).eq('id', h.id);
+            result.updated++;
+            result.details[h.symbol] = tryPrice;
+          } else {
+            log.push(`${h.symbol}: anomali reddedildi (${oldPrice} → ${tryPrice})`);
+            result.failed++;
+          }
         } else {
           result.failed++;
         }
@@ -477,21 +491,43 @@ async function fetchEurTry(): Promise<number> {
 
 async function fetchYahooPrices(symbols: string): Promise<Record<string, number>> {
   const prices: Record<string, number> = {};
+  const symbolList = symbols.split(',').filter(Boolean);
+
+  // v7 primary — son dönemde "Unauthorized" dönmeye başladı, yine de dene
   try {
     const res = await fetch(
       `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
     );
     if (res.ok) {
       const data = await res.json();
       const quotes = data?.quoteResponse?.result || [];
       for (const q of quotes) {
-        if (q.regularMarketPrice) {
+        if (q.regularMarketPrice && isFinite(q.regularMarketPrice) && q.regularMarketPrice > 0) {
           prices[q.symbol] = q.regularMarketPrice;
         }
       }
     }
-  } catch { /* skip */ }
+  } catch { /* fall through */ }
+
+  // v8 fallback — eksik kalan sembolleri tek tek çek
+  const missing = symbolList.filter(s => !(s in prices));
+  for (const sym of missing) {
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) }
+      );
+      if (!r.ok) continue;
+      const d = await r.json();
+      const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      // Sadece geçerli pozitif sayıları kabul et, 0 veya null atla
+      if (price && isFinite(price) && price > 0) {
+        prices[sym] = price;
+      }
+    } catch { /* skip */ }
+  }
+
   return prices;
 }
 
