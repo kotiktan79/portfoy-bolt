@@ -155,28 +155,41 @@ export async function importPortfolioFromJSON(file: File): Promise<{
 
     let holdingsImported = 0;
     let transactionsImported = 0;
+    const holdingIdMap = new Map<string, string>();
 
     for (const holding of backup.holdings) {
-      const { error } = await supabase.from('holdings').insert({
-        symbol: holding.symbol,
-        asset_type: holding.asset_type,
-        quantity: holding.quantity,
-        purchase_price: holding.purchase_price,
-        current_price: holding.current_price,
-      });
+      const { data, error } = await supabase
+        .from('holdings')
+        .insert({
+          symbol: holding.symbol,
+          asset_type: holding.asset_type,
+          quantity: holding.quantity,
+          purchase_price: holding.purchase_price,
+          current_price: holding.current_price,
+        })
+        .select('id')
+        .maybeSingle();
 
-      if (!error) holdingsImported++;
+      if (!error && data) {
+        holdingsImported++;
+        if (holding.id) holdingIdMap.set(holding.id, data.id);
+      }
     }
 
     if (backup.transactions && Array.isArray(backup.transactions)) {
       for (const transaction of backup.transactions) {
+        const newHoldingId = holdingIdMap.get(transaction.holding_id);
+        if (!newHoldingId) continue;
+
         const { error } = await supabase.from('transactions').insert({
-          symbol: transaction.symbol,
+          holding_id: newHoldingId,
           transaction_type: transaction.transaction_type,
           quantity: transaction.quantity,
           price: transaction.price,
-          transaction_date: transaction.transaction_date,
+          total_amount: transaction.total_amount,
+          fee: transaction.fee,
           notes: transaction.notes,
+          transaction_date: transaction.transaction_date,
         });
 
         if (!error) transactionsImported++;
