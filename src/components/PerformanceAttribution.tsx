@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, Minus, Trophy } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { computeAttribution, AttributionItem } from '../services/attributionService';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
 
 const TYPE_LABELS: Record<string, string> = {
   stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
@@ -21,28 +22,23 @@ export default function PerformanceAttribution() {
   );
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-md">
-          <Trophy className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Performans Atfı</h3>
-          <p className="text-xs text-gray-500">
-            +%{report.totalPnlPct.toFixed(1)} getirinin nereden geldiği — top 5: %
-            {report.top5ContributionPct.toFixed(1)}
-          </p>
-        </div>
-        <div className={`text-base font-bold ${report.totalPnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          {report.totalPnl >= 0 ? '+' : ''}
-          {formatCurrency(report.totalPnl, 0)} ₺
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
+    <Card>
+      <CardHeader
+        icon={Trophy}
+        iconTone="brand"
+        title="Performans Atfı"
+        subtitle={`+%${report.totalPnlPct.toFixed(1)} getirinin nereden geldiği — top 5: %${report.top5ContributionPct.toFixed(1)}`}
+        rightSlot={
+          <div className={`text-base font-bold ${report.totalPnl >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
+            {report.totalPnl >= 0 ? '+' : ''}
+            {formatCurrency(report.totalPnl, 0)} ₺
+          </div>
+        }
+      />
+      <CardBody>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <h4 className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <h4 className="text-[11px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <TrendingUp size={11} /> Kazandıranlar (Top 8)
             </h4>
             <div className="space-y-1.5">
@@ -64,7 +60,7 @@ export default function PerformanceAttribution() {
                 <AttributionRow key={item.symbol} item={item} max={maxAbsPnl} positive={false} />
               ))}
               {report.losers.length === 0 && (
-                <p className="text-xs text-emerald-600 italic">Kaybettiren pozisyon yok — tümü artıda.</p>
+                <p className="text-xs text-accent-600 italic">Kaybettiren pozisyon yok — tümü artıda.</p>
               )}
             </div>
           </div>
@@ -85,15 +81,15 @@ export default function PerformanceAttribution() {
             </p>
           </div>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
 function AttributionRow({ item, max, positive }: { item: AttributionItem; max: number; positive: boolean }) {
   const widthPct = (Math.abs(item.pnl) / max) * 100;
-  const barColor = positive ? 'bg-emerald-400 dark:bg-emerald-700' : 'bg-red-400 dark:bg-red-700';
-  const textColor = positive ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400';
+  const barColor = positive ? 'bg-accent-400 dark:bg-accent-700' : 'bg-red-400 dark:bg-red-700';
+  const textColor = positive ? 'text-accent-700 dark:text-accent-400' : 'text-red-700 dark:text-red-400';
 
   return (
     <div className="flex items-center gap-2 text-xs">

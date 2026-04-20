@@ -6,6 +6,7 @@ import { applyTrades, ProposedTrade } from '../services/tradeSimulatorService';
 import { analyzeXRay } from '../services/xrayService';
 import { forecastDividends } from '../services/dividendForecastService';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
 
 const ASSET_TYPES: AssetType[] = ['stock', 'crypto', 'currency', 'fund', 'eurobond', 'commodity'];
 const ASSET_LABELS: Record<AssetType, string> = {
@@ -55,20 +56,14 @@ export default function TradeSimulator() {
   const healthDelta = afterXRay.healthScore - beforeXRay.healthScore;
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl shadow-md">
-          <FlaskConical className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Trade Simülatörü</h3>
-          <p className="text-xs text-gray-500">
-            "Eğer satıp alsam" — gerçek alım-satım yapmadan etkisini gör
-          </p>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
+    <Card>
+      <CardHeader
+        icon={FlaskConical}
+        iconTone="brand"
+        title="Trade Simülatörü"
+        subtitle={'"Eğer satıp alsam" — gerçek alım-satım yapmadan etkisini gör'}
+      />
+      <CardBody>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => addTrade('sell')}
@@ -78,7 +73,7 @@ export default function TradeSimulator() {
           </button>
           <button
             onClick={() => addTrade('buy')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400 text-xs font-semibold hover:bg-accent-200 dark:hover:bg-accent-900/50"
           >
             <Plus size={12} /> Alış Ekle
           </button>
@@ -116,7 +111,7 @@ export default function TradeSimulator() {
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-gray-600 dark:text-gray-400">Net nakit akışı</span>
                 <span className={`font-bold tabular-nums ${
-                  sim.netCashFlow > 0 ? 'text-emerald-600' : sim.netCashFlow < 0 ? 'text-red-600' : 'text-gray-500'
+                  sim.netCashFlow > 0 ? 'text-accent-600' : sim.netCashFlow < 0 ? 'text-red-600' : 'text-gray-500'
                 }`}>
                   {sim.netCashFlow >= 0 ? '+' : ''}
                   {formatCurrency(sim.netCashFlow, 0)} ₺
@@ -194,8 +189,8 @@ export default function TradeSimulator() {
             </div>
           </>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -212,12 +207,12 @@ function TradeRow({ trade, onUpdate, onRemove, holdings }: {
     <div className={`flex flex-wrap items-center gap-1.5 p-2 rounded-xl border ${
       isSell
         ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-900'
-        : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900'
+        : 'bg-accent-50/50 dark:bg-accent-950/20 border-accent-200 dark:border-accent-900'
     }`}>
       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
         isSell
           ? 'bg-red-200 dark:bg-red-900/60 text-red-800 dark:text-red-300'
-          : 'bg-emerald-200 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+          : 'bg-accent-200 dark:bg-accent-900/60 text-accent-800 dark:text-accent-300'
       }`}>
         {isSell ? 'SAT' : 'AL'}
       </span>
@@ -296,7 +291,7 @@ function CompareCard({
   const color = noChange
     ? 'text-gray-400'
     : isImprovement
-    ? 'text-emerald-600 dark:text-emerald-400'
+    ? 'text-accent-600 dark:text-accent-400'
     : 'text-red-600 dark:text-red-400';
 
   const deltaStr = noChange

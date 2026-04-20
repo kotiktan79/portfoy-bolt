@@ -4,6 +4,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recha
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
 
 interface CurrencyBucket {
   [key: string]: unknown;
@@ -114,28 +115,24 @@ export default function CurrencyExposureCard() {
   const fxWarning = fxWeight > 60 ? 'high' : fxWeight > 40 ? 'medium' : 'ok';
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-sky-500 to-indigo-600 rounded-xl shadow-md">
-          <Globe className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Para Birimi Maruziyeti</h3>
-          <p className="text-xs text-gray-500">
-            Tüm pozisyonların alt yatırım birimi (fon/eurobond/altın dahil)
-          </p>
-        </div>
-        <div className="text-right">
-          <div className={`text-base font-bold ${
-            fxWarning === 'high' ? 'text-red-600' : fxWarning === 'medium' ? 'text-amber-600' : 'text-emerald-600'
-          }`}>
-            %{fxWeight.toFixed(1)} FX
+    <Card>
+      <CardHeader
+        icon={Globe}
+        iconTone="brand"
+        title="Para Birimi Maruziyeti"
+        subtitle="Tüm pozisyonların alt yatırım birimi (fon/eurobond/altın dahil)"
+        rightSlot={
+          <div className="text-right">
+            <div className={`text-base font-bold ${
+              fxWarning === 'high' ? 'text-red-600' : fxWarning === 'medium' ? 'text-amber-600' : 'text-accent-600'
+            }`}>
+              %{fxWeight.toFixed(1)} FX
+            </div>
+            <div className="text-[10px] text-gray-500">{tryWeight.toFixed(1)}% TRY</div>
           </div>
-          <div className="text-[10px] text-gray-500">{tryWeight.toFixed(1)}% TRY</div>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
+        }
+      />
+      <CardBody>
         {fxWarning !== 'ok' && (
           <div className={`flex items-start gap-1.5 p-2 rounded-lg border ${
             fxWarning === 'high'
@@ -216,7 +213,7 @@ export default function CurrencyExposureCard() {
           Sınıflandırma: BIST hisseleri TRY · Eurobond ve emtia USD · EUROFON EUR · Kripto BTC kovasında.
           Dolaylı maruziyet (örn. TUPRS petrol fiyatı) hariç.
         </p>
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }

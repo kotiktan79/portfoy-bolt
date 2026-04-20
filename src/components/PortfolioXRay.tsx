@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers } from 'lucide-
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { analyzeXRay, XRayFinding } from '../services/xrayService';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader } from './ui/Card';
 
 const SEVERITY_STYLES: Record<XRayFinding['severity'], string> = {
   high: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-700 dark:text-red-400',
@@ -35,29 +36,26 @@ export default function PortfolioXRay() {
     xray.healthScore >= 40 ? 'C' : 'D';
 
   const gradeColor =
-    xray.healthScore >= 75 ? 'text-emerald-500' :
+    xray.healthScore >= 75 ? 'text-accent-500' :
     xray.healthScore >= 55 ? 'text-amber-500' :
     'text-red-500';
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <button
+    <Card>
+      <CardHeader
+        icon={Activity}
+        iconTone="brand"
+        title="Portföy X-Ray"
+        subtitle={`${xray.findings.length === 0 ? 'Sorun bulunamadı' : `${xray.findings.length} bulgu`} · Sağlık skoru`}
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-gray-800/30 transition-colors"
-      >
-        <div className="p-2 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl shadow-md">
-          <Activity className="text-white" size={18} />
-        </div>
-        <div className="flex-1 text-left">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Portföy X-Ray</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {xray.findings.length === 0 ? 'Sorun bulunamadı' : `${xray.findings.length} bulgu`} · Sağlık skoru
-          </p>
-        </div>
-        <div className={`text-2xl font-black ${gradeColor}`}>{grade}</div>
-        <span className="text-xs font-semibold text-gray-500">{xray.healthScore}</span>
-        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-      </button>
+        rightSlot={
+          <>
+            <div className={`text-2xl font-black ${gradeColor}`}>{grade}</div>
+            <span className="text-xs font-semibold text-gray-500">{xray.healthScore}</span>
+            {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          </>
+        }
+      />
 
       {expanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-slate-200 dark:border-gray-800 pt-3">
@@ -89,7 +87,7 @@ export default function PortfolioXRay() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 text-center py-2">
+            <p className="text-xs text-accent-600 dark:text-accent-400 text-center py-2">
               Portföy sağlıklı görünüyor — kritik bulgu yok.
             </p>
           )}
@@ -122,7 +120,7 @@ export default function PortfolioXRay() {
                       </span>
                       <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-gray-800 overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-violet-400 to-fuchsia-500"
+                          className="h-full bg-gradient-to-r from-brand-400 to-brand-600"
                           style={{ width: `${Math.min(100, s.weight)}%` }}
                         />
                       </div>
@@ -145,7 +143,7 @@ export default function PortfolioXRay() {
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

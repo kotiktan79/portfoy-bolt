@@ -15,6 +15,7 @@ import {
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { projectFire } from '../services/fireProjectionService';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
 
 const STORAGE_KEY = 'tandor_fire_inputs';
 
@@ -80,28 +81,24 @@ export default function FireGoalTracker() {
   }));
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-orange-500 to-rose-600 rounded-xl shadow-md">
-          <Target className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">FIRE Hedef Takipçisi</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Aylık ₺{inputs.targetMonthlyIncome.toLocaleString('tr-TR')} pasif gelir hedefine kaç yıl?
-          </p>
-        </div>
-        {projection.yearsToTarget && (
-          <div className="text-right">
-            <div className="text-2xl font-black text-orange-600 dark:text-orange-400">
-              {projection.yearsToTarget}y
+    <Card>
+      <CardHeader
+        icon={Target}
+        iconTone="brand"
+        title="FIRE Hedef Takipçisi"
+        subtitle={`Aylık ₺${inputs.targetMonthlyIncome.toLocaleString('tr-TR')} pasif gelir hedefine kaç yıl?`}
+        rightSlot={
+          projection.yearsToTarget ? (
+            <div className="text-right">
+              <div className="text-2xl font-black text-brand-600 dark:text-brand-400">
+                {projection.yearsToTarget}y
+              </div>
+              <div className="text-[10px] text-gray-500">tahmini</div>
             </div>
-            <div className="text-[10px] text-gray-500">tahmini</div>
-          </div>
-        )}
-      </div>
-
-      <div className="p-4 space-y-4">
+          ) : null
+        }
+      />
+      <CardBody>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Stat
             label="Mevcut"
@@ -131,13 +128,13 @@ export default function FireGoalTracker() {
             <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               İlerleme
             </span>
-            <span className="text-xs font-bold text-orange-600 dark:text-orange-400 tabular-nums">
+            <span className="text-xs font-bold text-brand-600 dark:text-brand-400 tabular-nums">
               %{progressPct.toFixed(1)}
             </span>
           </div>
           <div className="h-3 rounded-full bg-slate-100 dark:bg-gray-800 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-orange-400 to-rose-500 transition-all"
+              className="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all"
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -178,8 +175,8 @@ export default function FireGoalTracker() {
             <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f97316" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.4} />
@@ -195,7 +192,7 @@ export default function FireGoalTracker() {
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fontSize: 10, fill: '#dc2626' }}
+                tick={{ fontSize: 10, fill: '#10b981' }}
                 axisLine={false}
                 tickLine={false}
                 tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v.toFixed(0)}`}
@@ -208,8 +205,8 @@ export default function FireGoalTracker() {
                   return (
                     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 text-xs space-y-0.5">
                       <p className="font-bold text-gray-700 dark:text-gray-300">{d.year}</p>
-                      <p className="text-orange-600">Portföy: {formatCurrency(d.portfolio, 0)} ₺</p>
-                      <p className="text-rose-600">Aylık gelir: {formatCurrency(d.income, 0)} ₺</p>
+                      <p className="text-brand-600 dark:text-brand-400">Portföy: {formatCurrency(d.portfolio, 0)} ₺</p>
+                      <p className="text-accent-600 dark:text-accent-400">Aylık gelir: {formatCurrency(d.income, 0)} ₺</p>
                     </div>
                   );
                 }}
@@ -219,7 +216,7 @@ export default function FireGoalTracker() {
                 yAxisId="left"
                 type="monotone"
                 dataKey="portfolio"
-                stroke="#f97316"
+                stroke="#6366f1"
                 strokeWidth={2}
                 fill="url(#portfolioGrad)"
                 name="Portföy ₺"
@@ -228,7 +225,7 @@ export default function FireGoalTracker() {
                 yAxisId="right"
                 type="monotone"
                 dataKey="income"
-                stroke="#dc2626"
+                stroke="#10b981"
                 strokeWidth={2}
                 strokeDasharray="4 3"
                 dot={false}
@@ -258,8 +255,8 @@ export default function FireGoalTracker() {
           SWR: Safe Withdrawal Rate. %4 klasik FIRE kuralı. Türkiye'de enflasyon nedeniyle
           %3 daha güvenli, %5-6 agresif. Hesap aylık bileşik faizle yapılır, vergi/komisyon hariçtir.
         </p>
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -297,7 +294,7 @@ function NumberInput({ label, value, onChange, step }: {
         value={value || ''}
         step={step}
         onChange={e => onChange(Math.max(0, parseFloat(e.target.value) || 0))}
-        className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold focus:ring-2 focus:ring-orange-500 outline-none tabular-nums"
+        className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold focus:ring-2 focus:ring-brand-500 outline-none tabular-nums"
       />
     </div>
   );

@@ -3,9 +3,10 @@ import { Calendar, Coins, Info } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { forecastDividends, MonthlyDividend } from '../services/dividendForecastService';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
 
 const TYPE_COLORS: Record<string, string> = {
-  dividend: 'bg-emerald-500',
+  dividend: 'bg-accent-500',
   staking: 'bg-purple-500',
   coupon: 'bg-amber-500',
 };
@@ -29,34 +30,23 @@ export default function ForwardDividendCalendar() {
     selectedMonth !== null ? forecast.months[selectedMonth] : null;
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-md">
-          <Coins className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            12 Aylık Temettü Takvimi
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              tahmini
-            </span>
-          </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Mevcut pozisyonlardan beklenen pasif gelir
-          </p>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
+    <Card>
+      <CardHeader
+        icon={Coins}
+        iconTone="accent"
+        title="12 Aylık Temettü Takvimi"
+        subtitle="Mevcut pozisyonlardan beklenen pasif gelir · tahmini"
+      />
+      <CardBody>
         <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3">
-            <div className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+          <div className="rounded-xl border border-accent-200 dark:border-accent-900 bg-accent-50 dark:bg-accent-950/30 p-3">
+            <div className="text-[10px] font-semibold text-accent-700 dark:text-accent-400 uppercase tracking-wider">
               Yıllık Toplam
             </div>
-            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
+            <div className="text-lg font-bold text-accent-700 dark:text-accent-300 mt-0.5">
               {formatCurrency(forecast.annualTotal)} ₺
             </div>
-            <div className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">
+            <div className="text-[10px] text-accent-600 dark:text-accent-500 mt-0.5">
               %{forecast.effectiveYieldPct.toFixed(2)} efektif verim
             </div>
           </div>
@@ -100,7 +90,7 @@ export default function ForwardDividendCalendar() {
                   onClick={() => setSelectedMonth(isSelected ? null : i)}
                   className={`flex flex-col items-stretch h-24 rounded-lg border transition-colors ${
                     isSelected
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 ring-2 ring-emerald-300 dark:ring-emerald-700'
+                      ? 'border-accent-500 bg-accent-50 dark:bg-accent-950/40 ring-2 ring-accent-300 dark:ring-accent-700'
                       : isCurrent
                       ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800'
                       : 'border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-slate-50 dark:hover:bg-gray-800/60'
@@ -112,8 +102,8 @@ export default function ForwardDividendCalendar() {
                       className={`w-full rounded ${
                         m.total > 0
                           ? isSelected
-                            ? 'bg-emerald-600'
-                            : 'bg-emerald-400 dark:bg-emerald-700'
+                            ? 'bg-accent-600'
+                            : 'bg-accent-400 dark:bg-accent-700'
                           : 'bg-transparent'
                       }`}
                       style={{ height: `${heightPct}%`, minHeight: m.total > 0 ? '3px' : 0 }}
@@ -134,12 +124,12 @@ export default function ForwardDividendCalendar() {
         </div>
 
         {selected && (
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-2">
+          <div className="rounded-xl border border-accent-200 dark:border-accent-900 bg-accent-50/50 dark:bg-accent-950/20 p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+              <h4 className="text-sm font-bold text-accent-800 dark:text-accent-300">
                 {selected.monthLabel} Detayı
               </h4>
-              <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+              <span className="text-sm font-bold text-accent-700 dark:text-accent-400">
                 Toplam: {formatCurrency(selected.total)} ₺
               </span>
             </div>
@@ -162,7 +152,7 @@ export default function ForwardDividendCalendar() {
                       </span>
                       <span className="text-[10px] text-gray-500">%{p.yieldPct.toFixed(1)}</span>
                     </div>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-2 flex-shrink-0">
+                    <span className="font-bold text-accent-600 dark:text-accent-400 ml-2 flex-shrink-0">
                       {formatCurrency(p.amount)} ₺
                     </span>
                   </div>
@@ -180,7 +170,7 @@ export default function ForwardDividendCalendar() {
             sürekli staking varsayılır.
           </span>
         </div>
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Receipt, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Receipt, ChevronDown, ChevronUp, RefreshCw, Inbox } from 'lucide-react';
 import { computeRealizedPnL, RealizedPnLReport as ReportData, ClosedLot } from '../services/taxLotService';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
+import { SkeletonCard } from './ui/Skeleton';
+import { EmptyState } from './ui/EmptyState';
 
 const TYPE_LABELS: Record<string, string> = {
   stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
@@ -41,58 +44,47 @@ export default function RealizedPnLReport() {
   }
 
   if (loading) {
-    return (
-      <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
-        <div className="flex items-center justify-center py-8 text-gray-500">
-          <RefreshCw className="animate-spin mr-2" size={16} /> Hesaplanıyor…
-        </div>
-      </div>
-    );
+    return <SkeletonCard />;
   }
 
   if (!data || data.closedLotsCount === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-md">
-            <Receipt className="text-white" size={18} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Gerçekleşmiş Kâr/Zarar</h3>
-            <p className="text-xs text-gray-500">FIFO bazlı tax-lot eşleşmesi</p>
-          </div>
-        </div>
-        <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">
-          Henüz hiç satış yapılmamış — gerçekleşmiş kâr/zarar yok.
-        </div>
-      </div>
+      <Card>
+        <CardHeader
+          icon={Receipt}
+          iconTone="brand"
+          title="Gerçekleşmiş Kâr/Zarar"
+          subtitle="FIFO bazlı tax-lot eşleşmesi"
+        />
+        <EmptyState
+          icon={Inbox}
+          title="Henüz satış yok"
+          description="Satış yaptıkça FIFO bazlı kâr/zarar + uzun/kısa vade ayrımı burada görünür."
+        />
+      </Card>
     );
   }
 
   const symbolsWithSells = data.symbols.filter(s => s.closedLots.length > 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-md">
-          <Receipt className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Gerçekleşmiş Kâr/Zarar (FIFO)</h3>
-          <p className="text-xs text-gray-500">
-            {data.closedLotsCount} kapalı lot · uzun vade = ≥365 gün
-          </p>
-        </div>
-        <button
-          onClick={load}
-          className="p-1.5 rounded-lg text-gray-500 hover:bg-slate-100 dark:hover:bg-gray-800"
-          title="Yenile"
-        >
-          <RefreshCw size={14} />
-        </button>
-      </div>
-
-      <div className="p-4 space-y-4">
+    <Card>
+      <CardHeader
+        icon={Receipt}
+        iconTone="brand"
+        title="Gerçekleşmiş Kâr/Zarar (FIFO)"
+        subtitle={`${data.closedLotsCount} kapalı lot · uzun vade = ≥365 gün`}
+        rightSlot={
+          <button
+            onClick={load}
+            className="p-1.5 rounded-lg text-gray-500 hover:bg-slate-100 dark:hover:bg-gray-800"
+            title="Yenile"
+          >
+            <RefreshCw size={14} />
+          </button>
+        }
+      />
+      <CardBody>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <SummaryCard label="Toplam Realize" value={data.totalRealized} sub="Tüm zamanlar" />
           <SummaryCard label="Bu Yıl (YTD)" value={data.yearToDateRealized} sub="Vergi bazı" />
@@ -157,8 +149,8 @@ export default function RealizedPnLReport() {
             );
           })}
         </div>
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 

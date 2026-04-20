@@ -177,6 +177,43 @@
 }
 
 /* ──────────────────────────────────────────────
+   Typography scale (h1/h2/h3/body/caption/eyebrow)
+   ────────────────────────────────────────────── */
+@layer components {
+  .t-h1 { @apply text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 dark:text-white; }
+  .t-h2 { @apply text-lg sm:text-xl font-semibold tracking-tight text-gray-900 dark:text-white; }
+  .t-h3 { @apply text-sm font-semibold text-gray-900 dark:text-white; }
+  .t-body { @apply text-sm text-gray-700 dark:text-gray-300; }
+  .t-caption { @apply text-xs text-gray-500 dark:text-gray-400; }
+  .t-eyebrow { @apply text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400; }
+  .t-num { @apply tabular-nums; }
+}
+
+/* ──────────────────────────────────────────────
+   Card hierarchy (primary elevated / secondary outlined)
+   ────────────────────────────────────────────── */
+@layer components {
+  .card-primary {
+    @apply rounded-2xl bg-white dark:bg-surface-dark-alt shadow-lg ring-1 ring-brand-500/10 dark:ring-brand-400/10 overflow-hidden;
+  }
+  .card-secondary {
+    @apply rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden;
+  }
+  .card-header {
+    @apply p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3;
+  }
+  .card-body {
+    @apply p-4 space-y-4;
+  }
+  .icon-badge {
+    @apply p-2 rounded-xl shadow-md flex items-center justify-center text-white;
+  }
+  .icon-badge-brand { @apply bg-gradient-to-br from-brand-500 to-brand-600; }
+  .icon-badge-accent { @apply bg-gradient-to-br from-accent-500 to-accent-600; }
+  .icon-badge-slate { @apply bg-gradient-to-br from-slate-600 to-slate-800; }
+}
+
+/* ──────────────────────────────────────────────
    Card & modal smooth transitions
    ────────────────────────────────────────────── */
 @layer components {

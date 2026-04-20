@@ -3,6 +3,7 @@ import { Wallet, TrendingUp, ArrowRight, Sparkles } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { analyzePortfolio, NewMoneyAllocation } from '../services/smartInvestmentEngine';
 import { formatCurrency } from '../services/priceService';
+import { Card, CardHeader, CardBody } from './ui/Card';
 
 const PRESET_AMOUNTS = [5000, 10000, 25000, 50000, 100000, 250000];
 
@@ -19,7 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
 const TYPE_COLORS: Record<string, string> = {
   stock: 'bg-blue-500',
   crypto: 'bg-amber-500',
-  currency: 'bg-emerald-500',
+  currency: 'bg-accent-500',
   fund: 'bg-purple-500',
   eurobond: 'bg-pink-500',
   commodity: 'bg-yellow-500',
@@ -78,20 +79,14 @@ export default function CashFlowRebalanceWidget() {
   if (holdings.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-gray-800 flex items-center gap-3">
-        <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-md">
-          <Wallet className="text-white" size={18} />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Yeni Para Dağıtım Planı</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Sat-al yapmadan, yeni nakitle dengesizlikleri kapat
-          </p>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
+    <Card>
+      <CardHeader
+        icon={Wallet}
+        iconTone="accent"
+        title="Yeni Para Dağıtım Planı"
+        subtitle="Sat-al yapmadan, yeni nakitle dengesizlikleri kapat"
+      />
+      <CardBody>
         <div>
           <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
             Eklenecek Tutar
@@ -103,7 +98,7 @@ export default function CashFlowRebalanceWidget() {
                 onClick={() => setAmount(preset)}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                   amount === preset
-                    ? 'bg-emerald-600 text-white'
+                    ? 'bg-accent-600 text-white'
                     : 'bg-slate-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700'
                 }`}
               >
@@ -116,7 +111,7 @@ export default function CashFlowRebalanceWidget() {
             value={amount || ''}
             onChange={e => setAmount(Math.max(0, parseFloat(e.target.value) || 0))}
             placeholder="Veya özel tutar gir (₺)"
-            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-accent-500 outline-none"
           />
         </div>
 
@@ -140,7 +135,7 @@ export default function CashFlowRebalanceWidget() {
                           %{pctOfNew.toFixed(0)}
                         </span>
                       </div>
-                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                      <span className="text-sm font-bold text-accent-600 dark:text-accent-400">
                         {formatCurrency(group.amount)} ₺
                       </span>
                     </div>
@@ -184,13 +179,13 @@ export default function CashFlowRebalanceWidget() {
                         %{row.afterPct.toFixed(1)}
                       </span>
                       {drift > 0.1 && (
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <span className="text-[10px] font-semibold text-accent-600 dark:text-accent-400">
                           +%{drift.toFixed(1)}
                         </span>
                       )}
                       {row.targetPct > 0 && (
                         <span className={`ml-auto text-[10px] font-semibold tabular-nums ${
-                          Math.abs(distFromTarget) <= 3 ? 'text-emerald-600 dark:text-emerald-400'
+                          Math.abs(distFromTarget) <= 3 ? 'text-accent-600 dark:text-accent-400'
                           : Math.abs(distFromTarget) <= 8 ? 'text-amber-600 dark:text-amber-400'
                           : 'text-red-600 dark:text-red-400'
                         }`}>
@@ -213,7 +208,7 @@ export default function CashFlowRebalanceWidget() {
             Portföyün dengeli — yeni para için belirgin bir eksik tür yok.
           </div>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }

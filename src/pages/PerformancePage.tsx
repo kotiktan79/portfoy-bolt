@@ -193,7 +193,7 @@ export default function PerformancePage() {
                   onClick={() => setBenchmarkKey(opt.key)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     benchmarkKey === opt.key
-                      ? 'bg-amber-600 text-white shadow-sm'
+                      ? 'bg-brand-600 text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -245,7 +245,7 @@ export default function PerformancePage() {
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={{ fontSize: 11, fill: '#d97706' }}
+                    tick={{ fontSize: 11, fill: '#6366f1' }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v: number) => `${v.toFixed(0)}`}
@@ -269,7 +269,7 @@ export default function PerformancePage() {
                           </span>
                         </p>
                         {data.benchmarkIdx != null && benchmarkKey && (
-                          <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                          <p className="text-sm font-bold text-brand-600 dark:text-brand-400">
                             {BENCHMARK_OPTIONS.find((b) => b.key === benchmarkKey)?.label}: idx {data.benchmarkIdx.toFixed(1)}
                             <span className="ml-2 text-xs text-gray-500">
                               ({data.portfolioIdx > data.benchmarkIdx ? '+' : ''}
@@ -298,7 +298,7 @@ export default function PerformancePage() {
                     yAxisId="right"
                     type="monotone"
                     dataKey="benchmarkIdx"
-                    stroke="#d97706"
+                    stroke="#6366f1"
                     strokeWidth={2}
                     strokeDasharray="4 3"
                     dot={false}
