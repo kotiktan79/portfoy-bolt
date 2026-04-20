@@ -113,10 +113,10 @@ export default function HomePage() {
             }}
           />
 
-          {/* Dashboard Content - Clean, minimal */}
-          <div className="px-3 md:px-5 pt-4 pb-2 space-y-3">
+          {/* Dashboard Content - Kiranism grid layout */}
+          <div className="px-3 md:px-5 pt-4 pb-2 space-y-4">
 
-            {/* Grand Total */}
+            {/* Hero balance (full width) */}
             {holdings.length > 0 && (
               <PortfolioSummaryCard
                 holdings={holdings}
@@ -134,10 +134,50 @@ export default function HomePage() {
               />
             )}
 
-            {/* Alerts */}
+            {/* Alerts strip */}
             {holdings.length > 0 && <SmartAlerts />}
 
-            {/* AI Action Plan */}
+            {/* Main 2-col grid: Chart left + Right rail */}
+            {holdings.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Left: Performance chart (2/3) */}
+                <div className="lg:col-span-2">
+                  <div className="card-secondary p-5 h-full">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="t-h3">Portföy Trendi</h3>
+                        <p className="t-caption">Son dönemdeki değer değişimi</p>
+                      </div>
+                      <button
+                        onClick={() => navigate('/performance')}
+                        className="text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline"
+                      >
+                        Detay →
+                      </button>
+                    </div>
+                    <div className="h-64">
+                      <Suspense fallback={<ChartLoader />}>
+                        {historicalData.length > 0 ? (
+                          <PortfolioChart data={historicalData} type="area" />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600 text-sm">
+                            Veri bekleniyor...
+                          </div>
+                        )}
+                      </Suspense>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right rail: X-Ray + IncomeWidget stacked (1/3) */}
+                <div className="space-y-4">
+                  <PortfolioXRay />
+                  <IncomeWidget />
+                </div>
+              </div>
+            )}
+
+            {/* AI Action Plan (full width, below) */}
             {holdings.length > 0 && (
               <DailyActionPlan
                 holdings={holdings}
@@ -148,12 +188,6 @@ export default function HomePage() {
                 totalCashValue={totalCashValue}
               />
             )}
-
-            {/* Gelir Widget */}
-            <IncomeWidget />
-
-            {/* Portföy X-Ray */}
-            {holdings.length > 0 && <PortfolioXRay />}
 
           </div>
 
@@ -243,7 +277,7 @@ export default function HomePage() {
                 }`}
               >
                 <BarChart3 size={15} />
-                {showCharts ? 'Grafikleri Gizle' : 'Grafikleri ve Analizleri Gor'}
+                {showCharts ? 'Dağılımı Gizle' : 'Dağılım ve İşlem Geçmişi'}
               </button>
             </div>
           )}
@@ -251,22 +285,10 @@ export default function HomePage() {
           {showCharts && holdings.length > 0 && (
             <div className="px-3 md:px-5 pb-4 space-y-3">
               <Suspense fallback={<ChartLoader />}>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-slate-200 dark:border-gray-700">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Performans</h3>
-                    <div className="h-56">
-                      {historicalData.length > 0 ? (
-                        <PortfolioChart data={historicalData} type="area" />
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600 text-sm">Veri bekleniyor...</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-slate-200 dark:border-gray-700">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Dağılım</h3>
-                    <div className="h-56">
-                      <AllocationChart holdings={holdings} />
-                    </div>
+                <div className="card-secondary p-5">
+                  <h3 className="t-h3 mb-3">Varlık Dağılımı</h3>
+                  <div className="h-72">
+                    <AllocationChart holdings={holdings} />
                   </div>
                 </div>
                 <TransactionHistory />
