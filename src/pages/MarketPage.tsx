@@ -1,31 +1,40 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, RefreshCw, Globe } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, Globe, Bitcoin, Gem, Banknote } from 'lucide-react';
 import { fetchUSDTRYRate, fetchEURTRYRate, fetchRealTimePrice, formatCurrency } from '../services/priceService';
+import { PageHeader } from '../components/ui/PageHeader';
+import { Sparkline } from '../components/ui/Sparkline';
 
 interface MarketIndicator {
   id: string;
   name: string;
   symbol: string;
+  yahooSymbol: string;
   category: string;
   price: number | null;
   updatedAt: number | null;
+  sparkline: number[];
+  changePct: number | null;
 }
 
-const INDICATORS: Omit<MarketIndicator, 'price' | 'updatedAt'>[] = [
-  { id: 'usd', name: 'USD/TRY', symbol: 'USD', category: 'Döviz' },
-  { id: 'eur', name: 'EUR/TRY', symbol: 'EUR', category: 'Döviz' },
-  { id: 'btc', name: 'Bitcoin', symbol: 'BTC', category: 'Kripto' },
-  { id: 'eth', name: 'Ethereum', symbol: 'ETH', category: 'Kripto' },
-  { id: 'gold', name: 'Altın (gr)', symbol: 'ALTIN', category: 'Emtia' },
+const INDICATORS: Omit<MarketIndicator, 'price' | 'updatedAt' | 'sparkline' | 'changePct'>[] = [
+  { id: 'usd',  name: 'USD/TRY', symbol: 'USD',   yahooSymbol: 'TRY=X',    category: 'Döviz' },
+  { id: 'eur',  name: 'EUR/TRY', symbol: 'EUR',   yahooSymbol: 'EURTRY=X', category: 'Döviz' },
+  { id: 'btc',  name: 'Bitcoin', symbol: 'BTC',   yahooSymbol: 'BTC-USD',  category: 'Kripto' },
+  { id: 'eth',  name: 'Ethereum',symbol: 'ETH',   yahooSymbol: 'ETH-USD',  category: 'Kripto' },
+  { id: 'gold', name: 'Altın',   symbol: 'ALTIN', yahooSymbol: 'GC=F',     category: 'Emtia' },
 ];
 
 const AUTO_REFRESH_MS = 60000;
 
+const CATEGORY_STYLES: Record<string, { icon: typeof Globe; tone: string }> = {
+  Döviz:  { icon: Banknote, tone: 'icon-badge-brand' },
+  Kripto: { icon: Bitcoin,  tone: 'icon-badge-accent' },
+  Emtia:  { icon: Gem,      tone: 'icon-badge-slate' },
+};
+
 export default function MarketPage() {
-  const navigate = useNavigate();
   const [indicators, setIndicators] = useState<MarketIndicator[]>(
-    INDICATORS.map((ind) => ({ ...ind, price: null, updatedAt: null }))
+    INDICATORS.map((ind) => ({ ...ind, price: null, updatedAt: null, sparkline: [], changePct: null }))
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,32 +42,34 @@ export default function MarketPage() {
   const fetchAll = useCallback(async (isManual = false) => {
     if (isManual) setRefreshing(true);
 
-    const results = await Promise.allSettled(
+    const priceResults = await Promise.allSettled(
       INDICATORS.map(async (ind) => {
         let price: number;
-        if (ind.symbol === 'USD') {
-          price = await fetchUSDTRYRate();
-        } else if (ind.symbol === 'EUR') {
-          price = await fetchEURTRYRate();
-        } else if (ind.symbol === 'BTC' || ind.symbol === 'ETH') {
-          price = await fetchRealTimePrice(ind.symbol, 'crypto');
-        } else {
-          // ALTIN
-          price = await fetchRealTimePrice(ind.symbol, 'commodity');
-        }
-        return { id: ind.id, price, updatedAt: Date.now() };
+        if (ind.symbol === 'USD') price = await fetchUSDTRYRate();
+        else if (ind.symbol === 'EUR') price = await fetchEURTRYRate();
+        else if (ind.symbol === 'BTC' || ind.symbol === 'ETH') price = await fetchRealTimePrice(ind.symbol, 'crypto');
+        else price = await fetchRealTimePrice(ind.symbol, 'commodity');
+        return { id: ind.id, price };
+      })
+    );
+
+    const sparkResults = await Promise.allSettled(
+      INDICATORS.map(async (ind) => {
+        const res = await fetch(`/api/price-proxy?type=benchmark-history&symbol=${encodeURIComponent(ind.yahooSymbol)}&days=30`);
+        if (!res.ok) return { id: ind.id, series: [] };
+        const data = await res.json();
+        return { id: ind.id, series: (data?.data?.series || []).map((p: { value: number }) => p.value) };
       })
     );
 
     setIndicators((prev) =>
       prev.map((ind) => {
-        const result = results.find(
-          (r) => r.status === 'fulfilled' && r.value.id === ind.id
-        );
-        if (result && result.status === 'fulfilled') {
-          return { ...ind, price: result.value.price, updatedAt: result.value.updatedAt };
-        }
-        return ind;
+        const priceRes = priceResults.find((r) => r.status === 'fulfilled' && r.value.id === ind.id);
+        const sparkRes = sparkResults.find((r) => r.status === 'fulfilled' && r.value.id === ind.id);
+        const price = priceRes?.status === 'fulfilled' ? priceRes.value.price : ind.price;
+        const series: number[] = sparkRes?.status === 'fulfilled' ? sparkRes.value.series : ind.sparkline;
+        const changePct = series.length >= 2 ? ((series[series.length - 1] - series[0]) / series[0]) * 100 : null;
+        return { ...ind, price, sparkline: series, changePct, updatedAt: Date.now() };
       })
     );
 
@@ -74,20 +85,7 @@ export default function MarketPage() {
 
   function formatTime(ts: number | null) {
     if (!ts) return '--:--';
-    return new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  }
-
-  function getCategoryIcon(category: string) {
-    switch (category) {
-      case 'Döviz':
-        return <Globe className="w-5 h-5 text-brand-500" />;
-      case 'Kripto':
-        return <TrendingUp className="w-5 h-5 text-brand-500" />;
-      case 'Emtia':
-        return <TrendingDown className="w-5 h-5 text-yellow-500" />;
-      default:
-        return <Globe className="w-5 h-5 text-gray-500" />;
-    }
+    return new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   }
 
   function getDecimals(symbol: string) {
@@ -97,71 +95,85 @@ export default function MarketPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50/40 via-white to-accent-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 p-4 md:p-6">
+      <div className="max-w-6xl mx-auto">
+        <PageHeader
+          icon={Globe}
+          title="Piyasa Özeti"
+          subtitle="Döviz, kripto ve emtia canlı fiyatları"
+          actions={
             <button
-              onClick={() => navigate('/')}
-              className="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              onClick={() => fetchAll(true)}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl bg-white dark:bg-gray-800 ring-1 ring-slate-200 dark:ring-gray-700 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-colors disabled:opacity-50 font-medium"
             >
-              <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Yenile
             </button>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Piyasa Özeti</h1>
-          </div>
-          <button
-            onClick={() => fetchAll(true)}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Yenile
-          </button>
-        </div>
-      </div>
+          }
+        />
 
-      {/* Grid */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {indicators.map((ind) => (
-            <div
-              key={ind.id}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2"
-            >
-              {loading ? (
-                /* Skeleton */
-                <div className="animate-pulse flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700" />
-                    <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {indicators.map((ind) => {
+            const cat = CATEGORY_STYLES[ind.category] || CATEGORY_STYLES.Döviz;
+            const Icon = cat.icon;
+            const isPositive = (ind.changePct ?? 0) >= 0;
+
+            return (
+              <div key={ind.id} className="card-secondary p-5 hover-lift group">
+                {loading ? (
+                  <div className="animate-pulse space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-gray-800" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 w-16 rounded bg-slate-200 dark:bg-gray-800" />
+                        <div className="h-2 w-24 rounded bg-slate-200 dark:bg-gray-800" />
+                      </div>
+                    </div>
+                    <div className="h-8 w-32 rounded bg-slate-200 dark:bg-gray-800" />
+                    <div className="h-10 rounded bg-slate-200 dark:bg-gray-800" />
                   </div>
-                  <div className="h-7 w-24 rounded bg-gray-200 dark:bg-gray-700 mt-1" />
-                  <div className="h-3 w-14 rounded bg-gray-200 dark:bg-gray-700" />
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2">
-                    {getCategoryIcon(ind.category)}
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                      {ind.category}
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    {ind.name}
-                  </p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">
-                    {ind.price !== null
-                      ? `₺${formatCurrency(ind.price, getDecimals(ind.symbol))}`
-                      : '---'}
-                  </p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                    {formatTime(ind.updatedAt)}
-                  </p>
-                </>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`icon-badge ${cat.tone}`}>
+                          <Icon size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="t-eyebrow">{ind.category}</p>
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{ind.name}</p>
+                        </div>
+                      </div>
+                      {ind.changePct !== null && (
+                        <div className={`pill ${isPositive ? 'pill-positive' : 'pill-negative'}`}>
+                          {isPositive ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                          {isPositive ? '+' : ''}{ind.changePct.toFixed(2)}%
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="kpi-number text-gray-900 dark:text-white mb-2">
+                      {ind.price !== null
+                        ? `${formatCurrency(ind.price, getDecimals(ind.symbol))}`
+                        : '---'}
+                      <span className="text-sm font-semibold text-slate-400 dark:text-gray-500 ml-1">
+                        {ind.symbol === 'BTC' || ind.symbol === 'ETH' ? '$' : ind.symbol === 'ALTIN' ? '$/oz' : '₺'}
+                      </span>
+                    </p>
+
+                    {ind.sparkline.length > 1 && (
+                      <div className="mb-2">
+                        <Sparkline data={ind.sparkline} width={260} height={40} />
+                      </div>
+                    )}
+
+                    <p className="t-caption">Son güncelleme: {formatTime(ind.updatedAt)} · 30 gün trend</p>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
