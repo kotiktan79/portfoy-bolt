@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { Scale } from 'lucide-react';
 import RebalancingEngine from '../components/RebalancingEngine';
+import CashFlowRebalanceWidget from '../components/CashFlowRebalanceWidget';
+import TradeSimulator from '../components/TradeSimulator';
 
 export default function RebalancingPage() {
   const navigate = useNavigate();
@@ -19,6 +21,10 @@ export default function RebalancingPage() {
           >
             Ana Sayfaya Dön
           </button>
+        </div>
+        <div className="space-y-6 mb-6">
+          <CashFlowRebalanceWidget />
+          <TradeSimulator />
         </div>
         <RebalancingEngine />
       </div>

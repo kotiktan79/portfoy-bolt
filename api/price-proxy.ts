@@ -103,8 +103,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json({ success: false, error: 'Binance failed' });
       }
 
+      case 'benchmark-history': {
+        // GET /api/price-proxy?type=benchmark-history&symbol=^XU100&days=30
+        const symbol = (req.query.symbol as string) || '^XU100';
+        const days = Math.max(1, Math.min(3650, parseInt(req.query.days as string) || 30));
+        const range = days <= 7 ? '7d' : days <= 30 ? '1mo' : days <= 90 ? '3mo' : days <= 180 ? '6mo' : days <= 365 ? '1y' : days <= 1825 ? '5y' : 'max';
+        const r = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`,
+          { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
+        );
+        if (!r.ok) return res.json({ success: false, error: `Yahoo ${r.status}` });
+        const d = await r.json();
+        const result = d?.chart?.result?.[0];
+        const timestamps: number[] = result?.timestamp || [];
+        const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || [];
+        const series = timestamps
+          .map((ts, i) => ({
+            date: new Date(ts * 1000).toISOString().split('T')[0],
+            value: closes[i],
+          }))
+          .filter(p => p.value != null && isFinite(p.value as number));
+        return res.json({ success: true, data: { symbol, series } });
+      }
+
       default:
-        return res.status(400).json({ error: 'Invalid type. Use: bist, us, european, usd, eur, gold, silver, crypto' });
+        return res.status(400).json({ error: 'Invalid type. Use: bist, us, european, usd, eur, gold, silver, crypto, benchmark-history' });
     }
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });

@@ -342,9 +342,9 @@ function calculateHealthFactors(
 
 function generateUrgentActions(
   holdings: HoldingAnalysis[],
-  allocation: AllocationItem[],
-  cashBalance: number,
-  grandTotal: number,
+  _allocation: AllocationItem[],
+  _cashBalance: number,
+  _grandTotal: number,
   ownedSymbols: Set<string>
 ): ActionRecommendation[] {
   const actions: ActionRecommendation[] = [];
@@ -503,7 +503,7 @@ function calculateRebalanceActions(
 }
 
 function calculateWithdrawal(
-  grandTotal: number, totalPnl: number, cashBalance: number, annualReturnPct: number
+  grandTotal: number, _totalPnl: number, cashBalance: number, annualReturnPct: number
 ): WithdrawalAnalysis {
   const safeMonthly = grandTotal * 0.02 / 12;
   const moderateMonthly = grandTotal * 0.04 / 12;
@@ -526,7 +526,7 @@ function calculateWithdrawal(
 function calculateNewMoneyPlan(
   amount: number,
   currentAllocation: AllocationItem[],
-  totalValue: number,
+  _totalValue: number,
   ownedSymbols: Set<string>
 ): NewMoneyAllocation[] {
   const plan: NewMoneyAllocation[] = [];

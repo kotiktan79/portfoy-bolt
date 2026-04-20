@@ -49,16 +49,28 @@ export async function savePortfolioSnapshot(
       pnl_percentage: pnlPercentage,
       total_deposits: totalDeposits,
       total_withdrawals: totalWithdrawals,
+      snapshot_date: today,
     };
 
-    const { error } = await supabase
+    const { data: existing } = await supabase
       .from('portfolio_snapshots')
-      .upsert(
-        [{ ...snapshotData, snapshot_date: today }],
-        { onConflict: 'snapshot_date' }
-      );
+      .select('id')
+      .eq('snapshot_date', today)
+      .limit(1)
+      .maybeSingle();
 
-    if (error) throw error;
+    if (existing?.id) {
+      const { error: updateError } = await supabase
+        .from('portfolio_snapshots')
+        .update(snapshotData)
+        .eq('id', existing.id);
+      if (updateError) throw updateError;
+    } else {
+      const { error: insertError } = await supabase
+        .from('portfolio_snapshots')
+        .insert([snapshotData]);
+      if (insertError) throw insertError;
+    }
   } catch (error) {
     console.error('Error saving portfolio snapshot:', error);
   }

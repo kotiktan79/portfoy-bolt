@@ -7,6 +7,7 @@ import {
 import { getLatestReport, getReportHistory, getMonthlySalaryHistory, triggerDailyReport, triggerDailySnapshot, type DailyReport, type MonthlySalary } from '../services/reportService';
 import IncomeRecordModal from '../components/IncomeRecordModal';
 import IncomeCalendar from '../components/IncomeCalendar';
+import ForwardDividendCalendar from '../components/ForwardDividendCalendar';
 import { supabase } from '../lib/supabase';
 
 export default function DailyReportPage() {
@@ -346,6 +347,9 @@ export default function DailyReportPage() {
             <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
               <IncomeCalendar onRefresh={incomeRefreshKey} />
             </div>
+
+            {/* 12 Aylık Temettü Tahmini */}
+            <ForwardDividendCalendar />
 
             {/* Aylık Maaş Özeti */}
             {salaryHistory.length > 0 && (

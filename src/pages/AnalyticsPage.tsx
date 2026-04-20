@@ -1,5 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import ComprehensiveAnalytics from '../components/ComprehensiveAnalytics';
+import RealizedPnLReport from '../components/RealizedPnLReport';
+import PerformanceAttribution from '../components/PerformanceAttribution';
+import FireGoalTracker from '../components/FireGoalTracker';
+import RiskMetricsCard from '../components/RiskMetricsCard';
 
 export default function AnalyticsPage() {
   const navigate = useNavigate();
@@ -16,7 +20,13 @@ export default function AnalyticsPage() {
           </button>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gelişmiş Analitik</h1>
         </div>
-        <ComprehensiveAnalytics />
+        <div className="space-y-6">
+          <ComprehensiveAnalytics />
+          <RiskMetricsCard />
+          <FireGoalTracker />
+          <PerformanceAttribution />
+          <RealizedPnLReport />
+        </div>
       </div>
     </div>
   );

@@ -198,7 +198,10 @@ export default function AIAdvisor() {
       // Try Claude API first
       const conversationHistory = chatHistory
         .filter(m => m.role === 'user' || m.role === 'ai')
-        .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
+        .map(m => ({
+          role: (m.role === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
+          content: m.content,
+        }));
 
       const claudeResult = await askClaude(
         chatInput,

@@ -52,7 +52,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const totalInvestment = holdings.reduce((sum, h) => sum + (h.purchase_price || 0) * (h.quantity || 0), 0);
     const totalPnl = totalValue - totalInvestment;
     const totalPnlPct = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
-    const totalCash = cashBalances.reduce((sum, c) => sum + (c.balance || 0), 0);
+
+    // Likit nakit = cash_balances + currency tipi holdings (USD/EURO/USDC vb. TRY karşılığı)
+    const cashBalancesValue = cashBalances.reduce((sum, c) => sum + (c.balance || 0), 0);
+    const currencyHoldingsValue = holdings
+      .filter(h => h.asset_type === 'currency')
+      .reduce((sum, h) => sum + (h.current_price || 0) * (h.quantity || 0), 0);
+    const totalCash = cashBalancesValue + currencyHoldingsValue;
+
+    // Sürdürülebilir aylık çekim (deterministik, AI'dan bağımsız)
+    const safeMonthly = totalValue * 0.003;     // %0.3/ay = ~%3.6/yıl
+    const moderateMonthly = totalValue * 0.005; // %0.5/ay = ~%6/yıl
 
     // Dünkü snapshot ile karşılaştır
     const todayStr = new Date().toISOString().split('T')[0];
@@ -101,8 +111,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       top_pick: aiResponse.top_pick || '',
       news_alerts: aiResponse.news_alerts || [],
       wealth_building_tip: aiResponse.wealth_building_tip || '',
-      safe_monthly_income: aiResponse.monthly_income?.safe || 0,
-      moderate_monthly_income: aiResponse.monthly_income?.moderate || 0,
+      safe_monthly_income: safeMonthly,
+      moderate_monthly_income: moderateMonthly,
       ai_model: 'claude-sonnet-4-20250514',
       generation_time_ms: Date.now() - startTime,
     };
@@ -121,8 +131,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 6. Aylık maaş hesaplamasını güncelle
     // ========================================
     const monthStart = `${todayStr.substring(0, 7)}-01`;
-    const safeMonthly = totalValue * 0.003; // %0.3/ay = %3.6/yıl
-    const moderateMonthly = totalValue * 0.005; // %0.5/ay = %6/yıl
 
     // Bu ayki toplam geliri hesapla
     const thisMonthIncome = (incomeRecords || [])

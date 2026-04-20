@@ -157,6 +157,18 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
         body: JSON.stringify({ portfolio: portfolioData, memory }),
       });
 
+      if (!res.ok) {
+        // Dev ortamında /api/daily-plan Vercel function çalışmaz — sessizce geç
+        setAiLoading(false);
+        return;
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setAiLoading(false);
+        return;
+      }
+
       const data = await res.json();
       if (data.success && data.plan) {
         setAiPlan(data.plan);

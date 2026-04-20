@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, Calendar } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Calendar, BarChart3 } from 'lucide-react';
 import {
   XAxis,
   YAxis,
@@ -8,10 +8,18 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Area,
-  AreaChart,
+  Line,
+  Legend,
+  ComposedChart,
 } from 'recharts';
 import { getHistoricalSnapshots, PortfolioSnapshot } from '../services/analyticsService';
 import { formatCurrency } from '../services/priceService';
+import {
+  getBenchmarkHistory,
+  BENCHMARK_OPTIONS,
+  BenchmarkKey,
+  BenchmarkPoint,
+} from '../services/benchmarkService';
 
 type Period = 7 | 30 | 90 | 9999;
 
@@ -42,6 +50,9 @@ export default function PerformancePage() {
   const [period, setPeriod] = useState<Period>(30);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [benchmarkKey, setBenchmarkKey] = useState<BenchmarkKey | null>(null);
+  const [benchmarkSeries, setBenchmarkSeries] = useState<BenchmarkPoint[]>([]);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,14 +68,55 @@ export default function PerformancePage() {
     };
   }, [period]);
 
+  useEffect(() => {
+    if (!benchmarkKey) {
+      setBenchmarkSeries([]);
+      return;
+    }
+    let cancelled = false;
+    setBenchmarkLoading(true);
+    const days = period === 9999 ? 1825 : period;
+    getBenchmarkHistory(benchmarkKey, days).then((data) => {
+      if (!cancelled) {
+        setBenchmarkSeries(data?.series || []);
+        setBenchmarkLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [benchmarkKey, period]);
+
   const chartData = useMemo(() => {
-    return snapshots.map((s) => ({
-      date: s.date,
-      dateLabel: formatDateTR(s.date),
-      value: s.total_value,
-      investment: s.total_investment,
-    }));
-  }, [snapshots]);
+    if (snapshots.length === 0) return [];
+
+    const portfolioBase = snapshots[0].total_value;
+    const benchmarkMap: Record<string, number> = {};
+    for (const p of benchmarkSeries) benchmarkMap[p.date] = p.value;
+
+    let benchmarkBase = 0;
+    if (benchmarkKey && benchmarkSeries.length > 0) {
+      const firstSnapDate = snapshots[0].date;
+      const firstAvailable =
+        benchmarkSeries.find((p) => p.date >= firstSnapDate) || benchmarkSeries[0];
+      benchmarkBase = firstAvailable?.value || 0;
+    }
+
+    return snapshots.map((s) => {
+      const benchValue = benchmarkMap[s.date];
+      return {
+        date: s.date,
+        dateLabel: formatDateTR(s.date),
+        value: s.total_value,
+        investment: s.total_investment,
+        portfolioIdx: portfolioBase > 0 ? (s.total_value / portfolioBase) * 100 : 100,
+        benchmarkIdx:
+          benchmarkKey && benchValue && benchmarkBase > 0
+            ? (benchValue / benchmarkBase) * 100
+            : null,
+      };
+    });
+  }, [snapshots, benchmarkSeries, benchmarkKey]);
 
   const stats = useMemo(() => {
     if (snapshots.length === 0)
@@ -102,22 +154,56 @@ export default function PerformancePage() {
         </div>
 
         {/* Period selector */}
-        <div className="flex items-center gap-2 mb-6">
-          <Calendar size={16} className="text-gray-500 dark:text-gray-400" />
-          <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm">
-            {PERIOD_OPTIONS.map((opt) => (
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="flex items-center gap-2">
+            <Calendar size={16} className="text-gray-500 dark:text-gray-400" />
+            <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm">
+              {PERIOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setPeriod(opt.value)}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    period === opt.value
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <BarChart3 size={16} className="text-gray-500 dark:text-gray-400" />
+            <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm">
               <button
-                key={opt.value}
-                onClick={() => setPeriod(opt.value)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  period === opt.value
-                    ? 'bg-blue-600 text-white shadow-sm'
+                onClick={() => setBenchmarkKey(null)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  benchmarkKey === null
+                    ? 'bg-gray-600 text-white shadow-sm'
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                {opt.label}
+                Karşılaştırma yok
               </button>
-            ))}
+              {BENCHMARK_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setBenchmarkKey(opt.key)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    benchmarkKey === opt.key
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {benchmarkLoading && (
+              <span className="text-[10px] text-gray-400">yükleniyor…</span>
+            )}
           </div>
         </div>
 
@@ -133,7 +219,7 @@ export default function PerformancePage() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={360}>
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={isPositive ? '#22c55e' : '#ef4444'} stopOpacity={0.3} />
@@ -148,39 +234,80 @@ export default function PerformancePage() {
                   tickLine={false}
                 />
                 <YAxis
+                  yAxisId="left"
                   tick={{ fontSize: 12, fill: '#9ca3af' }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v: number) => formatCurrency(v, 0)}
                   width={90}
                 />
+                {benchmarkKey && (
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 11, fill: '#d97706' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: number) => `${v.toFixed(0)}`}
+                    domain={['auto', 'auto']}
+                    width={50}
+                  />
+                )}
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload || payload.length === 0) return null;
                     const data = payload[0].payload;
                     return (
-                      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 space-y-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {formatTooltipDate(data.date)}
                         </p>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">
-                          {formatCurrency(data.value)}
+                          Portföy: {formatCurrency(data.value)}
+                          <span className="ml-2 text-xs text-gray-500">
+                            (idx {data.portfolioIdx?.toFixed(1)})
+                          </span>
                         </p>
+                        {data.benchmarkIdx != null && benchmarkKey && (
+                          <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                            {BENCHMARK_OPTIONS.find((b) => b.key === benchmarkKey)?.label}: idx {data.benchmarkIdx.toFixed(1)}
+                            <span className="ml-2 text-xs text-gray-500">
+                              ({data.portfolioIdx > data.benchmarkIdx ? '+' : ''}
+                              {(data.portfolioIdx - data.benchmarkIdx).toFixed(1)} pp)
+                            </span>
+                          </p>
+                        )}
                       </div>
                     );
                   }}
                 />
+                {benchmarkKey && <Legend wrapperStyle={{ fontSize: 12 }} />}
                 <Area
+                  yAxisId="left"
                   type="monotone"
                   dataKey="value"
                   stroke={isPositive ? '#22c55e' : '#ef4444'}
                   strokeWidth={2.5}
                   fill="url(#valueGradient)"
-                  name="Portföy Değeri"
+                  name="Portföy"
                   dot={false}
                   activeDot={{ r: 5, strokeWidth: 2 }}
                 />
-              </AreaChart>
+                {benchmarkKey && (
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="benchmarkIdx"
+                    stroke="#d97706"
+                    strokeWidth={2}
+                    strokeDasharray="4 3"
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                    name={BENCHMARK_OPTIONS.find((b) => b.key === benchmarkKey)?.label || 'Benchmark'}
+                    connectNulls
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </div>

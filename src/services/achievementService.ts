@@ -97,6 +97,11 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
 ];
 
+// Session-level cache to prevent duplicate inserts when unique constraint is missing
+let _cachedUnlockedTypes: Set<string> | null = null;
+let _lastCheckTs = 0;
+const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakikada bir tazele
+
 export async function checkAndUnlockAchievements(stats: {
   totalHoldings: number;
   totalValue: number;
@@ -106,19 +111,26 @@ export async function checkAndUnlockAchievements(stats: {
   totalDividends: number;
   totalTransactions: number;
 }) {
-  const { data: unlockedAchievements, error: fetchError } = await supabase
-    .from('achievements')
-    .select('achievement_type');
+  const now = Date.now();
+  if (_cachedUnlockedTypes === null || now - _lastCheckTs > CHECK_INTERVAL_MS) {
+    const { data: unlockedAchievements, error: fetchError } = await supabase
+      .from('achievements')
+      .select('achievement_type');
 
-  if (fetchError) {
-    console.error('Error fetching unlocked achievements:', fetchError);
+    if (fetchError) {
+      // Fetch başarısız olursa insert yapma — aksi halde duplicate spam üretiriz
+      console.error('Error fetching unlocked achievements:', fetchError);
+      return [];
+    }
+
+    _cachedUnlockedTypes = new Set(unlockedAchievements?.map((a) => a.achievement_type) || []);
+    _lastCheckTs = now;
   }
 
-  const unlockedTypes = new Set(unlockedAchievements?.map((a) => a.achievement_type) || []);
   const newAchievements: Achievement[] = [];
 
   for (const achievement of ACHIEVEMENT_DEFINITIONS) {
-    if (!unlockedTypes.has(achievement.type) && achievement.condition(stats)) {
+    if (!_cachedUnlockedTypes.has(achievement.type) && achievement.condition(stats)) {
       const { data, error: insertError } = await supabase
         .from('achievements')
         .insert([
@@ -134,9 +146,11 @@ export async function checkAndUnlockAchievements(stats: {
 
       if (insertError) {
         console.error('Error unlocking achievement:', insertError);
+        continue;
       }
 
       if (data) {
+        _cachedUnlockedTypes.add(achievement.type);
         newAchievements.push(data);
       }
     }
