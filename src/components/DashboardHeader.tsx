@@ -119,28 +119,24 @@ export function DashboardHeader({
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
   ];
 
+  const iconBtn = 'p-2 rounded-xl text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors';
+
   return (
-    <header
-      className={`relative border-b transition-colors ${
-        isDark
-          ? 'bg-gray-900 border-gray-800'
-          : 'bg-white border-gray-200'
-      }`}
-    >
+    <header className="sticky top-0 z-30 bg-white/85 dark:bg-gray-900/85 backdrop-blur-lg border-b border-slate-200 dark:border-gray-800">
       <div className="px-4 md:px-6 h-16 flex items-center justify-between gap-4">
-        {/* Left: Logo + status dot */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <img src="/logo.svg" alt="Tandor Finans" className="w-9 h-9 rounded-lg flex-shrink-0" />
-          <h1
-            className={`text-lg font-bold tracking-tight truncate ${
-              isDark ? 'text-gray-100' : 'text-gray-900'
-            }`}
-          >
-            <span className="text-amber-500">Tandor</span> Finans
-          </h1>
-          {/* Connection status dot */}
-          <div className="flex items-center gap-1.5" title={statusLabel()}>
-            <span className={`inline-block w-2 h-2 rounded-full ${statusDotColor()}`} />
+        {/* Left: Logo + brand + status */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-md shadow-brand-500/20 flex-shrink-0">
+            <TrendingUp size={18} className="text-white" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base font-bold tracking-tight truncate leading-none text-slate-900 dark:text-white">
+              <span className="bg-gradient-to-r from-brand-600 to-accent-600 bg-clip-text text-transparent">Tandor</span> Finans
+            </h1>
+            <div className="flex items-center gap-1 mt-0.5" title={statusLabel()}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusDotColor()}`} />
+              <span className="text-[10px] text-slate-500 dark:text-gray-400">{statusLabel()}</span>
+            </div>
           </div>
         </div>
 
@@ -150,57 +146,30 @@ export function DashboardHeader({
             <button
               key={item.label}
               onClick={item.onClick}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors"
             >
+              <item.icon size={14} strokeWidth={2} />
               {item.label}
             </button>
           ))}
         </nav>
 
         {/* Right: Actions (desktop) */}
-        <div className="hidden lg:flex items-center gap-1.5">
-          {/* Language toggle */}
+        <div className="hidden lg:flex items-center gap-1">
           <button
             onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')}
             aria-label="Dil değiştir"
-            className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-colors ${
-              isDark
-                ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-            }`}
+            className="px-2 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors"
           >
             {language === 'tr' ? 'EN' : 'TR'}
           </button>
 
-          {/* Theme toggle */}
-          <button
-            onClick={onToggleDark}
-            aria-label={isDark ? 'Aydınlık moda geç' : 'Karanlık moda geç'}
-            className={`p-2 rounded-md transition-colors ${
-              isDark
-                ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          <button onClick={onToggleDark} aria-label={isDark ? 'Aydınlık' : 'Karanlık'} className={iconBtn}>
+            {isDark ? <Sun size={17} /> : <Moon size={17} />}
           </button>
 
-          {/* Refresh */}
-          <button
-            onClick={onRefresh}
-            disabled={refreshing}
-            aria-label="Fiyatları yenile"
-            className={`p-2 rounded-md transition-colors disabled:opacity-40 ${
-              isDark
-                ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+          <button onClick={onRefresh} disabled={refreshing} aria-label="Yenile" className={`${iconBtn} disabled:opacity-40`}>
+            <RefreshCw size={17} className={refreshing ? 'animate-spin' : ''} />
           </button>
 
           {/* More menu */}
@@ -208,13 +177,9 @@ export function DashboardHeader({
             <button
               onClick={() => setMoreMenuOpen(!moreMenuOpen)}
               aria-label="Daha fazla"
-              className={`p-2 rounded-md transition-colors ${
-                isDark
-                  ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-              }`}
+              className={iconBtn}
             >
-              <MoreHorizontal size={18} />
+              <MoreHorizontal size={17} />
             </button>
             {moreMenuOpen && (
               <div
@@ -315,54 +280,31 @@ export function DashboardHeader({
             )}
           </div>
 
-          {/* Divider */}
-          <div
-            className={`h-6 w-px mx-1 ${
-              isDark ? 'bg-gray-700' : 'bg-gray-200'
-            }`}
-          />
+          <div className="h-6 w-px mx-1 bg-slate-200 dark:bg-gray-700" />
 
-          {/* Primary action: Add asset */}
           <button
             onClick={onAddHolding}
-            className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors font-semibold text-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-br from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 text-white rounded-xl shadow-md shadow-brand-500/20 hover:shadow-brand-500/40 transition-all font-semibold text-sm hover-lift"
           >
-            <Plus size={16} />
+            <Plus size={15} />
             Varlık Ekle
           </button>
         </div>
 
         {/* Right: Mobile controls */}
-        <div className="flex lg:hidden items-center gap-2">
-          <button
-            onClick={onRefresh}
-            disabled={refreshing}
-            aria-label="Fiyatları yenile"
-            className={`p-2 rounded-md transition-colors disabled:opacity-40 ${
-              isDark
-                ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+        <div className="flex lg:hidden items-center gap-1">
+          <button onClick={onRefresh} disabled={refreshing} aria-label="Yenile" className={`${iconBtn} disabled:opacity-40`}>
+            <RefreshCw size={17} className={refreshing ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={onAddHolding}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors font-semibold text-sm"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-br from-brand-600 to-brand-700 text-white rounded-lg shadow-md shadow-brand-500/20 font-semibold text-xs"
           >
-            <Plus size={16} />
+            <Plus size={14} />
             Ekle
           </button>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Menüyü aç"
-            className={`p-2 rounded-md transition-colors ${
-              isDark
-                ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menü" className={iconBtn}>
+            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </div>
