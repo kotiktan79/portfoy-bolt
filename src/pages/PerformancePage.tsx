@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, Calendar, BarChart3 } from 'lucide-react';
+import { TrendingUp, Calendar, BarChart3 } from 'lucide-react';
+import { PageHeader } from '../components/ui/PageHeader';
 import {
   XAxis,
   YAxis,
@@ -46,7 +46,6 @@ function formatTooltipDate(dateStr: string): string {
 }
 
 export default function PerformancePage() {
-  const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>(30);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,22 +135,13 @@ export default function PerformancePage() {
   const isPositive = stats.changeTL >= 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-accent-50/30 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50/40 via-white to-accent-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-md"
-          >
-            <ArrowLeft size={18} />
-            Geri
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <TrendingUp size={24} className="text-brand-600" />
-            Performans
-          </h1>
-        </div>
+        <PageHeader
+          icon={TrendingUp}
+          title="Performans"
+          subtitle="Portföy değer trendi ve benchmark karşılaştırması"
+        />
 
         {/* Period selector */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
