@@ -1,6 +1,6 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BarChart3, PieChart } from 'lucide-react';
+import { Plus, BarChart3, PieChart, LayoutGrid, List } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { useTheme } from '../hooks/useTheme';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -11,6 +11,8 @@ import { Holding } from '../lib/supabase';
 import { AddHoldingModal } from '../components/AddHoldingModal';
 import { EditHoldingModal } from '../components/EditHoldingModal';
 import { HoldingRow } from '../components/HoldingRow';
+import { HoldingCard } from '../components/HoldingCard';
+import { getSparklineData } from '../services/priceHistoryService';
 import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
 import { DailyActionPlan } from '../components/DailyActionPlan';
@@ -75,11 +77,27 @@ export default function HomePage() {
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [showAutoRebalanceModal, setShowAutoRebalanceModal] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>(() => {
+    return (localStorage.getItem('tandor_holdings_view') as 'table' | 'grid') || 'table';
+  });
+  const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
 
   const {
     totalInvestment, totalCurrentValue,
     totalProfitLoss, totalProfitLossPercent,
   } = portfolioMetrics;
+
+  useEffect(() => {
+    if (viewMode === 'grid' && holdings.length > 0) {
+      const symbols = [...new Set(holdings.map(h => h.symbol))];
+      getSparklineData(symbols, 30).then(setSparklines);
+    }
+  }, [viewMode, holdings]);
+
+  const handleViewModeChange = (mode: 'table' | 'grid') => {
+    setViewMode(mode);
+    localStorage.setItem('tandor_holdings_view', mode);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-950 animate-fade-in">
@@ -191,14 +209,42 @@ export default function HomePage() {
 
           </div>
 
-          {/* Holdings Table */}
+          {/* Holdings Table / Grid */}
           <div className="mt-2 mx-2 md:mx-6 rounded-xl border border-slate-200 dark:border-gray-800 overflow-hidden">
-            <div className="px-4 md:px-5 py-3 bg-slate-50/80 dark:bg-gray-800/50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-300 tracking-wide">Varliklar</h2>
+            <div className="px-4 md:px-5 py-3 bg-slate-50/80 dark:bg-gray-800/50 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-300 tracking-wide">Varlıklar</h2>
+                {holdings.length > 0 && (
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md border border-slate-200 dark:border-gray-600">
+                    {holdings.length}
+                  </span>
+                )}
+              </div>
               {holdings.length > 0 && (
-                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md border border-slate-200 dark:border-gray-600">
-                  {holdings.length}
-                </span>
+                <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600">
+                  <button
+                    onClick={() => handleViewModeChange('table')}
+                    className={`p-1.5 rounded transition-colors ${
+                      viewMode === 'table'
+                        ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300'
+                        : 'text-slate-500 dark:text-gray-400 hover:text-slate-700'
+                    }`}
+                    title="Tablo görünümü"
+                  >
+                    <List size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleViewModeChange('grid')}
+                    className={`p-1.5 rounded transition-colors ${
+                      viewMode === 'grid'
+                        ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300'
+                        : 'text-slate-500 dark:text-gray-400 hover:text-slate-700'
+                    }`}
+                    title="Kart görünümü"
+                  >
+                    <LayoutGrid size={14} />
+                  </button>
+                </div>
               )}
             </div>
             <div className="overflow-x-auto">
@@ -236,30 +282,45 @@ export default function HomePage() {
                       onSortOrderChange={setSortOrder}
                     />
                   </div>
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-gray-800">
-                        <th className="px-3 md:px-5 py-2.5 text-left text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">Varlik</th>
-                        <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider hidden sm:table-cell">Alis</th>
-                        <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider hidden md:table-cell">Miktar</th>
-                        <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">Fiyat</th>
-                        <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider hidden lg:table-cell">Deger</th>
-                        <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">K/Z</th>
-                        <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 dark:divide-gray-800/50">
+                  {viewMode === 'grid' ? (
+                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {filteredAndSortedHoldings.map((holding) => (
-                        <HoldingRow
+                        <HoldingCard
                           key={holding.id}
                           holding={holding}
+                          sparklineData={sparklines[holding.symbol]}
                           onEdit={setEditingHolding}
                           onDelete={handleDeleteHolding}
                           onTransactionComplete={handleRefresh}
                         />
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-100 dark:border-gray-800">
+                          <th className="px-3 md:px-5 py-2.5 text-left text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">Varlık</th>
+                          <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider hidden sm:table-cell">Alış</th>
+                          <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider hidden md:table-cell">Miktar</th>
+                          <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">Fiyat</th>
+                          <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider hidden lg:table-cell">Değer</th>
+                          <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider">K/Z</th>
+                          <th className="px-3 md:px-5 py-2.5 text-right text-[11px] font-medium text-slate-400 dark:text-gray-500 uppercase tracking-wider"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-gray-800/50">
+                        {filteredAndSortedHoldings.map((holding) => (
+                          <HoldingRow
+                            key={holding.id}
+                            holding={holding}
+                            onEdit={setEditingHolding}
+                            onDelete={handleDeleteHolding}
+                            onTransactionComplete={handleRefresh}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </>
               )}
             </div>
