@@ -134,7 +134,7 @@ export function BackupRestore({ onClose, onComplete }: BackupRestoreProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Database className="text-white" size={24} />
             <h2 className="text-xl font-bold text-white">Yedekleme & Geri Yükleme</h2>
@@ -152,7 +152,7 @@ export function BackupRestore({ onClose, onComplete }: BackupRestoreProps) {
             onClick={() => setActiveTab('backup')}
             className={`flex-1 px-4 py-3 font-medium text-sm transition-all ${
               activeTab === 'backup'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                ? 'text-brand-600 border-b-2 border-brand-600 bg-brand-50 dark:bg-brand-900/20'
                 : 'text-slate-600 dark:text-gray-400'
             }`}
           >
@@ -163,7 +163,7 @@ export function BackupRestore({ onClose, onComplete }: BackupRestoreProps) {
             onClick={() => setActiveTab('restore')}
             className={`flex-1 px-4 py-3 font-medium text-sm transition-all ${
               activeTab === 'restore'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                ? 'text-brand-600 border-b-2 border-brand-600 bg-brand-50 dark:bg-brand-900/20'
                 : 'text-slate-600 dark:text-gray-400'
             }`}
           >
@@ -175,9 +175,9 @@ export function BackupRestore({ onClose, onComplete }: BackupRestoreProps) {
         <div className="p-6">
           {activeTab === 'backup' ? (
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+              <div className="p-4 bg-brand-50 dark:bg-brand-900/20 rounded-lg border border-brand-200 dark:border-brand-700">
                 <div className="flex items-start gap-3">
-                  <Shield className="text-blue-600 flex-shrink-0 mt-1" size={20} />
+                  <Shield className="text-brand-600 flex-shrink-0 mt-1" size={20} />
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
                       Yedekleme İçeriği
@@ -195,7 +195,7 @@ export function BackupRestore({ onClose, onComplete }: BackupRestoreProps) {
               <button
                 onClick={handleBackup}
                 disabled={processing}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
               >
                 <Download size={20} />
                 {processing ? 'Yedekleniyor...' : 'Yedekle'}
@@ -229,7 +229,7 @@ export function BackupRestore({ onClose, onComplete }: BackupRestoreProps) {
                 />
                 <label
                   htmlFor="restore-file"
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl cursor-pointer disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl cursor-pointer disabled:opacity-50"
                 >
                   <Upload size={20} />
                   {processing ? 'Geri Yükleniyor...' : 'Dosya Seç'}

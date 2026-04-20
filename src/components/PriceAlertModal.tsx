@@ -58,7 +58,7 @@ export function PriceAlertModal({ onClose, onAdd }: PriceAlertModalProps) {
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
               placeholder="Örn: USD, BTC, AAPL"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -73,7 +73,7 @@ export function PriceAlertModal({ onClose, onAdd }: PriceAlertModalProps) {
               value={targetPrice}
               onChange={(e) => setTargetPrice(e.target.value)}
               placeholder="0.00"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -114,7 +114,7 @@ export function PriceAlertModal({ onClose, onAdd }: PriceAlertModalProps) {
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium"
             >
               Alarm Ekle
             </button>

@@ -190,7 +190,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {!isBuy && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+            <div className="p-3 bg-brand-50 border border-brand-200 rounded-lg text-sm text-brand-800">
               Mevcut Miktar: <strong>{formatCurrency(holding.quantity)} adet</strong>
             </div>
           )}
@@ -205,7 +205,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               placeholder="0"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -220,7 +220,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               placeholder="0.00"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -235,7 +235,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
               value={fee}
               onChange={(e) => setFee(e.target.value)}
               placeholder="0.00"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 
@@ -248,7 +248,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
               onChange={(e) => setNotes(e.target.value)}
               placeholder="İşlem notu..."
               rows={2}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 

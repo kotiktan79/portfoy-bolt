@@ -208,8 +208,8 @@ export function TradingSignals({ holdings }: TradingSignalsProps) {
     <div className="space-y-6">
       <div className="bg-gradient-to-br from-gray-900 to-slate-900 rounded-2xl p-6 border border-gray-700 shadow-2xl">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 bg-blue-500/20 rounded-xl">
-            <Zap className="text-blue-400" size={28} />
+          <div className="p-3 bg-brand-500/20 rounded-xl">
+            <Zap className="text-brand-400" size={28} />
           </div>
           <div>
             <h2 className="text-3xl font-bold text-white">Anlık İşlem Sinyalleri</h2>
@@ -318,7 +318,7 @@ export function TradingSignals({ holdings }: TradingSignalsProps) {
                   <p className="text-xs text-gray-400 mb-1">Sinyal Gücü</p>
                   <p className={`text-lg font-bold ${
                     Math.abs(signal.score) >= 3 ? 'text-yellow-400' :
-                    Math.abs(signal.score) >= 1 ? 'text-blue-400' :
+                    Math.abs(signal.score) >= 1 ? 'text-brand-400' :
                     'text-gray-400'
                   }`}>
                     {signal.score > 0 ? '+' : ''}{signal.score}
@@ -341,7 +341,7 @@ export function TradingSignals({ holdings }: TradingSignalsProps) {
 
       <div className="bg-gray-800/40 border border-gray-700 rounded-xl p-4">
         <div className="flex items-start gap-3">
-          <AlertCircle className="text-blue-400 flex-shrink-0" size={20} />
+          <AlertCircle className="text-brand-400 flex-shrink-0" size={20} />
           <div className="text-sm text-gray-400 space-y-1">
             <p><strong className="text-white">Dikkat:</strong> Bu sinyaller algoritmik hesaplamalara dayanır ve yatırım tavsiyesi değildir.</p>
             <p>RSI &lt; 30: Aşırı satım (alım fırsatı) • RSI &gt; 70: Aşırı alım (satım fırsatı)</p>

@@ -18,7 +18,7 @@ function formatDate(iso: string): string {
 
 function PnLClass(v: number) {
   return v > 0
-    ? 'text-emerald-600 dark:text-emerald-400'
+    ? 'text-accent-600 dark:text-accent-400'
     : v < 0
     ? 'text-red-600 dark:text-red-400'
     : 'text-gray-500';
@@ -186,7 +186,7 @@ function LotRow({ lot }: { lot: ClosedLot }) {
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">
         {lot.holdingDays}g{' '}
-        <span className={`text-[9px] font-semibold ${lot.isLongTerm ? 'text-emerald-500' : 'text-amber-500'}`}>
+        <span className={`text-[9px] font-semibold ${lot.isLongTerm ? 'text-accent-500' : 'text-amber-500'}`}>
           {lot.isLongTerm ? 'UV' : 'KV'}
         </span>
       </td>

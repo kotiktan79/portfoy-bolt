@@ -210,7 +210,7 @@ export default function PeriodicReturns() {
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Calendar className="w-6 h-6 text-blue-600" />
+          <Calendar className="w-6 h-6 text-brand-600" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Periyodik Getiriler</h2>
         </div>
 
@@ -219,7 +219,7 @@ export default function PeriodicReturns() {
             onClick={() => setViewMode('monthly')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               viewMode === 'monthly'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -229,7 +229,7 @@ export default function PeriodicReturns() {
             onClick={() => setViewMode('yearly')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               viewMode === 'yearly'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -335,12 +335,12 @@ export default function PeriodicReturns() {
                 {currentData.find(d => d.return === Math.min(...currentData.map(d => d.return)))?.period}
               </p>
             </div>
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Ortalama Getiri</p>
-              <p className="text-xl font-bold text-blue-900 dark:text-blue-300">
+            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+              <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">Ortalama Getiri</p>
+              <p className="text-xl font-bold text-brand-900 dark:text-brand-300">
                 {(currentData.reduce((sum, d) => sum + d.return, 0) / currentData.length).toFixed(2)}%
               </p>
-              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+              <p className="text-xs text-brand-700 dark:text-brand-400 mt-1">
                 {currentData.length} dönem
               </p>
             </div>

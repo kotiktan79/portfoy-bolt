@@ -48,30 +48,30 @@ export default function IncomeWidget() {
   return (
     <button
       onClick={() => navigate('/daily-report')}
-      className="w-full rounded-2xl border border-purple-200 dark:border-purple-800/50 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 p-3 text-left hover:shadow-md transition-all"
+      className="w-full rounded-2xl border border-brand-200 dark:border-brand-800/50 bg-gradient-to-r from-brand-50 to-brand-50 dark:from-brand-950/20 dark:to-brand-950/20 p-3 text-left hover:shadow-md transition-all"
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <PiggyBank className="w-4 h-4 text-purple-600" />
-          <span className="text-xs font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400">Dinamik Maaş</span>
+          <PiggyBank className="w-4 h-4 text-brand-600" />
+          <span className="text-xs font-bold uppercase tracking-widest text-brand-600 dark:text-brand-400">Dinamik Maaş</span>
         </div>
-        <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+        <ArrowRight className="w-3.5 h-3.5 text-brand-400" />
       </div>
 
       <div className="flex items-end justify-between">
         <div className="flex gap-4">
           <div>
             <p className="text-[10px] text-gray-400">Güvenli</p>
-            <p className="text-sm font-bold text-emerald-600">{formatMoney(data.safeSalary)} <span className="text-[10px] font-normal text-gray-400">TL/ay</span></p>
+            <p className="text-sm font-bold text-accent-600">{formatMoney(data.safeSalary)} <span className="text-[10px] font-normal text-gray-400">TL/ay</span></p>
           </div>
           <div>
             <p className="text-[10px] text-gray-400">Dengeli</p>
-            <p className="text-sm font-bold text-blue-600">{formatMoney(data.moderateSalary)} <span className="text-[10px] font-normal text-gray-400">TL/ay</span></p>
+            <p className="text-sm font-bold text-brand-600">{formatMoney(data.moderateSalary)} <span className="text-[10px] font-normal text-gray-400">TL/ay</span></p>
           </div>
           {data.monthlyIncome > 0 && (
             <div>
               <p className="text-[10px] text-gray-400">Bu ay</p>
-              <p className="text-sm font-bold text-purple-600 flex items-center gap-1">
+              <p className="text-sm font-bold text-brand-600 flex items-center gap-1">
                 <TrendingUp className="w-3 h-3" />
                 {formatMoney(data.monthlyIncome)} <span className="text-[10px] font-normal text-gray-400">TL</span>
               </p>

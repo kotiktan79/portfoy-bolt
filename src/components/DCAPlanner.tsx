@@ -159,12 +159,12 @@ export function DCAPlanner() {
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-          <DollarSign className="text-emerald-500" size={16} />
+          <DollarSign className="text-accent-500" size={16} />
           DCA Yatirim Plani
         </h3>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          className="flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
         >
           <Plus size={14} />
           Yeni Plan Ekle
@@ -173,17 +173,17 @@ export function DCAPlanner() {
 
       {/* Summary Bar */}
       {plans.length > 0 && (
-        <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+        <div className="mb-4 p-3 bg-accent-50 dark:bg-accent-900/20 rounded-lg border border-accent-200 dark:border-accent-800">
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-3">
-              <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+              <span className="text-accent-700 dark:text-accent-300 font-medium">
                 Aylik toplam: <span className="font-bold">{formatCurrency(summary.totalMonthly)} &#8378;</span>
               </span>
-              <span className="text-emerald-600 dark:text-emerald-400">
+              <span className="text-accent-600 dark:text-accent-400">
                 Yillik: <span className="font-bold">{formatCurrency(summary.totalYearly)} &#8378;</span>
               </span>
             </div>
-            <span className="text-emerald-600 dark:text-emerald-400">
+            <span className="text-accent-600 dark:text-accent-400">
               Bu yil: {formatCurrency(summary.totalInvestedThisYear)} &#8378;
             </span>
           </div>
@@ -204,7 +204,7 @@ export function DCAPlanner() {
                 value={monthlyAmount}
                 onChange={(e) => setMonthlyAmount(e.target.value)}
                 min="0"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div>
@@ -214,7 +214,7 @@ export function DCAPlanner() {
               <select
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value as DCAConfig['frequency'])}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="weekly">Haftalik</option>
                 <option value="biweekly">2 Haftalik</option>
@@ -225,7 +225,7 @@ export function DCAPlanner() {
           <div className="flex gap-2">
             <button
               onClick={handleAdd}
-              className="px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              className="px-4 py-2 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors"
             >
               Ekle
             </button>
@@ -276,7 +276,7 @@ export function DCAPlanner() {
                       {FREQUENCY_LABELS[plan.frequency]}
                     </span>
                     {!plan.isActive && (
-                      <span className="text-[10px] font-medium text-orange-500 dark:text-orange-400">
+                      <span className="text-[10px] font-medium text-brand-500 dark:text-brand-400">
                         Duraklatildi
                       </span>
                     )}
@@ -286,7 +286,7 @@ export function DCAPlanner() {
                       onClick={() => handleToggleActive(plan.id)}
                       className={`text-[10px] font-medium px-2 py-0.5 rounded transition-colors ${
                         plan.isActive
-                          ? 'text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20'
+                          ? 'text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-900/20'
                           : 'text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20'
                       }`}
                       title={plan.isActive ? 'Duraklat' : 'Devam Ettir'}
@@ -305,8 +305,8 @@ export function DCAPlanner() {
 
                 {/* AI allocation breakdown */}
                 {plan.isActive && allocation.length > 0 && (
-                  <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/15 rounded-md border border-blue-100 dark:border-blue-800/40">
-                    <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1">
+                  <div className="mb-2 p-2 bg-brand-50 dark:bg-brand-900/15 rounded-md border border-brand-100 dark:border-brand-800/40">
+                    <p className="text-[10px] font-medium text-brand-600 dark:text-brand-400 mb-1 flex items-center gap-1">
                       <TrendingUp size={10} />
                       AI Onerilen Dagilim
                     </p>
@@ -339,7 +339,7 @@ export function DCAPlanner() {
                 {plan.isActive && (
                   <button
                     onClick={handleInvestToday}
-                    className="mt-2 w-full py-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-md border border-emerald-200 dark:border-emerald-800 transition-colors"
+                    className="mt-2 w-full py-1.5 text-[11px] font-medium text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-900/20 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded-md border border-accent-200 dark:border-accent-800 transition-colors"
                   >
                     Bugun Yatir
                   </button>

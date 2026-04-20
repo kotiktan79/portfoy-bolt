@@ -8,7 +8,7 @@ import { Card, CardHeader } from './ui/Card';
 const SEVERITY_STYLES: Record<XRayFinding['severity'], string> = {
   high: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-700 dark:text-red-400',
   medium: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400',
-  low: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400',
+  low: 'bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-900 text-brand-700 dark:text-brand-400',
   info: 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-400',
 };
 

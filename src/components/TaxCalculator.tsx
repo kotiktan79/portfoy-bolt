@@ -45,7 +45,7 @@ export function TaxCalculator() {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 p-5">
       <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-        <Calculator className="text-blue-500" size={16} />
+        <Calculator className="text-brand-500" size={16} />
         Stopaj Hesaplayıcı
       </h3>
 
@@ -87,7 +87,7 @@ export function TaxCalculator() {
                 </td>
                 <td className={`py-2.5 pl-3 text-right font-mono tabular-nums font-medium ${
                   row.estimatedTax > 0
-                    ? 'text-orange-600 dark:text-orange-400'
+                    ? 'text-brand-600 dark:text-brand-400'
                     : 'text-slate-400 dark:text-gray-500'
                 }`}>
                   ₺{formatCurrency(row.estimatedTax)}
@@ -102,7 +102,7 @@ export function TaxCalculator() {
               </td>
               <td className={`py-3 pl-3 text-right font-mono tabular-nums font-bold text-base ${
                 taxData.totalTax > 0
-                  ? 'text-orange-600 dark:text-orange-400'
+                  ? 'text-brand-600 dark:text-brand-400'
                   : 'text-slate-400 dark:text-gray-500'
               }`}>
                 ₺{formatCurrency(taxData.totalTax)}

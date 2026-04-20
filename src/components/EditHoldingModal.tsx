@@ -87,7 +87,7 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
               type="text"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -99,7 +99,7 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
             <select
               value={assetType}
               onChange={(e) => setAssetType(e.target.value as AssetType)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             >
               <option value="stock">Hisse</option>
               <option value="crypto">Kripto</option>
@@ -119,7 +119,7 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
               step="0.0001"
               value={purchasePrice}
               onChange={(e) => setPurchasePrice(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -133,7 +133,7 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
               step="0.00000001"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               required
             />
           </div>
@@ -150,7 +150,7 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium disabled:opacity-50"
             >
               {submitting ? 'Güncelleniyor...' : 'Güncelle'}
             </button>

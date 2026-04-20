@@ -130,8 +130,8 @@ export function Security2FA({ onClose, onEnable }: Security2FAProps) {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <Lock className="text-blue-600 flex-shrink-0 mt-1" size={20} />
+                <div className="flex items-start gap-3 p-3 bg-brand-50 dark:bg-brand-900/20 rounded-lg">
+                  <Lock className="text-brand-600 flex-shrink-0 mt-1" size={20} />
                   <div>
                     <h4 className="font-semibold text-slate-900 dark:text-white text-sm">
                       Yerel PIN Koruması
@@ -289,7 +289,7 @@ export function Security2FA({ onClose, onEnable }: Security2FAProps) {
                     </p>
                     <button
                       onClick={copyBackupCodes}
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                      className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
                     >
                       <Copy size={14} />
                       {copied ? 'Kopyalandı!' : 'Kopyala'}

@@ -80,9 +80,9 @@ export default function MarketPage() {
   function getCategoryIcon(category: string) {
     switch (category) {
       case 'Döviz':
-        return <Globe className="w-5 h-5 text-blue-500" />;
+        return <Globe className="w-5 h-5 text-brand-500" />;
       case 'Kripto':
-        return <TrendingUp className="w-5 h-5 text-orange-500" />;
+        return <TrendingUp className="w-5 h-5 text-brand-500" />;
       case 'Emtia':
         return <TrendingDown className="w-5 h-5 text-yellow-500" />;
       default:
@@ -113,7 +113,7 @@ export default function MarketPage() {
           <button
             onClick={() => fetchAll(true)}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             Yenile

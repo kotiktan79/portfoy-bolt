@@ -204,7 +204,7 @@ export function SmartAlerts() {
       {!expanded && hiddenCount > 0 && (
         <button
           onClick={() => setExpanded(true)}
-          className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+          className="flex items-center gap-1 text-[11px] text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300 font-medium transition-colors"
         >
           <ChevronDown size={12} />
           {hiddenCount} daha
@@ -214,7 +214,7 @@ export function SmartAlerts() {
       {expanded && visibleAlerts.length > MAX_VISIBLE && (
         <button
           onClick={() => setExpanded(false)}
-          className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+          className="flex items-center gap-1 text-[11px] text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300 font-medium transition-colors"
         >
           <ChevronUp size={12} />
           Daralt

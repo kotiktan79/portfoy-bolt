@@ -158,9 +158,9 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-lg p-5">
+          <div className="bg-gradient-to-br from-brand-50 to-brand-50 border-2 border-brand-200 rounded-lg p-5">
             <div className="flex items-start gap-3 mb-4">
-              <div className="p-2 bg-blue-500 rounded-lg">
+              <div className="p-2 bg-brand-500 rounded-lg">
                 <BarChart3 className="text-white" size={20} />
               </div>
               <div className="flex-1">
@@ -172,7 +172,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                   </div>
                   <div>
                     <div className="text-gray-600">Maksimum Sapma</div>
-                    <div className="font-bold text-orange-600">{formatPercentage(rebalanceAnalysis.maxDeviation)}</div>
+                    <div className="font-bold text-brand-600">{formatPercentage(rebalanceAnalysis.maxDeviation)}</div>
                   </div>
                   <div>
                     <div className="text-gray-600">Alınacak</div>
@@ -186,9 +186,9 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
               </div>
             </div>
             {rebalanceAnalysis.needsRebalance && (
-              <div className="flex items-center gap-2 p-3 bg-orange-100 border border-orange-300 rounded-lg">
-                <AlertTriangle className="text-orange-600" size={18} />
-                <span className="text-sm font-medium text-orange-900">
+              <div className="flex items-center gap-2 p-3 bg-brand-100 border border-brand-300 rounded-lg">
+                <AlertTriangle className="text-brand-600" size={18} />
+                <span className="text-sm font-medium text-brand-900">
                   Portföyünüz hedef dağılımdan {formatPercentage(rebalanceAnalysis.maxDeviation)} sapma gösteriyor
                 </span>
               </div>
@@ -203,15 +203,15 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
               <button
                 type="button"
                 onClick={() => applyStrategy('conservative')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'conservative' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'conservative' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
               >
-                <Shield className="mx-auto mb-1 text-blue-600" size={20} />
+                <Shield className="mx-auto mb-1 text-brand-600" size={20} />
                 <div className="text-xs font-semibold text-gray-900">Muhafazakar</div>
               </button>
               <button
                 type="button"
                 onClick={() => applyStrategy('balanced')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'balanced' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'balanced' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
               >
                 <Target className="mx-auto mb-1 text-green-600" size={20} />
                 <div className="text-xs font-semibold text-gray-900">Dengeli</div>
@@ -219,23 +219,23 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
               <button
                 type="button"
                 onClick={() => applyStrategy('aggressive')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'aggressive' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'aggressive' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
               >
-                <Zap className="mx-auto mb-1 text-orange-600" size={20} />
+                <Zap className="mx-auto mb-1 text-brand-600" size={20} />
                 <div className="text-xs font-semibold text-gray-900">Agresif</div>
               </button>
               <button
                 type="button"
                 onClick={() => applyStrategy('equal-weight')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'equal-weight' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'equal-weight' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
               >
-                <DollarSign className="mx-auto mb-1 text-teal-600" size={20} />
+                <DollarSign className="mx-auto mb-1 text-accent-600" size={20} />
                 <div className="text-xs font-semibold text-gray-900">Eşit Ağırlık</div>
               </button>
               <button
                 type="button"
                 onClick={() => setStrategy('custom')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'custom' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'custom' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
               >
                 <BarChart3 className="mx-auto mb-1 text-gray-600" size={20} />
                 <div className="text-xs font-semibold text-gray-900">Özel</div>
@@ -293,7 +293,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                     onChange={(e) =>
                       setTargets({ ...targets, [group.type]: parseFloat(e.target.value) || 0 })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
               ))}
@@ -313,8 +313,8 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                     isBalanced
                       ? 'bg-green-50 border-green-200'
                       : shouldBuy
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-orange-50 border-orange-200'
+                      ? 'bg-brand-50 border-brand-200'
+                      : 'bg-brand-50 border-brand-200'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -338,14 +338,14 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                         </div>
                         <div>
                           <span className="text-gray-600">Hedef: </span>
-                          <span className="font-semibold text-blue-600">
+                          <span className="font-semibold text-brand-600">
                             {formatCurrency(action.targetValue)} ₺ ({formatPercentage(action.targetPct)})
                           </span>
                         </div>
                         <div className="col-span-2">
                           <span className="text-gray-600">Sapma: </span>
                           <span className={`font-bold ${
-                            action.deviation > 10 ? 'text-red-600' : action.deviation > 5 ? 'text-orange-600' : 'text-green-600'
+                            action.deviation > 10 ? 'text-red-600' : action.deviation > 5 ? 'text-brand-600' : 'text-green-600'
                           }`}>
                             {formatPercentage(action.deviation)}
                           </span>
@@ -377,7 +377,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                   <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                     <div
                       className={`h-2 rounded-full transition-all ${
-                        isBalanced ? 'bg-green-500' : shouldBuy ? 'bg-blue-500' : 'bg-orange-500'
+                        isBalanced ? 'bg-green-500' : shouldBuy ? 'bg-brand-500' : 'bg-brand-500'
                       }`}
                       style={{ width: `${action.currentPct}%` }}
                     />
@@ -398,7 +398,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
             <button
               type="submit"
               disabled={Math.abs(totalTarget - 100) >= 0.01}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Hedefleri Güncelle
             </button>

@@ -56,7 +56,7 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
           <p className="text-sm text-slate-600 dark:text-gray-400">
             {payload[0].value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
           </p>
-          <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{payload[0].payload.percentage}%</p>
+          <p className="text-sm font-bold text-brand-600 dark:text-brand-400">{payload[0].payload.percentage}%</p>
         </div>
       );
     }
@@ -93,7 +93,7 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
           labelLine={false}
           label={renderCustomLabel}
           outerRadius={120}
-          fill="#8884d8"
+          fill="#6366f1"
           dataKey="value"
         >
           {chartData.map((entry, index) => (

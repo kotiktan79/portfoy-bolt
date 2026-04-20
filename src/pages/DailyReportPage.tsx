@@ -74,7 +74,7 @@ export default function DailyReportPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-950">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600" />
           <p className="text-sm text-gray-500 dark:text-gray-400">Raporlar yükleniyor...</p>
         </div>
       </div>
@@ -88,13 +88,13 @@ export default function DailyReportPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
+            <FileText className="w-5 h-5 text-brand-600" />
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">Günlük Rapor</h1>
           </div>
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
             {generating ? 'Üretiliyor...' : 'Rapor Üret'}
@@ -113,7 +113,7 @@ export default function DailyReportPage() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${
                 activeTab === tab.key
-                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  ? 'bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 shadow-sm'
                   : 'text-gray-500 dark:text-gray-400'
               }`}
             >
@@ -127,7 +127,7 @@ export default function DailyReportPage() {
           <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 text-center">
             <FileText className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Henüz rapor yok</p>
-            <button onClick={handleGenerate} disabled={generating} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={handleGenerate} disabled={generating} className="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
               {generating ? 'Üretiliyor...' : 'İlk Raporu Üret'}
             </button>
           </div>
@@ -150,7 +150,7 @@ export default function DailyReportPage() {
             {/* Portföy Özeti */}
             <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Wallet className="w-4 h-4 text-blue-600" />
+                <Wallet className="w-4 h-4 text-brand-600" />
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Portföy Durumu</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -158,22 +158,22 @@ export default function DailyReportPage() {
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Toplam Değer</p>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">{formatMoney(report.portfolio_value)} <span className="text-xs text-gray-400">TL</span></p>
                 </div>
-                <div className={`rounded-xl p-3 ${report.portfolio_pnl >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
+                <div className={`rounded-xl p-3 ${report.portfolio_pnl >= 0 ? 'bg-accent-50 dark:bg-accent-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">K/Z</p>
-                  <p className={`text-lg font-bold ${report.portfolio_pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <p className={`text-lg font-bold ${report.portfolio_pnl >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
                     {report.portfolio_pnl >= 0 ? '+' : ''}{formatMoney(report.portfolio_pnl)} <span className="text-xs">TL</span>
                   </p>
-                  <p className={`text-[10px] ${report.portfolio_pnl_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  <p className={`text-[10px] ${report.portfolio_pnl_pct >= 0 ? 'text-accent-500' : 'text-red-500'}`}>
                     %{report.portfolio_pnl_pct?.toFixed(1)}
                   </p>
                 </div>
-                <div className="bg-purple-50 dark:bg-purple-950/20 rounded-xl p-3">
+                <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Güvenli Maaş</p>
-                  <p className="text-lg font-bold text-purple-600">{formatMoney(report.safe_monthly_income)} <span className="text-xs">TL/ay</span></p>
+                  <p className="text-lg font-bold text-brand-600">{formatMoney(report.safe_monthly_income)} <span className="text-xs">TL/ay</span></p>
                 </div>
-                <div className="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-3">
+                <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Dengeli Maaş</p>
-                  <p className="text-lg font-bold text-blue-600">{formatMoney(report.moderate_monthly_income)} <span className="text-xs">TL/ay</span></p>
+                  <p className="text-lg font-bold text-brand-600">{formatMoney(report.moderate_monthly_income)} <span className="text-xs">TL/ay</span></p>
                 </div>
               </div>
             </div>
@@ -182,7 +182,7 @@ export default function DailyReportPage() {
             {report.actions?.length > 0 && report.market_research && (
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <Globe className="w-4 h-4 text-indigo-600" />
+                  <Globe className="w-4 h-4 text-brand-600" />
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Piyasa Araştırması</span>
                 </div>
                 <div className="space-y-2">
@@ -197,7 +197,7 @@ export default function DailyReportPage() {
                     };
                     return (
                       <div key={key} className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-indigo-500 font-semibold mb-1">{labels[key] || key}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-brand-500 font-semibold mb-1">{labels[key] || key}</p>
                         <p className="text-xs text-gray-700 dark:text-gray-300">{value as string}</p>
                       </div>
                     );
@@ -211,7 +211,7 @@ export default function DailyReportPage() {
               {report.market_outlook && (
                 <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="w-4 h-4 text-cyan-600" />
+                    <BarChart3 className="w-4 h-4 text-brand-600" />
                     <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Piyasa Görünümü</span>
                   </div>
                   <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">{report.market_outlook}</p>
@@ -232,7 +232,7 @@ export default function DailyReportPage() {
             {report.news_alerts && report.news_alerts.length > 0 && (
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <Newspaper className="w-4 h-4 text-orange-600" />
+                  <Newspaper className="w-4 h-4 text-brand-600" />
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Haberler & Uyarılar</span>
                 </div>
                 <div className="space-y-1.5">
@@ -258,7 +258,7 @@ export default function DailyReportPage() {
                     const urgencyColors: Record<string, string> = {
                       today: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
                       this_week: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                      this_month: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                      this_month: 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400',
                     };
                     const typeIcons: Record<string, any> = {
                       buy: ArrowUpRight,
@@ -270,9 +270,9 @@ export default function DailyReportPage() {
                     };
                     const TypeIcon = typeIcons[action.type] || Target;
                     const typeColors: Record<string, string> = {
-                      buy: 'text-emerald-600', accumulate: 'text-emerald-500',
-                      hold: 'text-blue-500', rebalance: 'text-purple-500',
-                      protect: 'text-amber-500', take_profit: 'text-cyan-500',
+                      buy: 'text-accent-600', accumulate: 'text-accent-500',
+                      hold: 'text-brand-500', rebalance: 'text-brand-500',
+                      protect: 'text-amber-500', take_profit: 'text-brand-500',
                     };
 
                     return (
@@ -292,10 +292,10 @@ export default function DailyReportPage() {
                             <span className="text-[10px] text-gray-500"><DollarSign className="w-3 h-3 inline" /> {formatMoney(action.amount_try)} TL</span>
                           )}
                           {action.expected_annual_return > 0 && (
-                            <span className="text-[10px] text-emerald-500"><TrendingUp className="w-3 h-3 inline" /> %{action.expected_annual_return} yıllık</span>
+                            <span className="text-[10px] text-accent-500"><TrendingUp className="w-3 h-3 inline" /> %{action.expected_annual_return} yıllık</span>
                           )}
                           {action.dividend_yield > 0 && (
-                            <span className="text-[10px] text-purple-500"><PiggyBank className="w-3 h-3 inline" /> %{action.dividend_yield} temettü</span>
+                            <span className="text-[10px] text-brand-500"><PiggyBank className="w-3 h-3 inline" /> %{action.dividend_yield} temettü</span>
                           )}
                         </div>
                       </div>
@@ -308,19 +308,19 @@ export default function DailyReportPage() {
             {/* Top Pick + Wealth Tip */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {report.top_pick && (
-                <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/20 p-4">
+                <div className="rounded-2xl border border-accent-200 dark:border-accent-800/50 bg-accent-50 dark:bg-accent-950/20 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Target className="w-4 h-4 text-emerald-600" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-emerald-600">Günün Seçimi</span>
+                    <Target className="w-4 h-4 text-accent-600" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-accent-600">Günün Seçimi</span>
                   </div>
                   <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">{report.top_pick}</p>
                 </div>
               )}
               {report.wealth_building_tip && (
-                <div className="rounded-2xl border border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-950/20 p-4">
+                <div className="rounded-2xl border border-brand-200 dark:border-brand-800/50 bg-brand-50 dark:bg-brand-950/20 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="w-4 h-4 text-blue-600" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-blue-600">Servet Stratejisi</span>
+                    <TrendingUp className="w-4 h-4 text-brand-600" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-brand-600">Servet Stratejisi</span>
                   </div>
                   <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">{report.wealth_building_tip}</p>
                 </div>
@@ -336,7 +336,7 @@ export default function DailyReportPage() {
             <div className="flex justify-end">
               <button
                 onClick={() => setShowIncomeModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-600 text-white text-xs font-medium hover:bg-accent-700"
               >
                 <DollarSign className="w-3.5 h-3.5" />
                 Gelir Kaydet
@@ -355,7 +355,7 @@ export default function DailyReportPage() {
             {salaryHistory.length > 0 && (
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <PiggyBank className="w-4 h-4 text-purple-600" />
+                  <PiggyBank className="w-4 h-4 text-brand-600" />
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Aylık Dinamik Maaş</span>
                 </div>
                 <div className="space-y-2">
@@ -370,22 +370,22 @@ export default function DailyReportPage() {
                         <div className="grid grid-cols-3 gap-2">
                           <div>
                             <p className="text-[10px] uppercase text-gray-400">Güvenli</p>
-                            <p className="text-sm font-bold text-emerald-600">{formatMoney(salary.safe_amount)} TL</p>
+                            <p className="text-sm font-bold text-accent-600">{formatMoney(salary.safe_amount)} TL</p>
                           </div>
                           <div>
                             <p className="text-[10px] uppercase text-gray-400">Dengeli</p>
-                            <p className="text-sm font-bold text-blue-600">{formatMoney(salary.moderate_amount)} TL</p>
+                            <p className="text-sm font-bold text-brand-600">{formatMoney(salary.moderate_amount)} TL</p>
                           </div>
                           <div>
                             <p className="text-[10px] uppercase text-gray-400">Gerçekleşen</p>
-                            <p className="text-sm font-bold text-purple-600">{formatMoney(salary.actual_income)} TL</p>
+                            <p className="text-sm font-bold text-brand-600">{formatMoney(salary.actual_income)} TL</p>
                           </div>
                         </div>
                         {/* Gelir kaynakları */}
                         <div className="flex gap-2 mt-2 flex-wrap">
                           {salary.dividend_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Temettü: {formatMoney(salary.dividend_income)}</span>}
-                          {salary.interest_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">Faiz: {formatMoney(salary.interest_income)}</span>}
-                          {salary.staking_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">Staking: {formatMoney(salary.staking_income)}</span>}
+                          {salary.interest_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">Faiz: {formatMoney(salary.interest_income)}</span>}
+                          {salary.staking_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">Staking: {formatMoney(salary.staking_income)}</span>}
                           {salary.coupon_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Kupon: {formatMoney(salary.coupon_income)}</span>}
                         </div>
                         {salary.ai_recommendation && (
@@ -441,10 +441,10 @@ export default function DailyReportPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-sm font-bold ${r.portfolio_pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <p className={`text-sm font-bold ${r.portfolio_pnl >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
                         {r.portfolio_pnl >= 0 ? '+' : ''}{formatMoney(r.portfolio_pnl)} TL
                       </p>
-                      <p className={`text-[10px] ${r.portfolio_pnl_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      <p className={`text-[10px] ${r.portfolio_pnl_pct >= 0 ? 'text-accent-500' : 'text-red-500'}`}>
                         %{r.portfolio_pnl_pct?.toFixed(1)}
                       </p>
                     </div>

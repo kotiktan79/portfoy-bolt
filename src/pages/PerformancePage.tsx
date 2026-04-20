@@ -136,7 +136,7 @@ export default function PerformancePage() {
   const isPositive = stats.changeTL >= 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-accent-50/30 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
@@ -148,7 +148,7 @@ export default function PerformancePage() {
             Geri
           </button>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <TrendingUp size={24} className="text-blue-600" />
+            <TrendingUp size={24} className="text-brand-600" />
             Performans
           </h1>
         </div>
@@ -164,7 +164,7 @@ export default function PerformancePage() {
                   onClick={() => setPeriod(opt.value)}
                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     period === opt.value
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-brand-600 text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -211,7 +211,7 @@ export default function PerformancePage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
           {loading ? (
             <div className="flex items-center justify-center h-72">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
             </div>
           ) : chartData.length === 0 ? (
             <div className="flex items-center justify-center h-72 text-gray-500 dark:text-gray-400">

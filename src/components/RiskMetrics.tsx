@@ -95,7 +95,7 @@ export function RiskMetrics() {
 
         <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+            <div className="p-2 bg-brand-100 text-brand-600 rounded-lg">
               <TrendingDown size={20} />
             </div>
             <div>
@@ -125,7 +125,7 @@ export function RiskMetrics() {
         </div>
       </div>
 
-      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="mt-4 p-3 bg-brand-50 border border-brand-200 rounded-lg">
         <p className="text-xs text-slate-600">
           <span className="font-semibold">Not:</span> Volatilite portföyünüzün değerindeki dalgalanmayı,
           Sharpe oranı risk-getiri dengesini, maksimum düşüş ise en büyük değer kaybını gösterir.

@@ -287,7 +287,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
 
       s.push({
         id: `buy-${type}`, order: order++, urgency: 'today',
-        icon: <Target size={16} className="text-emerald-500" />,
+        icon: <Target size={16} className="text-accent-500" />,
         action: 'AL',
         symbol: pick,
         instruction: `${TYPE_NAMES[type] || type} ekle → ${pick} al (${formatCurrency(amt)} ₺)`,
@@ -323,7 +323,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
       if (buyAmt > 500) {
         s.push({
           id: `avg-${d.symbol}`, order: order++, urgency: 'this_week',
-          icon: <Zap size={16} className="text-purple-500" />,
+          icon: <Zap size={16} className="text-brand-500" />,
           action: 'EK ALIM',
           symbol: d.symbol,
           instruction: `${d.symbol}'a ${formatCurrency(buyAmt)} ₺ ek alım yap`,
@@ -339,7 +339,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
     if (noStopLoss.length > 0) {
       s.push({
         id: 'set-stoploss', order: order++, urgency: 'this_week',
-        icon: <Shield size={16} className="text-indigo-500" />,
+        icon: <Shield size={16} className="text-brand-500" />,
         action: 'KORU',
         instruction: `${noStopLoss.length} varlık için stop-loss belirle`,
         detail: noStopLoss.map(h => `${h.symbol}: ${formatCurrency(h.stopLoss)} ₺`).join(', '),
@@ -376,7 +376,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
       {/* Header */}
       <div className="p-4 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-gray-800/30 transition-colors" onClick={() => setExpanded(!expanded)}>
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-md flex-shrink-0">
+          <div className="p-2 bg-gradient-to-br from-amber-500 to-brand-600 rounded-xl shadow-md flex-shrink-0">
             <Brain className="text-white" size={18} />
           </div>
           <div className="flex-1 min-w-0">
@@ -405,16 +405,16 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
           {!aiPlan && !aiLoading && (
             <div className="text-center py-4">
               <p className="text-xs text-gray-400 mb-2">AI analizi henüz yüklenmedi</p>
-              <button onClick={fetchAIPlan} className="text-xs text-purple-600 dark:text-purple-400 font-semibold hover:underline">
+              <button onClick={fetchAIPlan} className="text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline">
                 Analiz Başlat
               </button>
             </div>
           )}
 
           {aiLoading && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
-              <Sparkles size={14} className="text-purple-500 animate-pulse" />
-              <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">Claude portföyünüzü analiz ediyor...</span>
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800">
+              <Sparkles size={14} className="text-brand-500 animate-pulse" />
+              <span className="text-xs text-brand-700 dark:text-brand-400 font-medium">Claude portföyünüzü analiz ediyor...</span>
             </div>
           )}
 
@@ -424,7 +424,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
                 <h4 className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                   AI Portföy Yöneticisi
                 </h4>
-                <button onClick={fetchAIPlan} disabled={aiLoading} className="text-[10px] text-purple-500 hover:text-purple-700 font-medium">
+                <button onClick={fetchAIPlan} disabled={aiLoading} className="text-[10px] text-brand-500 hover:text-brand-700 font-medium">
                   {aiLoading ? 'Yükleniyor...' : 'Yenile'}
                 </button>
               </div>
@@ -439,21 +439,21 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
 
               {/* Market Outlook */}
               {aiPlan.market_outlook && (
-                <div className="px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Piyasa Görünümü</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{aiPlan.market_outlook}</p>
+                <div className="px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800">
+                  <p className="text-[10px] font-bold text-brand-500 uppercase tracking-widest mb-1">Piyasa Görünümü</p>
+                  <p className="text-xs text-brand-700 dark:text-brand-300 leading-relaxed">{aiPlan.market_outlook}</p>
                 </div>
               )}
 
               {aiPlan.top_pick && (
-                <div className="px-3 py-2 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
-                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Gunun Tercihi: </span>
-                  <span className="text-xs text-purple-600 dark:text-purple-400">{aiPlan.top_pick}</span>
+                <div className="px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800">
+                  <span className="text-xs font-bold text-brand-700 dark:text-brand-300">Gunun Tercihi: </span>
+                  <span className="text-xs text-brand-600 dark:text-brand-400">{aiPlan.top_pick}</span>
                 </div>
               )}
 
               {(aiPlan as any).weekly_strategy && (
-                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium px-1">
+                <p className="text-xs text-brand-600 dark:text-brand-400 font-medium px-1">
                   Haftalık strateji: {(aiPlan as any).weekly_strategy}
                 </p>
               )}
@@ -471,17 +471,17 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
 
               {aiPlan.actions?.map((action, i) => {
                 const marketBadge: Record<string, string> = {
-                  BIST: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                  BIST: 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400',
                   US: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
                   EU: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
                   CRYPTO: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
                 };
                 const typeIcon = action.type === 'buy' ? <TrendingUp size={14} className="text-green-500" /> :
                   action.type === 'sell' || action.type === 'reduce' ? <TrendingDown size={14} className="text-red-500" /> :
-                  <Shield size={14} className="text-blue-500" />;
+                  <Shield size={14} className="text-brand-500" />;
 
                 return (
-                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-purple-50/50 dark:bg-purple-950/10 border border-purple-100 dark:border-purple-900/50">
+                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-brand-50/50 dark:bg-brand-950/10 border border-brand-100 dark:border-brand-900/50">
                     <div className="mt-0.5 flex-shrink-0">{typeIcon}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -521,26 +521,26 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
 
           {/* Monthly Dynamic Salary - ALWAYS shown */}
           {report.grandTotal > 5000 && (
-            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2">Aylık Dinamik Maaş</p>
+            <div className="p-3 rounded-xl bg-accent-50 dark:bg-accent-950/20 border border-accent-200 dark:border-accent-800">
+              <p className="text-[10px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-widest mb-2">Aylık Dinamik Maaş</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center">
-                  <p className="text-[10px] text-emerald-600">Güvenli (%2/yıl)</p>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(report.grandTotal * 0.02 / 12)} ₺</p>
+                  <p className="text-[10px] text-accent-600">Güvenli (%2/yıl)</p>
+                  <p className="text-sm font-bold text-accent-700 dark:text-accent-300">{formatCurrency(report.grandTotal * 0.02 / 12)} ₺</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[10px] text-emerald-600">Dengeli (%4/yıl)</p>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(report.grandTotal * 0.04 / 12)} ₺</p>
+                  <p className="text-[10px] text-accent-600">Dengeli (%4/yıl)</p>
+                  <p className="text-sm font-bold text-accent-700 dark:text-accent-300">{formatCurrency(report.grandTotal * 0.04 / 12)} ₺</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[10px] text-emerald-600">Büyüme (%6/yıl)</p>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(report.grandTotal * 0.06 / 12)} ₺</p>
+                  <p className="text-[10px] text-accent-600">Büyüme (%6/yıl)</p>
+                  <p className="text-sm font-bold text-accent-700 dark:text-accent-300">{formatCurrency(report.grandTotal * 0.06 / 12)} ₺</p>
                 </div>
               </div>
               {(aiPlan as any)?.monthly_income?.description ? (
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2">{(aiPlan as any).monthly_income.description}</p>
+                <p className="text-[11px] text-accent-600 dark:text-accent-400 mt-2">{(aiPlan as any).monthly_income.description}</p>
               ) : (
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2">
+                <p className="text-[11px] text-accent-600 dark:text-accent-400 mt-2">
                   Güvenli: portföy büyümeye devam eder. Dengeli: 25 yıl sürdürülebilir. Büyüme: kârdan çekim, anapara korunur.
                 </p>
               )}
@@ -549,7 +549,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
 
           {/* AI Wealth Building Tip */}
           {aiPlan && (aiPlan as any).wealth_building_tip && (
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium px-1 italic">
+            <p className="text-xs text-brand-600 dark:text-brand-400 font-medium px-1 italic">
               {(aiPlan as any).wealth_building_tip}
             </p>
           )}
@@ -563,10 +563,10 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
                   <span className="font-semibold text-gray-700 dark:text-gray-300">{a.symbol}</span>
                   <div className="flex gap-3">
                     {a.expected_annual_return && (
-                      <span className="text-emerald-600 dark:text-emerald-400">Yıllık: %{a.expected_annual_return}</span>
+                      <span className="text-accent-600 dark:text-accent-400">Yıllık: %{a.expected_annual_return}</span>
                     )}
                     {a.dividend_yield && (
-                      <span className="text-blue-600 dark:text-blue-400">Temettü: %{a.dividend_yield}</span>
+                      <span className="text-brand-600 dark:text-brand-400">Temettü: %{a.dividend_yield}</span>
                     )}
                   </div>
                 </div>

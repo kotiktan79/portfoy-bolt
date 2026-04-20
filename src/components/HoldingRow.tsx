@@ -65,13 +65,13 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
 
     return (
       <>
-        <tr className="border-b border-blue-50 bg-blue-50/30 hover:bg-blue-50/60 transition-colors">
+        <tr className="border-b border-brand-50 bg-brand-50/30 hover:bg-brand-50/60 transition-colors">
           <td className="px-3 md:px-5 py-3 md:py-4">
             <div className="flex items-center gap-2">
-              <Wallet size={16} className="text-blue-500" />
+              <Wallet size={16} className="text-brand-500" />
               <div className="flex flex-col">
                 <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white">{curSymbol} {holding.symbol}</span>
-                <span className="text-xs text-blue-500">Nakit</span>
+                <span className="text-xs text-brand-500">Nakit</span>
               </div>
             </div>
           </td>
@@ -84,7 +84,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
               {holding.symbol !== 'TRY' ? (
                 <>
                   <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white">1 {holding.symbol}</span>
-                  <span className="text-[10px] md:text-xs text-blue-600">= {cashTRYRate.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ₺</span>
+                  <span className="text-[10px] md:text-xs text-brand-600">= {cashTRYRate.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ₺</span>
                 </>
               ) : (
                 <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white">1 ₺</span>
@@ -95,7 +95,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             <div className="flex flex-col items-end">
               <span className="font-bold text-sm text-gray-900 dark:text-white">{tryValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺</span>
               {holding.symbol !== 'TRY' && (
-                <span className="text-xs text-blue-500">${formatCurrencyUSD(tryValue, usdRate)}</span>
+                <span className="text-xs text-brand-500">${formatCurrencyUSD(tryValue, usdRate)}</span>
               )}
             </div>
           </td>
@@ -106,7 +106,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             <div className="flex items-center justify-end gap-1 md:gap-2">
               <button
                 onClick={() => onEdit(holding)}
-                className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="p-1.5 md:p-2 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                 title="Düzenle"
               >
                 <Pencil size={16} />
@@ -159,14 +159,14 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
                   {formatCurrency(holding.current_price, 4)}
                 </span>
                 {holding.manual_price && (
-                  <Lock size={10} className="text-blue-600 md:hidden" />
+                  <Lock size={10} className="text-brand-600 md:hidden" />
                 )}
                 {holding.manual_price && (
-                  <Lock size={12} className="text-blue-600 hidden md:inline" />
+                  <Lock size={12} className="text-brand-600 hidden md:inline" />
                 )}
               </div>
               {holding.manual_price && holding.manual_price_updated_at && (
-                <span className="text-[10px] md:text-xs text-blue-600 hidden sm:block">
+                <span className="text-[10px] md:text-xs text-brand-600 hidden sm:block">
                   {new Date(holding.manual_price_updated_at).toLocaleDateString('tr-TR', {
                     day: '2-digit',
                     month: '2-digit',
@@ -183,7 +183,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             </div>
             <button
               onClick={() => setShowPriceUpdateModal(true)}
-              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors hidden sm:inline-flex"
+              className="p-1 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors hidden sm:inline-flex"
               title="Manuel Fiyat Güncelle"
             >
               <Edit3 size={14} />
@@ -196,11 +196,11 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             <span className="font-bold text-sm text-gray-900 dark:text-white">
               {formatCurrency(pnlData.currentValue)} ₺
             </span>
-            <span className="text-xs text-blue-600 dark:text-blue-400">
+            <span className="text-xs text-brand-600 dark:text-brand-400">
               ${formatCurrencyUSD(pnlData.currentValue, usdRate)}
             </span>
             {((holding as any).currency && (holding as any).currency !== 'TRY') && (
-              <span className="text-[10px] text-blue-600">
+              <span className="text-[10px] text-brand-600">
                 {getCurrencySymbol((holding as any).currency)} bazlı
               </span>
             )}
@@ -238,7 +238,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             </button>
             <button
               onClick={() => onEdit(holding)}
-              className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors hidden sm:inline-flex"
+              className="p-1.5 md:p-2 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors hidden sm:inline-flex"
               title="Düzenle"
             >
               <Pencil size={18} />

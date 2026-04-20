@@ -126,7 +126,7 @@ export default function SectorAnalysis() {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
         <div className="flex items-center gap-3 mb-6">
-          <PieChartIcon className="w-6 h-6 text-blue-600" />
+          <PieChartIcon className="w-6 h-6 text-brand-600" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Sektör Analizi</h2>
         </div>
         <p className="text-gray-500 dark:text-gray-400 text-center py-8">Henüz veri yok</p>
@@ -137,7 +137,7 @@ export default function SectorAnalysis() {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
       <div className="flex items-center gap-3 mb-6">
-        <PieChartIcon className="w-6 h-6 text-blue-600" />
+        <PieChartIcon className="w-6 h-6 text-brand-600" />
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Sektör Analizi</h2>
       </div>
 
@@ -178,7 +178,7 @@ export default function SectorAnalysis() {
                 formatter={(value: number) => `${value.toFixed(2)}%`}
                 labelStyle={{ color: '#000' }}
               />
-              <Bar dataKey="avgReturn" fill="#3b82f6" />
+              <Bar dataKey="avgReturn" fill="#6366f1" />
             </BarChart>
           </ResponsiveContainer>
         </div>

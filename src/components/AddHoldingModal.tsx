@@ -118,7 +118,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                 setAssetType(e.target.value as AssetType);
                 setError('');
               }}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             >
               <option value="stock">Hisse</option>
               <option value="crypto">Kripto</option>
@@ -132,7 +132,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
 
           {isCash ? (
             <>
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+              <div className="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg flex items-center gap-2 text-sm text-brand-700 dark:text-brand-300">
                 <Wallet size={16} />
                 Nakit varlık portföyünüze TRY, USD veya EUR olarak eklenir.
               </div>
@@ -143,7 +143,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                 <select
                   value={cashCurrency}
                   onChange={(e) => setCashCurrency(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 >
                   <option value="TRY">TRY - Türk Lirası</option>
                   <option value="USD">USD - Amerikan Doları</option>
@@ -165,7 +165,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                   value={cashAmount}
                   onChange={(e) => setCashAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   required
                   autoFocus
                 />
@@ -182,7 +182,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                   placeholder="AKSEN, BTC, USD..."
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   required
                 />
               </div>
@@ -197,7 +197,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                   value={purchasePrice}
                   onChange={(e) => setPurchasePrice(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   required
                 />
               </div>
@@ -212,7 +212,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   required
                 />
               </div>
@@ -235,7 +235,7 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl hover:scale-105"
+              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium shadow-lg hover:shadow-xl hover:scale-105"
             >
               {isCash ? 'Nakit Ekle' : 'Ekle'}
             </button>

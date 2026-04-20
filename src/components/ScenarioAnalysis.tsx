@@ -66,7 +66,7 @@ export function ScenarioAnalysis({ holdings, currentValue }: ScenarioAnalysisPro
           <select
             value={selectedSymbol}
             onChange={(e) => setSelectedSymbol(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           >
             <option value="">Varlık Seçin</option>
             {holdings.map((holding) => (
@@ -114,7 +114,7 @@ export function ScenarioAnalysis({ holdings, currentValue }: ScenarioAnalysisPro
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
           <div>
@@ -125,13 +125,13 @@ export function ScenarioAnalysis({ holdings, currentValue }: ScenarioAnalysisPro
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               placeholder="0.00"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
         </div>
 
         {scenario && (
-          <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-slate-50 rounded-lg border-2 border-blue-200">
+          <div className="mt-6 p-4 bg-gradient-to-br from-brand-50 to-slate-50 rounded-lg border-2 border-brand-200">
             <h4 className="font-semibold text-slate-900 mb-3">Sonuç:</h4>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">

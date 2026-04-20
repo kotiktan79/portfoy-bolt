@@ -131,7 +131,7 @@ export default function WatchlistPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 dark:from-gray-950 dark:via-gray-900 dark:to-slate-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-brand-50/40 to-slate-100 dark:from-gray-950 dark:via-gray-900 dark:to-slate-900 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -139,7 +139,7 @@ export default function WatchlistPage() {
             <button onClick={() => navigate(-1)} className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
               <ArrowLeft size={18} className="text-gray-600 dark:text-gray-400" />
             </button>
-            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg">
+            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-brand-600 rounded-xl shadow-lg">
               <Eye className="text-white" size={22} />
             </div>
             <div>
@@ -153,11 +153,11 @@ export default function WatchlistPage() {
               disabled={refreshing}
               className="p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
-              <RefreshCw size={18} className={`text-blue-600 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw size={18} className={`text-brand-600 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl font-semibold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-brand-600 text-white rounded-xl font-semibold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all"
             >
               <Plus size={18} />
               Ekle
@@ -187,7 +187,7 @@ export default function WatchlistPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Almak istediğiniz varlıkları buraya ekleyip fiyatlarını takip edin</p>
             <button
               onClick={() => setShowAddForm(true)}
-              className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+              className="px-6 py-3 bg-gradient-to-r from-amber-500 to-brand-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all"
             >
               <Plus size={18} className="inline mr-2" />
               İlk Varlığı Ekle
@@ -214,7 +214,7 @@ export default function WatchlistPage() {
                   <div className="flex items-center gap-4">
                     {/* Symbol */}
                     <div className="flex-shrink-0">
-                      <div className="w-12 h-12 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-amber-100 to-brand-100 dark:from-amber-900/30 dark:to-brand-900/30 rounded-xl flex items-center justify-center">
                         <span className="text-sm font-black text-amber-700 dark:text-amber-400">{item.symbol.slice(0, 3)}</span>
                       </div>
                     </div>
@@ -356,7 +356,7 @@ export default function WatchlistPage() {
               <button
                 onClick={addItem}
                 disabled={!newSymbol.trim()}
-                className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:hover:scale-100"
+                className="w-full py-3 bg-gradient-to-r from-amber-500 to-brand-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:hover:scale-100"
               >
                 Listeye Ekle
               </button>
@@ -371,7 +371,7 @@ export default function WatchlistPage() {
           <div key={t.id} className={`px-4 py-2 rounded-lg text-sm font-medium shadow-lg ${
             t.type === 'success' ? 'bg-green-600 text-white' :
             t.type === 'error' ? 'bg-red-600 text-white' :
-            'bg-blue-600 text-white'
+            'bg-brand-600 text-white'
           }`}>
             {t.message}
           </div>

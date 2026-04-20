@@ -83,12 +83,12 @@ export function InvestmentGoals() {
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-          <Target className="text-blue-500" size={16} />
+          <Target className="text-brand-500" size={16} />
           Yatırım Hedefleri
         </h3>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          className="flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
         >
           <Plus size={14} />
           Hedef Ekle
@@ -102,7 +102,7 @@ export function InvestmentGoals() {
             placeholder="Hedef adı (ör: Ev alımı)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <div className="grid grid-cols-2 gap-3">
             <input
@@ -111,19 +111,19 @@ export function InvestmentGoals() {
               value={targetAmount}
               onChange={(e) => setTargetAmount(e.target.value)}
               min="0"
-              className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <input
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleAdd}
-              className="px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              className="px-4 py-2 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors"
             >
               Ekle
             </button>
@@ -180,10 +180,10 @@ export function InvestmentGoals() {
                       isComplete
                         ? 'bg-green-500'
                         : progress > 60
-                        ? 'bg-blue-500'
+                        ? 'bg-brand-500'
                         : progress > 30
                         ? 'bg-yellow-500'
-                        : 'bg-orange-500'
+                        : 'bg-brand-500'
                     }`}
                     style={{ width: `${progress}%` }}
                   />

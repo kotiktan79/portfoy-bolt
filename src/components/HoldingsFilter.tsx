@@ -33,7 +33,7 @@ export function HoldingsFilter({
               placeholder="Sembol veya isim ara..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-gray-100"
             />
           </div>
         </div>
@@ -44,7 +44,7 @@ export function HoldingsFilter({
             <select
               value={selectedType}
               onChange={(e) => onTypeChange(e.target.value as AssetType | 'all')}
-              className="px-3 py-2 border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+              className="px-3 py-2 border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-gray-100"
             >
               <option value="all">Tüm Varlıklar</option>
               <option value="stock">Hisse Senedi</option>
@@ -57,7 +57,7 @@ export function HoldingsFilter({
           <select
             value={sortBy}
             onChange={(e) => onSortChange(e.target.value as any)}
-            className="px-3 py-2 border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+            className="px-3 py-2 border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-gray-100"
           >
             <option value="name">İsim</option>
             <option value="value">Toplam Değer</option>

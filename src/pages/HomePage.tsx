@@ -37,7 +37,7 @@ const AutoRebalanceSettings = lazy(() => import('../components/AutoRebalanceSett
 function ChartLoader() {
   return (
     <div className="flex items-center justify-center py-8">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
     </div>
   );
 }
@@ -170,7 +170,7 @@ export default function HomePage() {
             <div className="overflow-x-auto">
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-16">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-200 border-t-blue-600 dark:border-gray-600 dark:border-t-blue-400"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-200 border-t-brand-600 dark:border-gray-600 dark:border-t-brand-400"></div>
                   <p className="mt-3 text-sm text-slate-400 dark:text-gray-500">Yukleniyor...</p>
                 </div>
               ) : holdings.length === 0 ? (
@@ -182,7 +182,7 @@ export default function HomePage() {
                   <p className="text-sm text-slate-400 dark:text-gray-500 mb-5 max-w-xs mx-auto">Takip etmek istediginiz ilk varliginizi ekleyerek baslayabilirsiniz.</p>
                   <button
                     onClick={() => setShowAddModal(true)}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     <Plus size={16} />
                     Varlik Ekle
@@ -238,7 +238,7 @@ export default function HomePage() {
                 onClick={() => setShowCharts(!showCharts)}
                 className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   showCharts
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800'
                     : 'bg-slate-50 dark:bg-gray-800 text-slate-500 dark:text-gray-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300 dark:hover:border-gray-600 hover:text-slate-600 dark:hover:text-gray-300'
                 }`}
               >

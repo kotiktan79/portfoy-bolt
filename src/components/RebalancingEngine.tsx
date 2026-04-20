@@ -160,7 +160,7 @@ export default function RebalancingEngine() {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Scale className="w-6 h-6 text-blue-600" />
+            <Scale className="w-6 h-6 text-brand-600" />
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               Portföy Rebalancing
             </h2>
@@ -176,9 +176,9 @@ export default function RebalancingEngine() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-            <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Portföy Değeri</p>
-            <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+          <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+            <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">Portföy Değeri</p>
+            <p className="text-2xl font-bold text-brand-900 dark:text-brand-300">
               ₺{totalValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
             </p>
           </div>
@@ -207,8 +207,8 @@ export default function RebalancingEngine() {
                 onClick={() => handleStrategyChange(key)}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   selectedStrategy === key
-                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                    ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-brand-300'
                 }`}
               >
                 <p className="font-semibold text-gray-900 dark:text-white">{strategy.name}</p>
@@ -218,8 +218,8 @@ export default function RebalancingEngine() {
               onClick={() => handleStrategyChange('custom')}
               className={`p-4 rounded-lg border-2 transition-all ${
                 selectedStrategy === 'custom'
-                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                  ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-brand-300'
               }`}
             >
               <p className="font-semibold text-gray-900 dark:text-white">Özel</p>
@@ -257,7 +257,7 @@ export default function RebalancingEngine() {
             </div>
             <button
               onClick={applyCustomAllocations}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="mt-4 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
             >
               Uygula
             </button>
@@ -292,7 +292,7 @@ export default function RebalancingEngine() {
               </div>
               <div className="relative h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div
-                  className="absolute h-full bg-blue-600 rounded-full transition-all duration-500"
+                  className="absolute h-full bg-brand-600 rounded-full transition-all duration-500"
                   style={{ width: `${Math.min(allocation.current_percent, 100)}%` }}
                 />
                 <div
@@ -311,7 +311,7 @@ export default function RebalancingEngine() {
           <button
             onClick={runSimulation}
             disabled={simulating || totalDeviation < 1}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Play className="w-5 h-5" />
             {simulating ? 'Simüle ediliyor...' : 'Simülasyon Çalıştır'}
@@ -322,7 +322,7 @@ export default function RebalancingEngine() {
       {showSimulation && trades.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Sparkles className="w-6 h-6 text-purple-600" />
+            <Sparkles className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
               Önerilen İşlemler
             </h3>

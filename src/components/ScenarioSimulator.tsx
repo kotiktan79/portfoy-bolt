@@ -151,7 +151,7 @@ export default function ScenarioSimulator() {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Zap className="w-6 h-6 text-purple-600" />
+            <Zap className="w-6 h-6 text-brand-600" />
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               Senaryo Analizi
             </h2>
@@ -159,7 +159,7 @@ export default function ScenarioSimulator() {
           <button
             onClick={runMonteCarlo}
             disabled={simulating}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
           >
             <Shuffle className="w-5 h-5" />
             Monte Carlo
@@ -167,9 +167,9 @@ export default function ScenarioSimulator() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-            <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Mevcut Değer</p>
-            <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+          <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+            <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">Mevcut Değer</p>
+            <p className="text-2xl font-bold text-brand-900 dark:text-brand-300">
               ₺{currentValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
             </p>
           </div>
@@ -198,8 +198,8 @@ export default function ScenarioSimulator() {
                 onClick={() => handleScenarioChange(key)}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   selectedScenario === key
-                    ? 'border-purple-600 bg-purple-50 dark:bg-purple-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-purple-300'
+                    ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-brand-300'
                 }`}
               >
                 <div className="flex items-center justify-center mb-2">
@@ -214,8 +214,8 @@ export default function ScenarioSimulator() {
               onClick={() => handleScenarioChange('custom')}
               className={`p-4 rounded-lg border-2 transition-all ${
                 selectedScenario === 'custom'
-                  ? 'border-purple-600 bg-purple-50 dark:bg-purple-900/20'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-purple-300'
+                  ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-brand-300'
               }`}
             >
               <div className="flex items-center justify-center mb-2">
@@ -282,7 +282,7 @@ export default function ScenarioSimulator() {
         <button
           onClick={runScenario}
           disabled={simulating}
-          className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors font-semibold"
+          className="w-full px-6 py-3 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors font-semibold"
         >
           {simulating ? 'Hesaplanıyor...' : 'Senaryoyu Çalıştır'}
         </button>
@@ -295,17 +295,17 @@ export default function ScenarioSimulator() {
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Mevcut Değer</p>
-              <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+              <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">Mevcut Değer</p>
+              <p className="text-2xl font-bold text-brand-900 dark:text-brand-300">
                 ₺{scenarioResult.current_value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <p className="text-sm text-purple-600 dark:text-purple-400 mb-1">
+            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+              <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">
                 Tahmini Değer
               </p>
-              <p className="text-2xl font-bold text-purple-900 dark:text-purple-300">
+              <p className="text-2xl font-bold text-brand-900 dark:text-brand-300">
                 ₺{scenarioResult.projected_value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
               </p>
             </div>
@@ -448,15 +448,15 @@ export default function ScenarioSimulator() {
           </h3>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Ortalama</p>
-              <p className="text-xl font-bold text-blue-900 dark:text-blue-300">
+            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+              <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">Ortalama</p>
+              <p className="text-xl font-bold text-brand-900 dark:text-brand-300">
                 ₺{monteCarloResult.mean.toLocaleString('tr-TR', { minimumFractionDigits: 0 })}
               </p>
             </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <p className="text-sm text-purple-600 dark:text-purple-400 mb-1">Medyan</p>
-              <p className="text-xl font-bold text-purple-900 dark:text-purple-300">
+            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4">
+              <p className="text-sm text-brand-600 dark:text-brand-400 mb-1">Medyan</p>
+              <p className="text-xl font-bold text-brand-900 dark:text-brand-300">
                 ₺{monteCarloResult.median.toLocaleString('tr-TR', { minimumFractionDigits: 0 })}
               </p>
             </div>

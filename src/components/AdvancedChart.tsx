@@ -101,7 +101,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <BarChart3 className="text-blue-600" size={24} />
+          <BarChart3 className="text-brand-600" size={24} />
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               {symbol} Teknik Analiz
@@ -119,7 +119,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
               onClick={() => setIndicator(ind)}
               className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                 indicator === ind
-                  ? 'bg-blue-600 text-white shadow-md'
+                  ? 'bg-brand-600 text-white shadow-md'
                   : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
               }`}
             >
@@ -131,7 +131,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
 
       {loading ? (
         <div className="h-96 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
         </div>
       ) : (
         <>
@@ -140,8 +140,8 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -168,7 +168,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
                 <Area
                   type="monotone"
                   dataKey="price"
-                  stroke="#3b82f6"
+                  stroke="#6366f1"
                   strokeWidth={2}
                   fill="url(#colorPrice)"
                 />
@@ -196,7 +196,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
                   <Line
                     type="monotone"
                     dataKey="price"
-                    stroke="#3b82f6"
+                    stroke="#6366f1"
                     strokeWidth={2}
                     dot={false}
                   />
@@ -269,7 +269,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
                   <Line
                     type="monotone"
                     dataKey="price"
-                    stroke="#3b82f6"
+                    stroke="#6366f1"
                     strokeWidth={2}
                     dot={false}
                   />
@@ -295,7 +295,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
                     <Line
                       type="monotone"
                       dataKey="macd"
-                      stroke="#3b82f6"
+                      stroke="#6366f1"
                       strokeWidth={2}
                       dot={false}
                     />
@@ -354,7 +354,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
                 <Line
                   type="monotone"
                   dataKey="price"
-                  stroke="#3b82f6"
+                  stroke="#6366f1"
                   strokeWidth={2}
                   dot={false}
                 />

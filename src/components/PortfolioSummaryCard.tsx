@@ -64,7 +64,7 @@ export function PortfolioSummaryCard({
           <div
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
               isPositiveDaily
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                ? 'bg-accent-50 dark:bg-accent-900/20 text-accent-600 dark:text-accent-400'
                 : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
             }`}
           >
@@ -88,12 +88,12 @@ export function PortfolioSummaryCard({
           const pct = p.pct ?? 0;
           const pos = val >= 0;
           return (
-            <div key={p.label} className={`p-2 rounded-lg text-center ${pos ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
+            <div key={p.label} className={`p-2 rounded-lg text-center ${pos ? 'bg-accent-50 dark:bg-accent-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
               <p className="text-[10px] text-slate-500 dark:text-gray-400 font-medium">{p.label}</p>
-              <p className={`text-sm font-bold ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              <p className={`text-sm font-bold ${pos ? 'text-accent-600 dark:text-accent-400' : 'text-red-600 dark:text-red-400'}`}>
                 {pos ? '+' : ''}{formatCurrency(val, 0)} ₺
               </p>
-              <p className={`text-[10px] font-semibold ${pos ? 'text-emerald-500' : 'text-red-500'}`}>
+              <p className={`text-[10px] font-semibold ${pos ? 'text-accent-500' : 'text-red-500'}`}>
                 {pos ? '+' : ''}{pct.toFixed(2)}%
               </p>
             </div>
@@ -109,7 +109,7 @@ export function PortfolioSummaryCard({
         </div>
         <div>
           <p className="text-[10px] font-medium text-slate-400 dark:text-gray-500">Toplam K/Z</p>
-          <p className={`text-xs font-bold ${isPositivePnL ? 'text-emerald-600' : 'text-red-600'}`}>
+          <p className={`text-xs font-bold ${isPositivePnL ? 'text-accent-600' : 'text-red-600'}`}>
             {isPositivePnL ? '+' : ''}{formatCurrency(totalProfitLoss, 0)} ₺
           </p>
         </div>

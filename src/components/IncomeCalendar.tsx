@@ -24,16 +24,16 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  dividend: 'bg-green-500', interest: 'bg-blue-500', staking: 'bg-purple-500',
-  coupon: 'bg-amber-500', profit_taking: 'bg-cyan-500', other: 'bg-gray-500',
+  dividend: 'bg-green-500', interest: 'bg-brand-500', staking: 'bg-brand-500',
+  coupon: 'bg-amber-500', profit_taking: 'bg-brand-500', other: 'bg-gray-500',
 };
 
 const TYPE_BG: Record<string, string> = {
   dividend: 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50',
-  interest: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/50',
-  staking: 'bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/50',
+  interest: 'bg-brand-50 dark:bg-brand-950/20 border-brand-200 dark:border-brand-800/50',
+  staking: 'bg-brand-50 dark:bg-brand-950/20 border-brand-200 dark:border-brand-800/50',
   coupon: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/50',
-  profit_taking: 'bg-cyan-50 dark:bg-cyan-950/20 border-cyan-200 dark:border-cyan-800/50',
+  profit_taking: 'bg-brand-50 dark:bg-brand-950/20 border-brand-200 dark:border-brand-800/50',
   other: 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700',
 };
 
@@ -107,7 +107,7 @@ export default function IncomeCalendar({ onRefresh }: IncomeCalendarProps) {
         <div className="text-center">
           <span className="text-sm font-bold text-gray-800 dark:text-gray-200 capitalize">{monthLabel}</span>
           <div className="flex items-center justify-center gap-3 mt-0.5">
-            <span className="text-xs text-emerald-600 font-medium">{formatMoney(totalRealized)} TL gerçekleşen</span>
+            <span className="text-xs text-accent-600 font-medium">{formatMoney(totalRealized)} TL gerçekleşen</span>
             {totalProjected > 0 && (
               <span className="text-xs text-gray-400 font-medium">+{formatMoney(totalProjected)} TL tahmini</span>
             )}
@@ -134,7 +134,7 @@ export default function IncomeCalendar({ onRefresh }: IncomeCalendarProps) {
       {/* Gelir Listesi (kronolojik) */}
       {loading ? (
         <div className="flex justify-center py-6">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600" />
         </div>
       ) : records.length === 0 ? (
         <div className="text-center py-6">
@@ -191,9 +191,9 @@ export default function IncomeCalendar({ onRefresh }: IncomeCalendarProps) {
 
       {/* Yıllık Gelir Trendi (basit) */}
       {totalRealized > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50">
-          <TrendingUp className="w-4 h-4 text-emerald-600" />
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-accent-50 dark:bg-accent-950/20 border border-accent-200 dark:border-accent-800/50">
+          <TrendingUp className="w-4 h-4 text-accent-600" />
+          <span className="text-xs text-accent-700 dark:text-accent-400">
             Bu ay toplam <span className="font-bold">{formatMoney(totalRealized)} TL</span> gelir elde edildi
             {totalProjected > 0 && <> + <span className="font-bold">{formatMoney(totalProjected)} TL</span> bekleniyor</>}
           </span>

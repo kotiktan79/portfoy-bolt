@@ -244,7 +244,7 @@ export function DashboardHeader({
                         : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   >
-                    <Download size={16} className="text-blue-500" />
+                    <Download size={16} className="text-brand-500" />
                     Dışa/İçe Aktar
                   </button>
                   <button
@@ -277,7 +277,7 @@ export function DashboardHeader({
                         : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   >
-                    <Palette size={16} className="text-pink-500" />
+                    <Palette size={16} className="text-brand-500" />
                     Tema Değiştir
                   </button>
                 </div>
@@ -325,7 +325,7 @@ export function DashboardHeader({
           {/* Primary action: Add asset */}
           <button
             onClick={onAddHolding}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold text-sm"
+            className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors font-semibold text-sm"
           >
             <Plus size={16} />
             Varlık Ekle
@@ -348,7 +348,7 @@ export function DashboardHeader({
           </button>
           <button
             onClick={onAddHolding}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold text-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors font-semibold text-sm"
           >
             <Plus size={16} />
             Ekle

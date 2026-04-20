@@ -154,7 +154,7 @@ export function DailyMonthlyPnL() {
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
       <div className="p-5 border-b border-slate-200 dark:border-gray-700">
         <div className="flex items-center gap-2 mb-4">
-          <BarChart2 className="text-blue-600 dark:text-blue-400" size={22} />
+          <BarChart2 className="text-brand-600 dark:text-brand-400" size={22} />
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Kar/Zarar Geçmişi</h3>
         </div>
 
@@ -163,8 +163,8 @@ export function DailyMonthlyPnL() {
             onClick={() => setTab('daily')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
               tab === 'daily'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-blue-400'
+                ? 'bg-brand-600 text-white border-brand-600'
+                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-brand-400'
             }`}
           >
             <Calendar size={15} />
@@ -174,8 +174,8 @@ export function DailyMonthlyPnL() {
             onClick={() => setTab('monthly')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
               tab === 'monthly'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-blue-400'
+                ? 'bg-brand-600 text-white border-brand-600'
+                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-brand-400'
             }`}
           >
             <BarChart2 size={15} />

@@ -176,48 +176,48 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-teal-500 to-cyan-600 p-6 text-white">
+      <div className="bg-gradient-to-r from-accent-500 to-brand-600 p-6 text-white">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 bg-white bg-opacity-20 rounded-lg">
             <Wallet size={28} />
           </div>
           <div>
             <h2 className="text-2xl font-bold">Sürdürülebilir Maaş Hesaplayıcı</h2>
-            <p className="text-cyan-100 text-sm">Enflasyon korumalı, uzun vadeli çekim stratejisi</p>
+            <p className="text-brand-100 text-sm">Enflasyon korumalı, uzun vadeli çekim stratejisi</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
           <div className="bg-white bg-opacity-10 backdrop-blur-sm p-4 rounded-lg">
-            <p className="text-cyan-100 text-sm mb-1">Toplam Çekilebilir</p>
+            <p className="text-brand-100 text-sm mb-1">Toplam Çekilebilir</p>
             <p className="text-2xl font-bold">{formatCurrency(totalWithdrawable)} ₺</p>
           </div>
           <div className="bg-white bg-opacity-10 backdrop-blur-sm p-4 rounded-lg">
-            <p className="text-cyan-100 text-sm mb-1">Önerilen Miktar</p>
+            <p className="text-brand-100 text-sm mb-1">Önerilen Miktar</p>
             <p className="text-2xl font-bold">{formatCurrency(totalRecommended)} ₺</p>
           </div>
           <div className="bg-white bg-opacity-10 backdrop-blur-sm p-4 rounded-lg">
             <div className="flex items-center gap-2 mb-1">
               <Calendar size={14} />
-              <p className="text-cyan-100 text-sm">{monthName}</p>
+              <p className="text-brand-100 text-sm">{monthName}</p>
             </div>
             <p className="text-2xl font-bold">{formatCurrency(monthlyWithdrawals)} ₺</p>
-            <p className="text-cyan-100 text-xs mt-1">Bu ay çekilen</p>
+            <p className="text-brand-100 text-xs mt-1">Bu ay çekilen</p>
           </div>
           <div className="bg-white bg-opacity-10 backdrop-blur-sm p-4 rounded-lg">
-            <p className="text-cyan-100 text-sm mb-1">Kalan Çekilebilir</p>
+            <p className="text-brand-100 text-sm mb-1">Kalan Çekilebilir</p>
             <p className={`text-2xl font-bold ${remainingWithdrawable < 0 ? 'text-red-200' : ''}`}>
               {formatCurrency(Math.max(0, remainingWithdrawable))} ₺
             </p>
-            <p className="text-cyan-100 text-xs mt-1">Bu ay için</p>
+            <p className="text-brand-100 text-xs mt-1">Bu ay için</p>
           </div>
         </div>
       </div>
 
       <div className="p-6 space-y-6">
-        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-lg p-5 mb-6">
+        <div className="bg-gradient-to-br from-brand-50 to-brand-50 border-2 border-brand-200 rounded-lg p-5 mb-6">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-blue-500 rounded-lg">
+            <div className="p-2 bg-brand-500 rounded-lg">
               <TrendingUp className="text-white" size={20} />
             </div>
             <div className="flex-1">
@@ -236,9 +236,9 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
                 <p>
                   <span className="font-semibold">Güvenli Yıllık Çekim (4% Kuralı):</span> {formatCurrency(annualSafeWithdrawal)} ₺
                 </p>
-                <p className="pt-2 border-t border-blue-200">
-                  <span className="font-semibold text-teal-700">Aylık Sürdürülebilir Limit:</span>{' '}
-                  <span className="text-xl font-bold text-teal-600">{formatCurrency(monthlySafeWithdrawal)} ₺</span>
+                <p className="pt-2 border-t border-brand-200">
+                  <span className="font-semibold text-accent-700">Aylık Sürdürülebilir Limit:</span>{' '}
+                  <span className="text-xl font-bold text-accent-600">{formatCurrency(monthlySafeWithdrawal)} ₺</span>
                 </p>
               </div>
             </div>
@@ -254,7 +254,7 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
               onClick={() => setStrategy('sustainable')}
               className={`p-4 rounded-lg border-2 transition-all text-left ${
                 strategy === 'sustainable'
-                  ? 'border-teal-500 bg-teal-50'
+                  ? 'border-accent-500 bg-accent-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -265,7 +265,7 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
               onClick={() => setStrategy('profit-only')}
               className={`p-4 rounded-lg border-2 transition-all text-left ${
                 strategy === 'profit-only'
-                  ? 'border-teal-500 bg-teal-50'
+                  ? 'border-accent-500 bg-accent-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -276,7 +276,7 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
               onClick={() => setStrategy('balanced')}
               className={`p-4 rounded-lg border-2 transition-all text-left ${
                 strategy === 'balanced'
-                  ? 'border-teal-500 bg-teal-50'
+                  ? 'border-accent-500 bg-accent-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -287,7 +287,7 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
               onClick={() => setStrategy('aggressive')}
               className={`p-4 rounded-lg border-2 transition-all text-left ${
                 strategy === 'aggressive'
-                  ? 'border-teal-500 bg-teal-50'
+                  ? 'border-accent-500 bg-accent-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -307,7 +307,7 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
             value={targetAmount}
             onChange={(e) => setTargetAmount(e.target.value)}
             placeholder="Örn: 10000"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-lg"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent text-lg"
           />
           {targetValue > 0 && (
             <div className={`mt-2 p-3 rounded-lg flex items-center gap-2 ${
@@ -347,7 +347,7 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-teal-600">
+                      <div className="text-2xl font-bold text-accent-600">
                         {formatCurrency(plan.withdrawAmount)} ₺
                       </div>
                       <div className="text-sm text-gray-600">
@@ -380,13 +380,13 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
               ))}
             </div>
 
-            <div className="mt-4 p-4 bg-teal-50 border-2 border-teal-200 rounded-lg">
+            <div className="mt-4 p-4 bg-accent-50 border-2 border-accent-200 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="text-teal-600" size={24} />
+                  <DollarSign className="text-accent-600" size={24} />
                   <span className="font-semibold text-gray-900">Toplam Çekilecek Miktar</span>
                 </div>
-                <span className="text-2xl font-bold text-teal-600">
+                <span className="text-2xl font-bold text-accent-600">
                   {formatCurrency(withdrawalPlan.reduce((sum, p) => sum + p.withdrawAmount, 0))} ₺
                 </span>
               </div>
@@ -422,13 +422,13 @@ export function WithdrawalCalculator({ holdings }: WithdrawalCalculatorProps) {
                   <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200">
                     <div>
                       <div className="text-xs text-gray-500 mb-1">Maksimum Çekilebilir</div>
-                      <div className="text-lg font-bold text-teal-600">
+                      <div className="text-lg font-bold text-accent-600">
                         {formatCurrency(asset.maxWithdrawable)} ₺
                       </div>
                     </div>
                     <div>
                       <div className="text-xs text-gray-500 mb-1">Önerilen</div>
-                      <div className="text-lg font-bold text-blue-600">
+                      <div className="text-lg font-bold text-brand-600">
                         {formatCurrency(asset.recommendedWithdraw)} ₺
                       </div>
                     </div>

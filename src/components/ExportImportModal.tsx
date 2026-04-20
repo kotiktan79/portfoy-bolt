@@ -96,10 +96,10 @@ export function ExportImportModal({ isOpen, onClose, onImportComplete }: ExportI
             <div className="space-y-3">
               <button
                 onClick={handleExportJSON}
-                className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-100 dark:hover:bg-brand-900/50 rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <FileJson className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <FileJson className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                   <div className="text-left">
                     <div className="font-medium text-slate-800 dark:text-gray-200">Tam Yedek (JSON)</div>
                     <div className="text-sm text-slate-600 dark:text-gray-400">Holdings + İşlemler</div>
@@ -124,10 +124,10 @@ export function ExportImportModal({ isOpen, onClose, onImportComplete }: ExportI
 
               <button
                 onClick={handleExportTransactionsCSV}
-                className="w-full flex items-center justify-between px-4 py-3 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-lg transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-100 dark:hover:bg-brand-900/50 rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <FileSpreadsheet className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <FileSpreadsheet className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                   <div className="text-left">
                     <div className="font-medium text-slate-800 dark:text-gray-200">İşlemler (CSV)</div>
                     <div className="text-sm text-slate-600 dark:text-gray-400">Tüm işlem geçmişi</div>

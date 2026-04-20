@@ -67,7 +67,7 @@ export function PnLBreakdown() {
     return (
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
         <div className="flex items-center gap-2 mb-4">
-          <PieChart className="text-blue-600 dark:text-blue-400" size={24} />
+          <PieChart className="text-brand-600 dark:text-brand-400" size={24} />
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">
             Varlık Tipi Bazında Kar/Zarar
           </h3>
@@ -84,7 +84,7 @@ export function PnLBreakdown() {
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
       <div className="flex items-center gap-2 mb-6">
-        <PieChart className="text-blue-600 dark:text-blue-400" size={24} />
+        <PieChart className="text-brand-600 dark:text-brand-400" size={24} />
         <h3 className="text-lg font-bold text-gray-900 dark:text-white">
           Varlık Tipi Bazında Kar/Zarar
         </h3>

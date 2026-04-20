@@ -46,7 +46,7 @@ export default function InstallPWA() {
 
   if (showIOSInstructions) {
     return (
-      <div className="fixed bottom-20 left-4 right-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl shadow-2xl p-6 z-50 animate-slide-up">
+      <div className="fixed bottom-20 left-4 right-4 bg-gradient-to-r from-brand-600 to-brand-700 text-white rounded-2xl shadow-2xl p-6 z-50 animate-slide-up">
         <button
           onClick={dismissIOSInstructions}
           className="absolute top-3 right-3 p-1 hover:bg-white/20 rounded-full transition-colors"
@@ -60,10 +60,10 @@ export default function InstallPWA() {
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-bold mb-2">Ana Ekrana Ekle</h3>
-            <p className="text-sm text-blue-100 mb-3">
+            <p className="text-sm text-brand-100 mb-3">
               Uygulamayı iPhone'unuza yükleyin:
             </p>
-            <ol className="text-sm space-y-2 text-blue-100">
+            <ol className="text-sm space-y-2 text-brand-100">
               <li className="flex items-center gap-2">
                 <span className="flex items-center justify-center w-5 h-5 bg-white/20 rounded-full text-xs font-bold">1</span>
                 Safari'de paylaş butonuna dokunun
@@ -88,7 +88,7 @@ export default function InstallPWA() {
   }
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-auto md:right-4 md:w-96 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl shadow-2xl p-6 z-50 animate-slide-up">
+    <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-auto md:right-4 md:w-96 bg-gradient-to-r from-brand-600 to-brand-600 text-white rounded-2xl shadow-2xl p-6 z-50 animate-slide-up">
       <button
         onClick={dismissPrompt}
         className="absolute top-3 right-3 p-1 hover:bg-white/20 rounded-full transition-colors"
@@ -102,13 +102,13 @@ export default function InstallPWA() {
         </div>
         <div className="flex-1">
           <h3 className="text-xl font-bold mb-1">Uygulamayı Yükle</h3>
-          <p className="text-sm text-blue-100">
+          <p className="text-sm text-brand-100">
             Portföy Takip uygulamasını telefonunuza yükleyin ve offline kullanın!
           </p>
         </div>
       </div>
 
-      <div className="space-y-2 mb-4 text-sm text-blue-100">
+      <div className="space-y-2 mb-4 text-sm text-brand-100">
         <div className="flex items-center gap-2">
           <span className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs">✓</span>
           Offline çalışma desteği
@@ -132,7 +132,7 @@ export default function InstallPWA() {
         </button>
         <button
           onClick={handleInstall}
-          className="flex-1 px-4 py-3 bg-white text-blue-600 hover:bg-blue-50 rounded-xl font-semibold transition-colors shadow-lg"
+          className="flex-1 px-4 py-3 bg-white text-brand-600 hover:bg-brand-50 rounded-xl font-semibold transition-colors shadow-lg"
         >
           Yükle
         </button>

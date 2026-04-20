@@ -104,13 +104,13 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
         {/* Total Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-4 sm:p-6 shadow-lg">
-            <div className="text-blue-100 text-sm mb-2">Toplam Değer</div>
+          <div className="bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl p-4 sm:p-6 shadow-lg">
+            <div className="text-brand-100 text-sm mb-2">Toplam Değer</div>
             <div className="text-2xl sm:text-3xl font-bold">{totalValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-4 sm:p-6 shadow-lg">
-            <div className="text-purple-100 text-sm mb-2">Toplam Yatırım</div>
+          <div className="bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl p-4 sm:p-6 shadow-lg">
+            <div className="text-brand-100 text-sm mb-2">Toplam Yatırım</div>
             <div className="text-2xl sm:text-3xl font-bold">{totalInvestment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
           </div>
 
@@ -122,8 +122,8 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
             </div>
           </div>
 
-          <div className={`bg-gradient-to-br ${totalProfitPercent >= 0 ? 'from-emerald-600 to-emerald-700' : 'from-orange-600 to-orange-700'} rounded-xl p-4 sm:p-6 shadow-lg`}>
-            <div className={`${totalProfitPercent >= 0 ? 'text-emerald-100' : 'text-orange-100'} text-sm mb-2`}>Getiri Oranı</div>
+          <div className={`bg-gradient-to-br ${totalProfitPercent >= 0 ? 'from-accent-600 to-accent-700' : 'from-brand-600 to-brand-700'} rounded-xl p-4 sm:p-6 shadow-lg`}>
+            <div className={`${totalProfitPercent >= 0 ? 'text-accent-100' : 'text-brand-100'} text-sm mb-2`}>Getiri Oranı</div>
             <div className="text-2xl sm:text-3xl font-bold">
               {totalProfitPercent >= 0 ? '+' : ''}{totalProfitPercent.toFixed(2)}%
             </div>
@@ -144,7 +144,7 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                   labelLine={false}
                   label={(entry: any) => `${(entry.percent * 100).toFixed(1)}%`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="#6366f1"
                   dataKey="value"
                 >
                   {pieData.map((_entry, index) => {

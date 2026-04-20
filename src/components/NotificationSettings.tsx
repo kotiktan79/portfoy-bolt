@@ -108,8 +108,8 @@ export function NotificationSettings() {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'telegram': return <Send className="text-blue-500" size={20} />;
-      case 'discord': return <MessageSquare className="text-indigo-500" size={20} />;
+      case 'telegram': return <Send className="text-brand-500" size={20} />;
+      case 'discord': return <MessageSquare className="text-brand-500" size={20} />;
       default: return <Bell className="text-gray-500" size={20} />;
     }
   };
@@ -142,14 +142,14 @@ export function NotificationSettings() {
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <Bell className="text-blue-600" size={24} />
+            <Bell className="text-brand-600" size={24} />
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               Bildirim Ayarları
             </h3>
           </div>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
           >
             Bildirim Ekle
           </button>
@@ -197,7 +197,7 @@ export function NotificationSettings() {
                           return eventInfo ? (
                             <span
                               key={event}
-                              className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded"
+                              className="text-xs px-2 py-1 bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300 rounded"
                             >
                               {eventInfo.icon} {eventInfo.label}
                             </span>
@@ -222,7 +222,7 @@ export function NotificationSettings() {
                     <button
                       onClick={() => testNotification(config)}
                       disabled={testingId === config.id || !config.enabled}
-                      className="px-3 py-1 text-sm border border-blue-600 text-blue-600 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
+                      className="px-3 py-1 text-sm border border-brand-600 text-brand-600 rounded hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50"
                     >
                       {testingId === config.id ? 'Gönderiliyor...' : 'Test Et'}
                     </button>
@@ -330,11 +330,11 @@ function AddNotificationModal({ onClose, onAdded }: AddNotificationModalProps) {
                 onClick={() => setNotificationType('telegram')}
                 className={`p-4 rounded-lg border-2 flex items-center justify-center gap-2 ${
                   notificationType === 'telegram'
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                     : 'border-gray-300 dark:border-gray-600'
                 }`}
               >
-                <Send size={20} className="text-blue-500" />
+                <Send size={20} className="text-brand-500" />
                 <span className="font-semibold text-gray-900 dark:text-white">Telegram</span>
               </button>
               <button
@@ -342,11 +342,11 @@ function AddNotificationModal({ onClose, onAdded }: AddNotificationModalProps) {
                 onClick={() => setNotificationType('discord')}
                 className={`p-4 rounded-lg border-2 flex items-center justify-center gap-2 ${
                   notificationType === 'discord'
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                     : 'border-gray-300 dark:border-gray-600'
                 }`}
               >
-                <MessageSquare size={20} className="text-indigo-500" />
+                <MessageSquare size={20} className="text-brand-500" />
                 <span className="font-semibold text-gray-900 dark:text-white">Discord</span>
               </button>
             </div>
@@ -442,7 +442,7 @@ function AddNotificationModal({ onClose, onAdded }: AddNotificationModalProps) {
             <button
               type="submit"
               disabled={saving || selectedEvents.length === 0}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
             >
               {saving ? 'Kaydediliyor...' : 'Ekle'}
             </button>

@@ -27,17 +27,17 @@ function getGreeting(): string {
 const actionIcons: Record<string, JSX.Element> = {
   sell: <ArrowDownRight size={15} className="text-red-500" />,
   buy: <ArrowUpRight size={15} className="text-green-500" />,
-  reduce: <TrendingDown size={15} className="text-orange-500" />,
-  add: <TrendingUp size={15} className="text-emerald-500" />,
-  rebalance: <RefreshCw size={15} className="text-blue-500" />,
-  protect: <ShieldCheck size={15} className="text-purple-500" />,
+  reduce: <TrendingDown size={15} className="text-brand-500" />,
+  add: <TrendingUp size={15} className="text-accent-500" />,
+  rebalance: <RefreshCw size={15} className="text-brand-500" />,
+  protect: <ShieldCheck size={15} className="text-brand-500" />,
   hold: <Target size={15} className="text-gray-500" />,
 };
 
 const priorityStyles: Record<string, string> = {
   critical: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900',
-  high: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900',
-  medium: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900',
+  high: 'bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-900',
+  medium: 'bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-900',
   low: 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800',
 };
 
@@ -94,7 +94,7 @@ export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps
       {/* Header */}
       <div className="p-4 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-gray-800/30 transition-colors" onClick={() => setExpanded(!expanded)}>
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-md flex-shrink-0">
+          <div className="p-2 bg-gradient-to-br from-amber-500 to-brand-600 rounded-xl shadow-md flex-shrink-0">
             <Brain className="text-white" size={18} />
           </div>
           <div className="flex-1 min-w-0">
@@ -120,7 +120,7 @@ export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps
             {allActions.length > 3 && (
               <button
                 onClick={() => setShowAllActions(!showAllActions)}
-                className="w-full text-center text-xs text-indigo-600 dark:text-indigo-400 font-semibold py-1.5 hover:underline"
+                className="w-full text-center text-xs text-brand-600 dark:text-brand-400 font-semibold py-1.5 hover:underline"
               >
                 {showAllActions ? 'Daha az göster' : `+${allActions.length - 3} öneri daha`}
               </button>
@@ -143,7 +143,7 @@ export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps
                   <div key={h.symbol} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-50 dark:bg-gray-800/60 text-xs">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                       h.action === 'sell' ? 'bg-red-500' :
-                      h.action === 'reduce' ? 'bg-orange-500' :
+                      h.action === 'reduce' ? 'bg-brand-500' :
                       h.action === 'buy' || h.action === 'strong_buy' ? 'bg-green-500' :
                       'bg-gray-400'
                     }`} />
@@ -154,7 +154,7 @@ export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps
                     <span className="text-gray-400 dark:text-gray-500 flex-1 text-right">{formatCurrency(h.value)} ₺</span>
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                       h.action === 'sell' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' :
-                      h.action === 'reduce' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400' :
+                      h.action === 'reduce' ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-400' :
                       h.action === 'buy' || h.action === 'strong_buy' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
                       'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                     }`}>
@@ -195,8 +195,8 @@ export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps
               onClick={() => { setShowAddMoney(!showAddMoney); setNewMoneyAmount(''); }}
               className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
                 showAddMoney
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                  ? 'bg-accent-600 text-white border-accent-600'
+                  : 'bg-accent-50 dark:bg-accent-950/20 text-accent-700 dark:text-accent-400 border-accent-200 dark:border-accent-800'
               }`}
             >
               <DollarSign size={15} />
@@ -204,36 +204,36 @@ export function FinancialCoach({ holdings, totalCashValue }: FinancialCoachProps
             </button>
 
             {showAddMoney && (
-              <div className="mt-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 space-y-2.5">
+              <div className="mt-2 p-3 rounded-xl bg-accent-50 dark:bg-accent-950/20 border border-accent-200 dark:border-accent-800 space-y-2.5">
                 <div className="flex gap-2">
                   <input
                     type="number"
                     value={newMoneyAmount}
                     onChange={e => setNewMoneyAmount(e.target.value)}
                     placeholder="Tutar (₺)"
-                    className="flex-1 px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="flex-1 px-3 py-2 rounded-lg border border-accent-300 dark:border-accent-800 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-accent-500 outline-none"
                   />
                   <button
                     onClick={() => {}} // Result is computed reactively via useMemo
                     disabled={!newMoneyAmount || parseFloat(newMoneyAmount) <= 0}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40"
+                    className="px-4 py-2 bg-accent-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40"
                   >
                     Hesapla
                   </button>
                 </div>
 
                 {newMoneyResult && newMoneyResult.length > 0 && (
-                  <div className="space-y-1 pt-2 border-t border-emerald-200 dark:border-emerald-800">
-                    <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                  <div className="space-y-1 pt-2 border-t border-accent-200 dark:border-accent-800">
+                    <p className="text-xs font-bold text-accent-800 dark:text-accent-300">
                       {formatCurrency(parseFloat(newMoneyAmount))} ₺ şöyle dağıtın:
                     </p>
                     {newMoneyResult.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm text-emerald-700 dark:text-emerald-400">
+                      <div key={i} className="flex items-center justify-between text-sm text-accent-700 dark:text-accent-400">
                         <span className="font-semibold">{item.symbol}</span>
                         <span className="font-bold">{formatCurrency(item.amount)} ₺</span>
                       </div>
                     ))}
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-500 italic pt-1">
+                    <p className="text-[10px] text-accent-600 dark:text-accent-500 italic pt-1">
                       * Portföyünüzde eksik türlere göre hesaplandı
                     </p>
                   </div>

@@ -96,7 +96,7 @@ export function ManualPriceUpdateModal({
                 step="0.0001"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
                 placeholder="0.0000"
                 required
                 autoFocus
@@ -111,16 +111,16 @@ export function ManualPriceUpdateModal({
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white resize-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white resize-none"
               placeholder="Fiyat kaynağı veya notlar (ör: 'Bloomberg terminal', 'Kurumdan alınan rapor')"
               rows={3}
             />
           </div>
 
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+          <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-3">
             <div className="flex gap-2">
-              <Info size={16} className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800 dark:text-blue-300">
+              <Info size={16} className="text-brand-600 dark:text-brand-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-brand-800 dark:text-brand-300">
                 <p className="font-medium mb-1">Manuel Fiyat Koruması</p>
                 <p>Bu fiyat manuel olarak işaretlenecek ve otomatik güncellemelerden etkilenmeyecektir.</p>
               </div>
@@ -139,7 +139,7 @@ export function ManualPriceUpdateModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Güncelleniyor...' : 'Güncelle'}
             </button>

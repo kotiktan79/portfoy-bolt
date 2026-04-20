@@ -464,7 +464,7 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
                       key={k}
                       onClick={() => setSortKey(k)}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${sortKey === k
-                        ? 'bg-blue-600 text-white shadow-sm'
+                        ? 'bg-brand-600 text-white shadow-sm'
                         : 'text-slate-500 dark:text-gray-400 hover:bg-slate-200 dark:hover:bg-gray-700'
                         }`}
                     >
@@ -475,13 +475,13 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setViewMode('list')}
-                    className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-700'}`}
+                    className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-700'}`}
                   >
                     <List size={13} />
                   </button>
                   <button
                     onClick={() => setViewMode('bars')}
-                    className={`p-1.5 rounded-lg transition-colors ${viewMode === 'bars' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-700'}`}
+                    className={`p-1.5 rounded-lg transition-colors ${viewMode === 'bars' ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400' : 'text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-700'}`}
                   >
                     <BarChart2 size={13} />
                   </button>

@@ -63,7 +63,7 @@ export function CorrelationMatrix({ holdings }: CorrelationMatrixProps) {
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Network className="text-blue-600" size={24} />
+          <Network className="text-brand-600" size={24} />
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               Korelasyon Matrisi
@@ -75,9 +75,9 @@ export function CorrelationMatrix({ holdings }: CorrelationMatrixProps) {
         </div>
 
         {strongCorrelations.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-            <Network className="text-blue-600" size={16} />
-            <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+          <div className="flex items-center gap-2 px-3 py-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg">
+            <Network className="text-brand-600" size={16} />
+            <span className="text-sm font-semibold text-brand-700 dark:text-brand-400">
               {strongCorrelations.length} Güçlü İlişki
             </span>
           </div>
@@ -89,7 +89,7 @@ export function CorrelationMatrix({ holdings }: CorrelationMatrixProps) {
           onClick={() => setSelectedAsset(null)}
           className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
             selectedAsset === null
-              ? 'bg-blue-600 text-white'
+              ? 'bg-brand-600 text-white'
               : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300'
           }`}
         >
@@ -101,7 +101,7 @@ export function CorrelationMatrix({ holdings }: CorrelationMatrixProps) {
             onClick={() => setSelectedAsset(holding.symbol)}
             className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
               selectedAsset === holding.symbol
-                ? 'bg-blue-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300'
             }`}
           >
@@ -167,7 +167,7 @@ export function CorrelationMatrix({ holdings }: CorrelationMatrixProps) {
         )}
       </div>
 
-      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+      <div className="mt-6 p-4 bg-brand-50 dark:bg-brand-900/20 rounded-lg border border-brand-200 dark:border-brand-700">
         <h4 className="text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">
           💡 Korelasyon Nedir?
         </h4>

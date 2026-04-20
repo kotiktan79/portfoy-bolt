@@ -101,7 +101,7 @@ export function AdvancedAnalytics({ holdings, totalValue, totalInvestment }: Adv
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Activity className="text-blue-600" size={24} />
+            <Activity className="text-brand-600" size={24} />
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                 Gelişmiş Analitik
@@ -119,7 +119,7 @@ export function AdvancedAnalytics({ holdings, totalValue, totalInvestment }: Adv
                 onClick={() => setTimeRange(range)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   timeRange === range
-                    ? 'bg-blue-600 text-white shadow-md'
+                    ? 'bg-brand-600 text-white shadow-md'
                     : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
                 }`}
               >
@@ -151,7 +151,7 @@ export function AdvancedAnalytics({ holdings, totalValue, totalInvestment }: Adv
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke="#3b82f6"
+                  stroke="#6366f1"
                   strokeWidth={3}
                   dot={{ fill: '#3b82f6', r: 4 }}
                   name="Portföy Değeri"
@@ -190,7 +190,7 @@ export function AdvancedAnalytics({ holdings, totalValue, totalInvestment }: Adv
                   labelLine={false}
                   label={({ percentage }: any) => `${(percentage as number).toFixed(1)}%`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="#6366f1"
                   dataKey="value"
                 >
                   {assetAllocation.map((_entry, index) => (
@@ -236,8 +236,8 @@ export function AdvancedAnalytics({ holdings, totalValue, totalInvestment }: Adv
             {topPerformers.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-gray-900 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                    <span className="text-sm font-bold text-blue-600">{idx + 1}</span>
+                  <div className="flex items-center justify-center w-8 h-8 bg-brand-100 dark:bg-brand-900/30 rounded-full">
+                    <span className="text-sm font-bold text-brand-600">{idx + 1}</span>
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900 dark:text-white">{item.symbol}</p>
@@ -256,13 +256,13 @@ export function AdvancedAnalytics({ holdings, totalValue, totalInvestment }: Adv
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
           <div className="flex items-center gap-3 mb-4">
-            <DollarSign className="text-blue-600" size={20} />
+            <DollarSign className="text-brand-600" size={20} />
             <h4 className="text-sm font-bold text-slate-900 dark:text-white">
               Özet İstatistikler
             </h4>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-lg">
+            <div className="p-4 bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-900/10 rounded-lg">
               <p className="text-xs text-slate-600 dark:text-gray-400 mb-1">Toplam Değer</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white">
                 {totalValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺

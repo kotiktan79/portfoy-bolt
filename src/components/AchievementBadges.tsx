@@ -68,7 +68,7 @@ export function AchievementBadges({ stats }: AchievementBadgesProps) {
               key={achievement.type}
               className={`relative p-4 rounded-lg border-2 transition-all ${
                 achievement.unlocked
-                  ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-400 shadow-md'
+                  ? 'bg-gradient-to-br from-yellow-50 to-brand-50 border-yellow-400 shadow-md'
                   : 'bg-slate-50 border-slate-200 opacity-60'
               }`}
               title={achievement.description}

@@ -169,7 +169,7 @@ export function QuickProfitWithdrawal({ holdings, onWithdrawalComplete }: QuickP
         </div>
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
+          className="text-brand-600 dark:text-brand-400 hover:underline text-sm font-medium"
         >
           {showDetails ? 'Detayları Gizle' : 'Detayları Göster'}
         </button>
@@ -189,15 +189,15 @@ export function QuickProfitWithdrawal({ holdings, onWithdrawalComplete }: QuickP
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+        <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-lg p-4 border border-brand-200 dark:border-brand-800">
           <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="text-blue-600 dark:text-blue-400" size={20} />
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Ortalama Getiri</span>
+            <DollarSign className="text-brand-600 dark:text-brand-400" size={20} />
+            <span className="text-sm font-medium text-brand-700 dark:text-brand-300">Ortalama Getiri</span>
           </div>
-          <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">
+          <p className="text-2xl font-bold text-brand-800 dark:text-brand-200">
             {(profitableAssets.reduce((sum, a) => sum + a.profitPercent, 0) / profitableAssets.length).toFixed(1)}%
           </p>
-          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+          <p className="text-xs text-brand-600 dark:text-brand-400 mt-1">
             En yüksek: {profitableAssets[0]?.profitPercent.toFixed(1)}%
           </p>
         </div>
@@ -223,7 +223,7 @@ export function QuickProfitWithdrawal({ holdings, onWithdrawalComplete }: QuickP
             <div className="flex gap-2">
               <button
                 onClick={selectAll}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
               >
                 Tümünü Seç
               </button>
@@ -301,10 +301,10 @@ export function QuickProfitWithdrawal({ holdings, onWithdrawalComplete }: QuickP
         )}
       </button>
 
-      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+      <div className="mt-4 p-3 bg-brand-50 dark:bg-brand-900/20 rounded-lg border border-brand-200 dark:border-brand-800">
         <div className="flex items-start gap-2">
-          <AlertTriangle className="text-blue-600 dark:text-blue-400 mt-0.5" size={16} />
-          <div className="text-xs text-blue-700 dark:text-blue-300">
+          <AlertTriangle className="text-brand-600 dark:text-brand-400 mt-0.5" size={16} />
+          <div className="text-xs text-brand-700 dark:text-brand-300">
             <p className="font-semibold mb-1">Nasıl Hesaplanıyor?</p>
             <p>Enflasyon oranları: Hisse %15, Döviz/Nakit %65, Kripto/Altın %0</p>
             <p className="mt-1">Sadece enflasyon ayarlı maliyetin üzerindeki kar çekilebilir.</p>

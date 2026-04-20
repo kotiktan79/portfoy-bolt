@@ -45,7 +45,7 @@ export function PortfolioMetricsBar({
         <MetricCard
           label="Toplam Deger"
           value={`${formatCurrency(totalCurrentValue)} TL`}
-          valueClassName="text-sm md:text-2xl font-extrabold text-blue-600 dark:text-blue-400"
+          valueClassName="text-sm md:text-2xl font-extrabold text-brand-600 dark:text-brand-400"
           priority
         />
 
@@ -121,7 +121,7 @@ function MetricCard({
   priority?: boolean;
 }) {
   return (
-    <div className={`bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg px-2.5 md:px-3 py-2 md:py-2.5 ${priority ? 'ring-1 ring-blue-100 dark:ring-blue-900/30 md:ring-0' : ''}`}>
+    <div className={`bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg px-2.5 md:px-3 py-2 md:py-2.5 ${priority ? 'ring-1 ring-brand-100 dark:ring-brand-900/30 md:ring-0' : ''}`}>
       <p className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-0.5 md:mb-1 truncate">
         {label}
       </p>

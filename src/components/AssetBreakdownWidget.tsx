@@ -8,12 +8,12 @@ interface AssetBreakdownWidgetProps {
 }
 
 const ASSET_TYPE_CONFIG: Record<string, { label: string; color: string; bgLight: string; bgDark: string }> = {
-  stock: { label: 'Hisse', color: 'bg-blue-500', bgLight: 'bg-blue-50', bgDark: 'dark:bg-blue-900/20' },
+  stock: { label: 'Hisse', color: 'bg-brand-500', bgLight: 'bg-brand-50', bgDark: 'dark:bg-brand-900/20' },
   crypto: { label: 'Kripto', color: 'bg-amber-500', bgLight: 'bg-amber-50', bgDark: 'dark:bg-amber-900/20' },
-  commodity: { label: 'Emtia', color: 'bg-orange-500', bgLight: 'bg-orange-50', bgDark: 'dark:bg-orange-900/20' },
+  commodity: { label: 'Emtia', color: 'bg-brand-500', bgLight: 'bg-brand-50', bgDark: 'dark:bg-brand-900/20' },
   forex: { label: 'Döviz', color: 'bg-green-500', bgLight: 'bg-green-50', bgDark: 'dark:bg-green-900/20' },
-  fund: { label: 'Fon', color: 'bg-teal-500', bgLight: 'bg-teal-50', bgDark: 'dark:bg-teal-900/20' },
-  eurobond: { label: 'Eurobond', color: 'bg-cyan-500', bgLight: 'bg-cyan-50', bgDark: 'dark:bg-cyan-900/20' },
+  fund: { label: 'Fon', color: 'bg-accent-500', bgLight: 'bg-accent-50', bgDark: 'dark:bg-accent-900/20' },
+  eurobond: { label: 'Eurobond', color: 'bg-brand-500', bgLight: 'bg-brand-50', bgDark: 'dark:bg-brand-900/20' },
   other: { label: 'Diğer', color: 'bg-gray-500', bgLight: 'bg-gray-50', bgDark: 'dark:bg-gray-900/20' },
 };
 
@@ -34,8 +34,8 @@ export function AssetBreakdownWidget({ holdings, totalValue }: AssetBreakdownWid
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700/70 flex items-center gap-2">
-        <div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-          <PieChart size={16} className="text-orange-600 dark:text-orange-400" />
+        <div className="p-1.5 bg-brand-100 dark:bg-brand-900/30 rounded-lg">
+          <PieChart size={16} className="text-brand-600 dark:text-brand-400" />
         </div>
         <h3 className="text-sm font-bold text-slate-800 dark:text-gray-200">Varlık Dağılımı</h3>
         <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{holdings.length} varlık</span>

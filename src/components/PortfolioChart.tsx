@@ -70,10 +70,10 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
             <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            <Bar dataKey="value" fill="#3b82f6" name="Portföy Değeri" radius={[8, 8, 0, 0]} />
+            <Bar dataKey="value" fill="#6366f1" name="Portföy Değeri" radius={[8, 8, 0, 0]} />
             <Bar dataKey="investment" fill="#64748b" name="Yatırım" radius={[8, 8, 0, 0]} />
             {showPnL && <Bar dataKey="pnl" fill="#10b981" name="Kar/Zarar" radius={[8, 8, 0, 0]} />}
-            <Brush dataKey="date" height={30} stroke="#3b82f6" />
+            <Brush dataKey="date" height={30} stroke="#6366f1" />
           </BarChart>
         </ResponsiveContainer>
       );
@@ -85,8 +85,8 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
         <AreaChart data={chartData}>
           <defs>
             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
             </linearGradient>
             <linearGradient id="colorInvestment" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#64748b" stopOpacity={0.2}/>
@@ -101,7 +101,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
           <Area
             type="monotone"
             dataKey="value"
-            stroke="#3b82f6"
+            stroke="#6366f1"
             strokeWidth={2}
             fillOpacity={1}
             fill="url(#colorValue)"
@@ -116,7 +116,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
             fill="url(#colorInvestment)"
             name="Yatırım"
           />
-          <Brush dataKey="date" height={30} stroke="#3b82f6" />
+          <Brush dataKey="date" height={30} stroke="#6366f1" />
         </AreaChart>
       </ResponsiveContainer>
     );
@@ -133,7 +133,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#3b82f6"
+            stroke="#6366f1"
             strokeWidth={3}
             dot={{ fill: '#3b82f6', r: 4 }}
             activeDot={{ r: 7, stroke: '#3b82f6', strokeWidth: 2 }}
@@ -159,7 +159,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
               name="Kar/Zarar"
             />
           )}
-          <Brush dataKey="date" height={30} stroke="#3b82f6" />
+          <Brush dataKey="date" height={30} stroke="#6366f1" />
         </LineChart>
       </ResponsiveContainer>
     );
@@ -174,7 +174,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
               onClick={() => setChartType('area')}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                 chartType === 'area'
-                  ? 'bg-blue-600 text-white shadow-md'
+                  ? 'bg-brand-600 text-white shadow-md'
                   : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
               }`}
             >
@@ -185,7 +185,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
               onClick={() => setChartType('line')}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                 chartType === 'line'
-                  ? 'bg-blue-600 text-white shadow-md'
+                  ? 'bg-brand-600 text-white shadow-md'
                   : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
               }`}
             >
@@ -196,7 +196,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
               onClick={() => setChartType('bar')}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                 chartType === 'bar'
-                  ? 'bg-blue-600 text-white shadow-md'
+                  ? 'bg-brand-600 text-white shadow-md'
                   : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
               }`}
             >
@@ -209,7 +209,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
               type="checkbox"
               checked={showPnL}
               onChange={(e) => setShowPnL(e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+              className="w-4 h-4 text-brand-600 rounded focus:ring-2 focus:ring-brand-500"
             />
             <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
               Kar/Zarar Göster

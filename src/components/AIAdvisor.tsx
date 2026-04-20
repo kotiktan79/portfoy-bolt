@@ -115,9 +115,9 @@ export default function AIAdvisor() {
       case 'conservative':
         return 'text-green-600 bg-green-50 border-green-200';
       case 'moderate':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
+        return 'text-brand-600 bg-brand-50 border-brand-200';
       case 'aggressive':
-        return 'text-orange-600 bg-orange-50 border-orange-200';
+        return 'text-brand-600 bg-brand-50 border-brand-200';
       case 'very_aggressive':
         return 'text-red-600 bg-red-50 border-red-200';
       default:
@@ -143,7 +143,7 @@ export default function AIAdvisor() {
       case 'medium':
         return <Lightbulb className="w-5 h-5 text-yellow-600" />;
       default:
-        return <Target className="w-5 h-5 text-blue-600" />;
+        return <Target className="w-5 h-5 text-brand-600" />;
     }
   };
 
@@ -156,7 +156,7 @@ export default function AIAdvisor() {
       case 'warning':
         return 'bg-yellow-50 border-yellow-200';
       case 'rebalance':
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-brand-50 border-brand-200';
       default:
         return 'bg-gray-50 border-gray-200';
     }
@@ -271,21 +271,21 @@ export default function AIAdvisor() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+      <div className="bg-gradient-to-r from-brand-600 to-brand-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
             <Brain className="w-8 h-8" />
           </div>
           <div>
             <h2 className="text-2xl font-bold">AI Portföy Danışmanı</h2>
-            <p className="text-blue-100">Kişiselleştirilmiş öneriler ve analizler</p>
+            <p className="text-brand-100">Kişiselleştirilmiş öneriler ve analizler</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => runAnalysis(holdings)}
             disabled={analyzing}
-            className="flex items-center gap-2 px-6 py-3 bg-white text-purple-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 font-semibold transition-colors"
+            className="flex items-center gap-2 px-6 py-3 bg-white text-brand-600 rounded-lg hover:bg-brand-50 disabled:opacity-50 font-semibold transition-colors"
           >
             <Sparkles className="w-5 h-5" />
             {analyzing ? 'Analiz ediliyor...' : 'Yeniden Analiz Et'}
@@ -294,7 +294,7 @@ export default function AIAdvisor() {
             <div className="flex items-center gap-2 px-4 py-3 bg-white/20 rounded-lg backdrop-blur-sm">
               <Award className="w-6 h-6" />
               <div>
-                <p className="text-xs text-blue-100">Portföy Notu</p>
+                <p className="text-xs text-brand-100">Portföy Notu</p>
                 <p className="text-2xl font-bold">{portfolioScore.grade}</p>
               </div>
             </div>
@@ -308,7 +308,7 @@ export default function AIAdvisor() {
             onClick={() => setActiveTab('overview')}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               activeTab === 'overview'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             }`}
           >
@@ -318,7 +318,7 @@ export default function AIAdvisor() {
             onClick={() => setActiveTab('signals')}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               activeTab === 'signals'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             }`}
           >
@@ -328,7 +328,7 @@ export default function AIAdvisor() {
             onClick={() => setActiveTab('suggestions')}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               activeTab === 'suggestions'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             }`}
           >
@@ -338,7 +338,7 @@ export default function AIAdvisor() {
             onClick={() => setActiveTab('chat')}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               activeTab === 'chat'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             }`}
           >
@@ -350,7 +350,7 @@ export default function AIAdvisor() {
       {activeTab === 'overview' && riskProfile && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Shield className="w-6 h-6 text-blue-600" />
+            <Shield className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Risk Profili</h3>
           </div>
 
@@ -378,7 +378,7 @@ export default function AIAdvisor() {
                   </div>
                   <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
+                      className="h-full bg-gradient-to-r from-brand-500 to-brand-500 transition-all duration-500"
                       style={{ width: `${riskProfile.score}%` }}
                     />
                   </div>
@@ -411,7 +411,7 @@ export default function AIAdvisor() {
                 </div>
                 <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-blue-500"
+                    className="h-full bg-brand-500"
                     style={{ width: `${riskProfile.factors.volatility}%` }}
                   />
                 </div>
@@ -441,7 +441,7 @@ export default function AIAdvisor() {
                 </div>
                 <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-purple-500"
+                    className="h-full bg-brand-500"
                     style={{ width: `${riskProfile.factors.asset_allocation}%` }}
                   />
                 </div>
@@ -454,7 +454,7 @@ export default function AIAdvisor() {
       {activeTab === 'overview' && sentiment && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Activity className="w-6 h-6 text-purple-600" />
+            <Activity className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Piyasa Sentiment</h3>
           </div>
 
@@ -552,7 +552,7 @@ export default function AIAdvisor() {
       {activeTab === 'overview' && insights.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Sparkles className="w-6 h-6 text-purple-600" />
+            <Sparkles className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
               Portföy İçgörüleri
             </h3>
@@ -567,7 +567,7 @@ export default function AIAdvisor() {
                     ? 'bg-red-50 border-red-200'
                     : insight.severity === 'warning'
                     ? 'bg-yellow-50 border-yellow-200'
-                    : 'bg-blue-50 border-blue-200'
+                    : 'bg-brand-50 border-brand-200'
                 }`}
               >
                 <h4 className="font-bold text-gray-900 dark:text-white mb-2">
@@ -583,27 +583,27 @@ export default function AIAdvisor() {
       {activeTab === 'signals' && (
         <div className="space-y-4">
           {portfolioScore && (
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+            <div className="bg-gradient-to-r from-brand-600 to-brand-600 rounded-xl shadow-lg p-6 text-white">
               <h3 className="text-2xl font-bold mb-4">Portföy Skoru</h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
-                  <p className="text-sm text-blue-100">Genel</p>
+                  <p className="text-sm text-brand-100">Genel</p>
                   <p className="text-3xl font-bold">{portfolioScore.overall.toFixed(0)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-blue-100">Çeşitlendirme</p>
+                  <p className="text-sm text-brand-100">Çeşitlendirme</p>
                   <p className="text-2xl font-bold">{portfolioScore.breakdown.diversification.toFixed(0)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-blue-100">Performans</p>
+                  <p className="text-sm text-brand-100">Performans</p>
                   <p className="text-2xl font-bold">{portfolioScore.breakdown.performance.toFixed(0)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-blue-100">Risk</p>
+                  <p className="text-sm text-brand-100">Risk</p>
                   <p className="text-2xl font-bold">{portfolioScore.breakdown.riskManagement.toFixed(0)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-blue-100">Not</p>
+                  <p className="text-sm text-brand-100">Not</p>
                   <p className="text-3xl font-bold">{portfolioScore.grade}</p>
                 </div>
               </div>
@@ -679,7 +679,7 @@ export default function AIAdvisor() {
                       <p className="text-sm text-gray-600 dark:text-gray-400">{suggestion.type.replace('_', ' ').toUpperCase()}</p>
                     </div>
                   </div>
-                  <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 rounded-lg text-sm font-bold">
+                  <span className="px-3 py-1 bg-brand-100 dark:bg-brand-900 text-brand-600 dark:text-brand-300 rounded-lg text-sm font-bold">
                     Öncelik: {suggestion.priority}
                   </span>
                 </div>
@@ -725,7 +725,7 @@ export default function AIAdvisor() {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <MessageSquare className="w-6 h-6 text-purple-600" />
+              <MessageSquare className="w-6 h-6 text-brand-600" />
               <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Sohbet</h3>
             </div>
             {chatHistory.length > 0 && (
@@ -742,7 +742,7 @@ export default function AIAdvisor() {
           <div className="space-y-4 mb-6 max-h-[500px] overflow-y-auto">
             {chatHistory.length === 0 && (
               <div className="text-center py-8">
-                <Brain className="w-12 h-12 text-purple-300 mx-auto mb-3" />
+                <Brain className="w-12 h-12 text-brand-300 mx-auto mb-3" />
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
                   Portföyünüz hakkında her şeyi sorun!
                 </p>
@@ -751,7 +751,7 @@ export default function AIAdvisor() {
                     <button
                       key={q}
                       onClick={() => setChatInput(q)}
-                      className="px-3 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm hover:bg-purple-100 dark:hover:bg-purple-900/50 font-medium transition-colors"
+                      className="px-3 py-2 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-lg text-sm hover:bg-brand-100 dark:hover:bg-brand-900/50 font-medium transition-colors"
                     >
                       {q}
                     </button>
@@ -764,7 +764,7 @@ export default function AIAdvisor() {
               <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`rounded-2xl px-4 py-3 max-w-lg ${
                   msg.role === 'user'
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-brand-600 text-white'
                     : 'bg-gray-100 dark:bg-gray-700'
                 }`}>
                   <div className={`text-sm whitespace-pre-wrap ${msg.role === 'ai' ? 'text-gray-900 dark:text-white' : ''}`}>
@@ -783,7 +783,7 @@ export default function AIAdvisor() {
                           <p className={`text-sm font-bold ${
                             m.color === 'green' ? 'text-green-600' :
                             m.color === 'red' ? 'text-red-600' :
-                            m.color === 'blue' ? 'text-blue-600' :
+                            m.color === 'blue' ? 'text-brand-600' :
                             'text-gray-900 dark:text-white'
                           }`}>{m.value}</p>
                         </div>
@@ -797,7 +797,7 @@ export default function AIAdvisor() {
                         <button
                           key={i}
                           onClick={() => a.route && window.location.assign(a.route)}
-                          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 transition-colors"
+                          className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold hover:bg-brand-700 transition-colors"
                         >
                           {a.label}
                         </button>
@@ -824,8 +824,8 @@ export default function AIAdvisor() {
           </div>
 
           {chatLoading && (
-            <div className="flex items-center gap-2 px-4 py-2 text-sm text-purple-600 dark:text-purple-400">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent" />
+            <div className="flex items-center gap-2 px-4 py-2 text-sm text-brand-600 dark:text-brand-400">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-brand-600 border-t-transparent" />
               Claude düşünüyor...
             </div>
           )}
@@ -843,7 +843,7 @@ export default function AIAdvisor() {
             <button
               onClick={handleChatSubmit}
               disabled={chatLoading}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+              className="px-6 py-3 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
             >
               <Send className="w-5 h-5" />
             </button>

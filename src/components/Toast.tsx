@@ -36,7 +36,7 @@ export function ToastItem({ toast, onClose }: ToastProps) {
     success: 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-700',
     error: 'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-200 dark:border-red-700',
     warning: 'bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-700',
-    info: 'bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-700',
+    info: 'bg-brand-50 dark:bg-brand-900/30 text-brand-800 dark:text-brand-300 border-brand-200 dark:border-brand-700',
   };
 
   return (

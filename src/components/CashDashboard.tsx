@@ -108,7 +108,7 @@ export function CashDashboard() {
     switch (type) {
       case 'deposit': return <ArrowDownCircle className="text-green-600" size={20} />;
       case 'withdrawal': return <ArrowUpCircle className="text-red-600" size={20} />;
-      case 'buy': return <TrendingUp className="text-blue-600" size={20} />;
+      case 'buy': return <TrendingUp className="text-brand-600" size={20} />;
       case 'sell': return <DollarSign className="text-green-600" size={20} />;
       case 'dividend': return <Plus className="text-green-600" size={20} />;
       default: return <Wallet className="text-slate-600" size={20} />;
@@ -138,7 +138,7 @@ export function CashDashboard() {
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Wallet className="text-blue-600" size={24} />
+          <Wallet className="text-brand-600" size={24} />
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Nakit Cüzdan</h3>
             <p className="text-sm text-slate-500 dark:text-gray-400">Çok para birimli nakit takibi</p>
@@ -148,7 +148,7 @@ export function CashDashboard() {
           <button
             onClick={loadData}
             disabled={ratesLoading}
-            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+            className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-colors"
             title="Kurları Güncelle"
           >
             <RefreshCw size={16} className={ratesLoading ? 'animate-spin' : ''} />
@@ -170,7 +170,7 @@ export function CashDashboard() {
         </div>
       </div>
 
-      <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl mb-4 text-white">
+      <div className="p-4 bg-gradient-to-r from-brand-600 to-brand-700 rounded-xl mb-4 text-white">
         <p className="text-sm opacity-80 mb-1">Toplam Nakit Değeri (TL)</p>
         <p className="text-3xl font-bold">{formatTRY(totalTRY)}</p>
         <p className="text-xs opacity-70 mt-1">Tüm para birimleri anlık kur ile dönüştürülmüştür</p>
@@ -186,9 +186,9 @@ export function CashDashboard() {
               onClick={() => setActiveCurrency(cur.code)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
                 activeCurrency === cur.code
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                  ? 'bg-brand-600 text-white border-brand-600 shadow-md'
                   : hasBalance
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-100'
+                  ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-700 hover:bg-brand-100'
                   : 'bg-slate-50 dark:bg-gray-700 text-slate-500 dark:text-gray-400 border-slate-200 dark:border-gray-600 hover:bg-slate-100 dark:hover:bg-gray-600'
               }`}
             >
@@ -201,13 +201,13 @@ export function CashDashboard() {
 
       {activeBal && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="p-3 bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-900/10 rounded-lg border border-brand-200 dark:border-brand-800">
             <p className="text-xs text-slate-600 dark:text-gray-400 mb-1 font-medium">Mevcut Bakiye</p>
             <p className="text-lg font-bold text-slate-900 dark:text-white">
               {formatCash(activeBal.balance, activeBal.currency)}
             </p>
             {activeBal.currency !== 'TRY' && (
-              <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+              <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5">
                 ≈ {formatTRY(activeBal.tryValue)}
               </p>
             )}
@@ -386,8 +386,8 @@ function CashTransactionModal({
             </div>
           )}
           {isWithdraw && currentBalance !== undefined && (
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <p className="text-sm text-blue-800 dark:text-blue-300">
+            <div className="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg">
+              <p className="text-sm text-brand-800 dark:text-brand-300">
                 Mevcut Bakiye: <strong>{currentBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {curInfo?.symbol || selectedCurrency}</strong>
               </p>
             </div>
@@ -397,7 +397,7 @@ function CashTransactionModal({
             <select
               value={selectedCurrency}
               onChange={e => onCurrencyChange(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500"
             >
               {currencies.map(c => (
                 <option key={c.code} value={c.code}>{c.symbol} {c.code} - {c.label}</option>
@@ -414,7 +414,7 @@ function CashTransactionModal({
               min="0"
               value={amount}
               onChange={e => onAmountChange(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500"
               placeholder="0.00"
               autoFocus
             />
@@ -425,7 +425,7 @@ function CashTransactionModal({
               type="text"
               value={notes}
               onChange={e => onNotesChange(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500"
               placeholder="Örn: Maaş yatırımı"
             />
           </div>

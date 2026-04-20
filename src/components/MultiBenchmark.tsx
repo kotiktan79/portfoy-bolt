@@ -72,7 +72,7 @@ export function MultiBenchmark({ portfolioValue, initialValue }: MultiBenchmarkP
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <BarChart3 className="text-blue-600" size={24} />
+          <BarChart3 className="text-brand-600" size={24} />
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               Çoklu Benchmark Karşılaştırma
@@ -90,7 +90,7 @@ export function MultiBenchmark({ portfolioValue, initialValue }: MultiBenchmarkP
               onClick={() => setPeriod(p)}
               className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                 period === p
-                  ? 'bg-blue-600 text-white shadow-md'
+                  ? 'bg-brand-600 text-white shadow-md'
                   : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
               }`}
             >
@@ -160,7 +160,7 @@ export function MultiBenchmark({ portfolioValue, initialValue }: MultiBenchmarkP
           <Line
             type="monotone"
             dataKey="portfolio"
-            stroke="#3b82f6"
+            stroke="#6366f1"
             strokeWidth={3}
             dot={false}
             name="Portföy"
@@ -192,7 +192,7 @@ export function MultiBenchmark({ portfolioValue, initialValue }: MultiBenchmarkP
           <Line
             type="monotone"
             dataKey="btc"
-            stroke="#f97316"
+            stroke="#6366f1"
             strokeWidth={2}
             dot={false}
             strokeDasharray="5 5"

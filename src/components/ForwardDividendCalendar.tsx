@@ -7,7 +7,7 @@ import { Card, CardHeader, CardBody } from './ui/Card';
 
 const TYPE_COLORS: Record<string, string> = {
   dividend: 'bg-accent-500',
-  staking: 'bg-purple-500',
+  staking: 'bg-brand-500',
   coupon: 'bg-amber-500',
 };
 
@@ -50,14 +50,14 @@ export default function ForwardDividendCalendar() {
               %{forecast.effectiveYieldPct.toFixed(2)} efektif verim
             </div>
           </div>
-          <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-3">
-            <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
+          <div className="rounded-xl border border-brand-200 dark:border-brand-900 bg-brand-50 dark:bg-brand-950/30 p-3">
+            <div className="text-[10px] font-semibold text-brand-700 dark:text-brand-400 uppercase tracking-wider">
               Aylık Ortalama
             </div>
-            <div className="text-lg font-bold text-blue-700 dark:text-blue-300 mt-0.5">
+            <div className="text-lg font-bold text-brand-700 dark:text-brand-300 mt-0.5">
               {formatCurrency(forecast.averageMonthly)} ₺
             </div>
-            <div className="text-[10px] text-blue-600 dark:text-blue-500 mt-0.5">
+            <div className="text-[10px] text-brand-600 dark:text-brand-500 mt-0.5">
               Yıllık ÷ 12
             </div>
           </div>
@@ -92,7 +92,7 @@ export default function ForwardDividendCalendar() {
                     isSelected
                       ? 'border-accent-500 bg-accent-50 dark:bg-accent-950/40 ring-2 ring-accent-300 dark:ring-accent-700'
                       : isCurrent
-                      ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800'
+                      ? 'border-brand-300 bg-brand-50/50 dark:bg-brand-950/20 dark:border-brand-800'
                       : 'border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-slate-50 dark:hover:bg-gray-800/60'
                   }`}
                   title={`${m.monthLabel}: ${formatCurrency(m.total)} ₺`}

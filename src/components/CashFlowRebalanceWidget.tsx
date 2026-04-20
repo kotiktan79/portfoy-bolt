@@ -18,11 +18,11 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  stock: 'bg-blue-500',
+  stock: 'bg-brand-500',
   crypto: 'bg-amber-500',
   currency: 'bg-accent-500',
-  fund: 'bg-purple-500',
-  eurobond: 'bg-pink-500',
+  fund: 'bg-brand-500',
+  eurobond: 'bg-brand-500',
   commodity: 'bg-yellow-500',
   cash: 'bg-gray-500',
 };

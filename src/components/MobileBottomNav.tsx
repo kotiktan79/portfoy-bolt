@@ -27,7 +27,7 @@ export default function MobileBottomNav({ onNavigate, currentPage = 'home' }: Mo
               onClick={() => onNavigate(item.id)}
               className={`flex flex-col items-center justify-center min-h-[44px] py-1.5 px-1 rounded-lg transition-all ${
                 isActive
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                  ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400'
                   : 'text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800'
               }`}
             >

@@ -71,24 +71,24 @@ export default function ComprehensiveAnalytics() {
 
   function getSharpeRating(sharpe: number): { text: string; color: string } {
     if (sharpe < 0) return { text: 'Zayıf', color: 'text-red-600' };
-    if (sharpe < 1) return { text: 'Kabul Edilebilir', color: 'text-orange-600' };
+    if (sharpe < 1) return { text: 'Kabul Edilebilir', color: 'text-brand-600' };
     if (sharpe < 2) return { text: 'İyi', color: 'text-yellow-600' };
     if (sharpe < 3) return { text: 'Çok İyi', color: 'text-green-600' };
-    return { text: 'Mükemmel', color: 'text-blue-600' };
+    return { text: 'Mükemmel', color: 'text-brand-600' };
   }
 
   function getDrawdownRating(drawdown: number): { text: string; color: string } {
     if (drawdown < 5) return { text: 'Çok Düşük', color: 'text-green-600' };
     if (drawdown < 10) return { text: 'Düşük', color: 'text-green-500' };
     if (drawdown < 20) return { text: 'Orta', color: 'text-yellow-600' };
-    if (drawdown < 30) return { text: 'Yüksek', color: 'text-orange-600' };
+    if (drawdown < 30) return { text: 'Yüksek', color: 'text-brand-600' };
     return { text: 'Çok Yüksek', color: 'text-red-600' };
   }
 
   function getVolatilityRating(volatility: number): { text: string; color: string } {
     if (volatility < 10) return { text: 'Düşük', color: 'text-green-600' };
     if (volatility < 20) return { text: 'Orta', color: 'text-yellow-600' };
-    if (volatility < 30) return { text: 'Yüksek', color: 'text-orange-600' };
+    if (volatility < 30) return { text: 'Yüksek', color: 'text-brand-600' };
     return { text: 'Çok Yüksek', color: 'text-red-600' };
   }
 
@@ -113,7 +113,7 @@ export default function ComprehensiveAnalytics() {
     <div className="space-y-6">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
         <div className="flex items-center gap-3 mb-6">
-          <BarChart3 className="w-6 h-6 text-blue-600" />
+          <BarChart3 className="w-6 h-6 text-brand-600" />
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Gelişmiş Analitik</h2>
         </div>
 
@@ -127,18 +127,18 @@ export default function ComprehensiveAnalytics() {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
+              <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-xl p-6 border border-brand-200 dark:border-brand-800">
                 <div className="flex items-center justify-between mb-2">
-                  <Award className="w-8 h-8 text-blue-600" />
+                  <Award className="w-8 h-8 text-brand-600" />
                   <span className={`text-xs font-semibold px-2 py-1 rounded ${getSharpeRating(metrics.sharpeRatio).color} bg-white dark:bg-gray-800`}>
                     {getSharpeRating(metrics.sharpeRatio).text}
                   </span>
                 </div>
-                <h3 className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">Sharpe Oranı</h3>
-                <p className="text-3xl font-bold text-blue-900 dark:text-blue-300">
+                <h3 className="text-sm font-medium text-brand-700 dark:text-brand-400 mb-1">Sharpe Oranı</h3>
+                <p className="text-3xl font-bold text-brand-900 dark:text-brand-300">
                   {metrics.sharpeRatio.toFixed(2)}
                 </p>
-                <p className="text-xs text-blue-600 dark:text-blue-500 mt-2">
+                <p className="text-xs text-brand-600 dark:text-brand-500 mt-2">
                   Risk-ayarlı getiri ölçütü
                 </p>
               </div>
@@ -159,18 +159,18 @@ export default function ComprehensiveAnalytics() {
                 </p>
               </div>
 
-              <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-xl p-6 border border-orange-200 dark:border-orange-800">
+              <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-xl p-6 border border-brand-200 dark:border-brand-800">
                 <div className="flex items-center justify-between mb-2">
-                  <Activity className="w-8 h-8 text-orange-600" />
+                  <Activity className="w-8 h-8 text-brand-600" />
                   <span className={`text-xs font-semibold px-2 py-1 rounded ${getVolatilityRating(metrics.volatility).color} bg-white dark:bg-gray-800`}>
                     {getVolatilityRating(metrics.volatility).text}
                   </span>
                 </div>
-                <h3 className="text-sm font-medium text-orange-700 dark:text-orange-400 mb-1">Volatilite</h3>
-                <p className="text-3xl font-bold text-orange-900 dark:text-orange-300">
+                <h3 className="text-sm font-medium text-brand-700 dark:text-brand-400 mb-1">Volatilite</h3>
+                <p className="text-3xl font-bold text-brand-900 dark:text-brand-300">
                   {metrics.volatility.toFixed(2)}%
                 </p>
-                <p className="text-xs text-orange-600 dark:text-orange-500 mt-2">
+                <p className="text-xs text-brand-600 dark:text-brand-500 mt-2">
                   Yıllık standart sapma
                 </p>
               </div>
@@ -194,7 +194,7 @@ export default function ComprehensiveAnalytics() {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Metrik Açıklamaları</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-2">📊 Sharpe Oranı</h4>
+                  <h4 className="font-semibold text-brand-600 dark:text-brand-400 mb-2">📊 Sharpe Oranı</h4>
                   <p className="text-gray-700 dark:text-gray-300">
                     Risk başına getiri oranı. Yüksek değerler daha iyi risk-getiri dengesi gösterir.
                     1'in üzeri kabul edilebilir, 2'nin üzeri iyidir.
@@ -207,7 +207,7 @@ export default function ComprehensiveAnalytics() {
                   </p>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-orange-600 dark:text-orange-400 mb-2">📈 Volatilite</h4>
+                  <h4 className="font-semibold text-brand-600 dark:text-brand-400 mb-2">📈 Volatilite</h4>
                   <p className="text-gray-700 dark:text-gray-300">
                     Getiri değişkenliği. Düşük volatilite daha stabil bir portföy gösterir. %20'nin altı normal kabul edilir.
                   </p>
@@ -227,20 +227,20 @@ export default function ComprehensiveAnalytics() {
       {techIndicators && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Activity className="w-6 h-6 text-purple-600" />
+            <Activity className="w-6 h-6 text-brand-600" />
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Teknik Göstergeler</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* RSI */}
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-5 border border-purple-200 dark:border-purple-800">
-              <h3 className="text-sm font-medium text-purple-700 dark:text-purple-400 mb-2">RSI (14)</h3>
-              <p className="text-3xl font-bold text-purple-900 dark:text-purple-300 mb-2">
+            <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-xl p-5 border border-brand-200 dark:border-brand-800">
+              <h3 className="text-sm font-medium text-brand-700 dark:text-brand-400 mb-2">RSI (14)</h3>
+              <p className="text-3xl font-bold text-brand-900 dark:text-brand-300 mb-2">
                 {techIndicators.rsi.toFixed(1)}
               </p>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
                 <div
                   className={`h-2.5 rounded-full transition-all ${
-                    techIndicators.rsi <= 30 ? 'bg-green-500' : techIndicators.rsi >= 70 ? 'bg-red-500' : 'bg-purple-500'
+                    techIndicators.rsi <= 30 ? 'bg-green-500' : techIndicators.rsi >= 70 ? 'bg-red-500' : 'bg-brand-500'
                   }`}
                   style={{ width: `${Math.min(techIndicators.rsi, 100)}%` }}
                 />
@@ -260,8 +260,8 @@ export default function ComprehensiveAnalytics() {
             </div>
 
             {/* MACD */}
-            <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 rounded-xl p-5 border border-cyan-200 dark:border-cyan-800">
-              <h3 className="text-sm font-medium text-cyan-700 dark:text-cyan-400 mb-2">MACD</h3>
+            <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-xl p-5 border border-brand-200 dark:border-brand-800">
+              <h3 className="text-sm font-medium text-brand-700 dark:text-brand-400 mb-2">MACD</h3>
               <div className="flex items-center gap-2 mb-2">
                 {techIndicators.macdSignal === 'bullish' ? (
                   <TrendingUp className="w-8 h-8 text-green-600" />
@@ -281,7 +281,7 @@ export default function ComprehensiveAnalytics() {
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                 Histogram: {techIndicators.macdHistogram >= 0 ? '+' : ''}{techIndicators.macdHistogram.toFixed(0)}
               </p>
-              <p className="text-xs text-cyan-600 dark:text-cyan-500">
+              <p className="text-xs text-brand-600 dark:text-brand-500">
                 {techIndicators.macdSignal === 'bullish'
                   ? 'MACD sinyal çizgisinin üzerinde ve yükseliyor'
                   : techIndicators.macdSignal === 'bearish'

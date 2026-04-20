@@ -35,13 +35,13 @@ export function ConfirmDialog({
   const confirmColors = {
     danger: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
     warning: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500',
-    info: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+    info: 'bg-brand-600 hover:bg-brand-700 focus:ring-brand-500',
   };
 
   const iconColors = {
     danger: 'text-red-600 bg-red-100 dark:bg-red-900/30',
     warning: 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30',
-    info: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30',
+    info: 'text-brand-600 bg-brand-100 dark:bg-brand-900/30',
   };
 
   return (

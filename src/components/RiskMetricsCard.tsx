@@ -20,8 +20,8 @@ function formatDate(iso: string): string {
 
 function gradeSharpe(s: number | null): { label: string; color: string } {
   if (s === null) return { label: '–', color: 'text-gray-500' };
-  if (s >= 2) return { label: 'Mükemmel', color: 'text-emerald-600' };
-  if (s >= 1) return { label: 'İyi', color: 'text-emerald-500' };
+  if (s >= 2) return { label: 'Mükemmel', color: 'text-accent-600' };
+  if (s >= 1) return { label: 'İyi', color: 'text-accent-500' };
   if (s >= 0.5) return { label: 'Vasat', color: 'text-amber-500' };
   if (s >= 0) return { label: 'Zayıf', color: 'text-red-500' };
   return { label: 'Negatif', color: 'text-red-600' };
@@ -98,7 +98,7 @@ export default function RiskMetricsCard() {
             label="Yıllık Getiri"
             value={`%${(metrics.annualizedReturn * 100).toFixed(1)}`}
             sub="Annualized"
-            color={metrics.annualizedReturn >= 0 ? 'text-emerald-600' : 'text-red-600'}
+            color={metrics.annualizedReturn >= 0 ? 'text-accent-600' : 'text-red-600'}
           />
           <Stat
             label="Volatilite"
@@ -143,14 +143,14 @@ export default function RiskMetricsCard() {
             )}
           </div>
 
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-1">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+          <div className="rounded-xl border border-accent-200 dark:border-accent-900 bg-accent-50/50 dark:bg-accent-950/20 p-3 space-y-1">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-accent-700 dark:text-accent-400 uppercase tracking-wider">
               <TrendingUp size={11} /> Pozitif Gün Oranı
             </div>
-            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+            <div className="text-lg font-bold text-accent-700 dark:text-accent-400">
               %{metrics.positiveDaysPct.toFixed(0)}
             </div>
-            <div className="text-xs text-emerald-600 dark:text-emerald-500">
+            <div className="text-xs text-accent-600 dark:text-accent-500">
               {Math.round((metrics.positiveDaysPct / 100) * metrics.observationDays)} / {metrics.observationDays} gün
             </div>
             {metrics.bestDay && metrics.worstDay && (

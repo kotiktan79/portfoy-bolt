@@ -228,11 +228,11 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
       case 'opportunity':
         return <Lightbulb className="text-green-600" size={20} />;
       case 'rebalance':
-        return <Target className="text-blue-600" size={20} />;
+        return <Target className="text-brand-600" size={20} />;
       case 'risk':
         return <AlertTriangle className="text-red-600" size={20} />;
       default:
-        return <Brain className="text-purple-600" size={20} />;
+        return <Brain className="text-brand-600" size={20} />;
     }
   };
 
@@ -243,7 +243,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
       case 'opportunity':
         return 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20';
       case 'rebalance':
-        return 'border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20';
+        return 'border-brand-200 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20';
       case 'risk':
         return 'border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20';
       default:
@@ -258,7 +258,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
       case 'medium':
         return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
       case 'low':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+        return 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400';
       default:
         return 'bg-slate-100 text-slate-700 dark:bg-gray-700 dark:text-gray-300';
     }
@@ -268,7 +268,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-slate-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Brain className="text-purple-600" size={24} />
+          <Brain className="text-brand-600" size={24} />
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               AI Portföy Danışmanı
@@ -283,7 +283,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
           onClick={() => setUseAI(!useAI)}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
             useAI
-              ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
+              ? 'bg-gradient-to-r from-brand-600 to-brand-600 text-white shadow-lg'
               : 'bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
           }`}
         >
@@ -298,7 +298,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
             onClick={() => setActiveTab('overview')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap transition-colors ${
               activeTab === 'overview'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -309,7 +309,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
             onClick={() => setActiveTab('risk')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap transition-colors ${
               activeTab === 'risk'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -320,7 +320,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
             onClick={() => setActiveTab('diversification')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap transition-colors ${
               activeTab === 'diversification'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -331,7 +331,7 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
             onClick={() => setActiveTab('suggestions')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap transition-colors ${
               activeTab === 'suggestions'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -343,14 +343,14 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mb-4"></div>
           <p className="text-slate-500 dark:text-gray-400">
             {useAI ? 'AI analiz yapıyor...' : 'Analiz ediliyor...'}
           </p>
         </div>
       ) : useAI && aiAnalysis ? (
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-6 border border-purple-200 dark:border-purple-700">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="bg-gradient-to-br from-brand-50 to-brand-50 dark:from-brand-900/20 dark:to-brand-900/20 rounded-lg p-6 border border-brand-200 dark:border-brand-700">
+          <div className="prose pbrand-sm dark:pbrand-invert max-w-none">
             <div className="whitespace-pre-wrap text-slate-700 dark:text-gray-300 leading-relaxed">
               {aiAnalysis}
             </div>
