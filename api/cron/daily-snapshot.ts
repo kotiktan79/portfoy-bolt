@@ -297,20 +297,31 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
 
     // Uluslararası hisseler (USD/EUR cinsinden → TRY'ye çevir)
     if (intlHoldings.length > 0) {
-      const symbols = intlHoldings.map(h => h.symbol).join(',');
-      const prices = await fetchYahooPrices(symbols);
+      // Avrupa hisseleri Yahoo'da özel ticker'lar kullanır (.AS/.DE/.PA/.HE)
+      const EURO_YAHOO: Record<string, string> = {
+        ASML: 'ASML.AS', ADYEN: 'ADYEN.AS', PROSUS: 'PRX.AS',
+        LVMH: 'MC.PA', TTE: 'TTE.PA', OR: 'OR.PA', SAN: 'SAN.PA', AIR: 'AIR.PA', SU: 'SU.PA',
+        SAP: 'SAP.DE', BMW: 'BMW.DE', SIE: 'SIE.DE',
+        NOKIA: 'NOKIA.HE',
+      };
+      // Her hisse için doğru ticker'ı topla
+      const tickerMap: Record<string, string> = {};
+      for (const h of intlHoldings) {
+        const sym = h.symbol.toUpperCase();
+        tickerMap[sym] = EURO_YAHOO[sym] || sym;
+      }
+      const yahooSymbols = Object.values(tickerMap).join(',');
+      const prices = await fetchYahooPrices(yahooSymbols);
       const usdTry = await fetchUsdTry();
+      const eurTry = await fetchEurTry();
 
       for (const h of intlHoldings) {
-        const price = prices[h.symbol];
+        const sym = h.symbol.toUpperCase();
+        const yahooTicker = tickerMap[sym];
+        const price = prices[yahooTicker];
         if (price) {
-          // Avrupa hisseleri EUR, ABD hisseleri USD
-          const isEuropean = ['ASML', 'LVMH', 'SAP', 'TTE', 'OR', 'SAN', 'AIR', 'SU', 'NOKIA', 'BMW', 'SIE', 'ADYEN', 'PROSUS'].includes(h.symbol.toUpperCase());
-          let tryPrice = price * usdTry;
-          if (isEuropean) {
-            const eurTry = await fetchEurTry();
-            tryPrice = price * eurTry;
-          }
+          const isEuropean = yahooTicker in EURO_YAHOO || yahooTicker !== sym;
+          const tryPrice = price * (isEuropean ? eurTry : usdTry);
           await supabase.from('holdings').update({ current_price: tryPrice, updated_at: new Date().toISOString() }).eq('id', h.id);
           result.updated++;
           result.details[h.symbol] = tryPrice;
