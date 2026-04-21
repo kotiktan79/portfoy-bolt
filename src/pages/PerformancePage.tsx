@@ -200,9 +200,7 @@ export default function PerformancePage() {
         {/* Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
           {loading ? (
-            <div className="flex items-center justify-center h-72">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
-            </div>
+            <div className="h-72 rounded-xl bg-gradient-to-b from-slate-100 to-slate-200 dark:from-gray-800 dark:to-gray-900 animate-pulse" />
           ) : chartData.length === 0 ? (
             <div className="flex items-center justify-center h-72 text-gray-500 dark:text-gray-400">
               Bu döneme ait veri bulunamadı.

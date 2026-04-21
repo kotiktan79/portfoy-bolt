@@ -13,6 +13,7 @@ import { EditHoldingModal } from '../components/EditHoldingModal';
 import { HoldingRow } from '../components/HoldingRow';
 import { HoldingCard } from '../components/HoldingCard';
 import { getSparklineData } from '../services/priceHistoryService';
+import { SkeletonRow, SkeletonCard } from '../components/ui/Skeleton';
 import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
 import { DailyActionPlan } from '../components/DailyActionPlan';
@@ -37,11 +38,7 @@ const Security2FA = lazy(() => import('../components/Security2FA').then(m => ({ 
 const AutoRebalanceSettings = lazy(() => import('../components/AutoRebalanceSettings').then(m => ({ default: m.AutoRebalanceSettings })));
 
 function ChartLoader() {
-  return (
-    <div className="flex items-center justify-center py-8">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
-    </div>
-  );
+  return <div className="h-full w-full animate-pulse rounded-xl bg-gradient-to-b from-slate-100 to-slate-200 dark:from-gray-800 dark:to-gray-900" />;
 }
 
 export default function HomePage() {
@@ -249,10 +246,15 @@ export default function HomePage() {
             </div>
             <div className="overflow-x-auto">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-200 border-t-brand-600 dark:border-gray-600 dark:border-t-brand-400"></div>
-                  <p className="mt-3 text-sm text-slate-400 dark:text-gray-500">Yukleniyor...</p>
-                </div>
+                viewMode === 'grid' ? (
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+                  </div>
+                ) : (
+                  <div className="p-4 space-y-1">
+                    {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} cols={5} />)}
+                  </div>
+                )
               ) : holdings.length === 0 ? (
                 <div className="text-center py-16 px-4">
                   <div className="w-16 h-16 bg-slate-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">

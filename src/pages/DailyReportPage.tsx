@@ -72,10 +72,17 @@ export default function DailyReportPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-950">
-        <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Raporlar yükleniyor...</p>
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-950 p-4">
+        <div className="max-w-4xl mx-auto space-y-3">
+          <div className="h-8 w-48 rounded-lg bg-slate-200 dark:bg-gray-800 animate-pulse" />
+          <div className="h-12 rounded-2xl bg-slate-200 dark:bg-gray-800 animate-pulse" />
+          <div className="h-40 rounded-2xl bg-gradient-to-b from-slate-200 to-slate-100 dark:from-gray-800 dark:to-gray-900 animate-pulse" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 rounded-xl bg-slate-200 dark:bg-gray-800 animate-pulse" />
+            ))}
+          </div>
+          <div className="h-64 rounded-2xl bg-gradient-to-b from-slate-200 to-slate-100 dark:from-gray-800 dark:to-gray-900 animate-pulse" />
         </div>
       </div>
     );

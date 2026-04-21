@@ -133,8 +133,10 @@ export default function IncomeCalendar({ onRefresh }: IncomeCalendarProps) {
 
       {/* Gelir Listesi (kronolojik) */}
       {loading ? (
-        <div className="flex justify-center py-6">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600" />
+        <div className="space-y-2 py-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          ))}
         </div>
       ) : records.length === 0 ? (
         <div className="text-center py-6">

@@ -20,10 +20,17 @@ const DailyReportPage = lazy(() => import('./pages/DailyReportPage'));
 
 function PageLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="flex flex-col items-center gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">Yükleniyor...</p>
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 p-4">
+      <div className="max-w-7xl mx-auto space-y-4">
+        <div className="h-10 w-64 rounded-xl bg-slate-200 dark:bg-gray-800 animate-pulse" />
+        <div className="h-32 rounded-2xl bg-gradient-to-b from-slate-200 to-slate-100 dark:from-gray-800 dark:to-gray-900 animate-pulse" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 h-72 rounded-2xl bg-gradient-to-b from-slate-200 to-slate-100 dark:from-gray-800 dark:to-gray-900 animate-pulse" />
+          <div className="space-y-4">
+            <div className="h-32 rounded-2xl bg-slate-200 dark:bg-gray-800 animate-pulse" />
+            <div className="h-32 rounded-2xl bg-slate-200 dark:bg-gray-800 animate-pulse" />
+          </div>
+        </div>
       </div>
     </div>
   );

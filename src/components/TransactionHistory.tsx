@@ -21,10 +21,12 @@ export function TransactionHistory() {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Son İşlemler</h3>
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-700"></div>
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-800">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Son İşlemler</h3>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-lg bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          ))}
         </div>
       </div>
     );
