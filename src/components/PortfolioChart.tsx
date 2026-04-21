@@ -166,9 +166,9 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
   };
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col gap-3 min-h-0">
       {showControls && (
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3 flex-shrink-0">
           <div className="flex gap-2">
             <button
               onClick={() => setChartType('area')}
@@ -217,7 +217,9 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
           </label>
         </div>
       )}
-      {renderChart()}
+      <div className="flex-1 min-h-0">
+        {renderChart()}
+      </div>
     </div>
   );
 }

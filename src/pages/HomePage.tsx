@@ -170,7 +170,7 @@ export default function HomePage() {
                         Detay →
                       </button>
                     </div>
-                    <div className="h-64">
+                    <div className="h-72 md:h-64">
                       <Suspense fallback={<ChartLoader />}>
                         {historicalData.length > 0 ? (
                           <PortfolioChart data={historicalData} type="area" />
