@@ -246,10 +246,10 @@ export default function AIAdvisor() {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <div className="card-secondary p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-          <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-8 bg-slate-200 dark:bg-gray-800 rounded w-1/3"></div>
+          <div className="h-64 bg-gradient-to-b from-slate-100 to-slate-200 dark:from-gray-800 dark:to-gray-900 rounded-xl"></div>
         </div>
       </div>
     );
@@ -257,98 +257,89 @@ export default function AIAdvisor() {
 
   if (holdings.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
-        <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-          AI Analiz için varlık gerekli
-        </h3>
-        <p className="text-gray-600 dark:text-gray-400">
-          Portföyünüze varlık ekleyin ve AI danışmanınızı kullanmaya başlayın.
-        </p>
+      <div className="card-secondary">
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 mb-4 shadow-lg shadow-brand-500/20">
+            <Brain className="w-10 h-10 text-white" />
+          </div>
+          <h3 className="t-h2 mb-1">AI Analiz için varlık gerekli</h3>
+          <p className="t-caption max-w-sm">
+            Portföyünüze varlık ekleyin; AI danışmanınız risk profili, sinyaller ve öneriler üretecek.
+          </p>
+        </div>
       </div>
     );
   }
 
+  const tabs = [
+    { id: 'overview' as const, label: 'Genel Bakış', icon: Target },
+    { id: 'signals' as const, label: 'Al/Sat Sinyalleri', icon: Activity },
+    { id: 'suggestions' as const, label: 'Akıllı Öneriler', icon: Lightbulb },
+    { id: 'chat' as const, label: 'AI Sohbet', icon: MessageSquare },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-brand-600 to-brand-600 rounded-xl shadow-lg p-6 text-white">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-            <Brain className="w-8 h-8" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">AI Portföy Danışmanı</h2>
-            <p className="text-brand-100">Kişiselleştirilmiş öneriler ve analizler</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => runAnalysis(holdings)}
-            disabled={analyzing}
-            className="flex items-center gap-2 px-6 py-3 bg-white text-brand-600 rounded-lg hover:bg-brand-50 disabled:opacity-50 font-semibold transition-colors"
-          >
-            <Sparkles className="w-5 h-5" />
-            {analyzing ? 'Analiz ediliyor...' : 'Yeniden Analiz Et'}
-          </button>
-          {portfolioScore && (
-            <div className="flex items-center gap-2 px-4 py-3 bg-white/20 rounded-lg backdrop-blur-sm">
-              <Award className="w-6 h-6" />
-              <div>
-                <p className="text-xs text-brand-100">Portföy Notu</p>
-                <p className="text-2xl font-bold">{portfolioScore.grade}</p>
-              </div>
+    <div className="space-y-5">
+      {/* Hero — modern glassmorphism with brand gradient */}
+      <div className="card-hero p-5 md:p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="icon-badge icon-badge-brand !p-3 !rounded-2xl">
+              <Brain className="w-6 h-6" />
             </div>
-          )}
+            <div>
+              <h2 className="t-h2">AI Portföy Danışmanı</h2>
+              <p className="t-caption">Kişiselleştirilmiş öneriler ve piyasa analizleri</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {portfolioScore && (
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white dark:bg-gray-800 ring-1 ring-slate-200 dark:ring-gray-700">
+                <Award className="w-5 h-5 text-amber-500" />
+                <div>
+                  <p className="t-eyebrow !text-[9px]">Portföy Notu</p>
+                  <p className="text-xl font-black text-brand-600 dark:text-brand-400 leading-none">{portfolioScore.grade}</p>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => runAnalysis(holdings)}
+              disabled={analyzing}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-br from-brand-600 to-brand-700 hover:from-brand-500 text-white rounded-xl shadow-md shadow-brand-500/20 hover:shadow-brand-500/40 transition-all font-semibold text-sm disabled:opacity-50 hover-lift"
+            >
+              <Sparkles className="w-4 h-4" />
+              {analyzing ? 'Analiz...' : 'Yeniden Analiz'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
-        <div className="flex gap-2 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              activeTab === 'overview'
-                ? 'bg-brand-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            Genel Bakış
-          </button>
-          <button
-            onClick={() => setActiveTab('signals')}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              activeTab === 'signals'
-                ? 'bg-brand-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            Al/Sat Sinyalleri
-          </button>
-          <button
-            onClick={() => setActiveTab('suggestions')}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              activeTab === 'suggestions'
-                ? 'bg-brand-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            Akıllı Öneriler
-          </button>
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              activeTab === 'chat'
-                ? 'bg-brand-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            AI Sohbet
-          </button>
+      {/* Tabs — pill style */}
+      <div className="card-secondary p-1.5">
+        <div className="flex gap-1 overflow-x-auto">
+          {tabs.map(t => {
+            const Icon = t.icon;
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm whitespace-nowrap transition-all ${
+                  isActive
+                    ? 'bg-brand-100 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-800/50'
+                }`}
+              >
+                <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
+                {t.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {activeTab === 'overview' && riskProfile && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="flex items-center gap-3 mb-6">
             <Shield className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Risk Profili</h3>
@@ -452,7 +443,7 @@ export default function AIAdvisor() {
       )}
 
       {activeTab === 'overview' && sentiment && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="flex items-center gap-3 mb-6">
             <Activity className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Piyasa Sentiment</h3>
@@ -507,7 +498,7 @@ export default function AIAdvisor() {
       )}
 
       {activeTab === 'overview' && recommendations.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="flex items-center gap-3 mb-6">
             <Lightbulb className="w-6 h-6 text-yellow-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -550,7 +541,7 @@ export default function AIAdvisor() {
       )}
 
       {activeTab === 'overview' && insights.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="flex items-center gap-3 mb-6">
             <Sparkles className="w-6 h-6 text-brand-600" />
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -610,7 +601,7 @@ export default function AIAdvisor() {
             </div>
           )}
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+          <div className="card-secondary p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
               Al/Sat Sinyalleri ({buySellSignals.length})
             </h3>
@@ -662,7 +653,7 @@ export default function AIAdvisor() {
       )}
 
       {activeTab === 'suggestions' && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
             Akıllı Öneriler ({smartSuggestions.length})
           </h3>
@@ -722,7 +713,7 @@ export default function AIAdvisor() {
       )}
 
       {activeTab === 'chat' && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <MessageSquare className="w-6 h-6 text-brand-600" />
