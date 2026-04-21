@@ -130,9 +130,7 @@ export function AdvancedChart({ symbol, currentPrice }: AdvancedChartProps) {
       </div>
 
       {loading ? (
-        <div className="h-96 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
-        </div>
+        <div className="h-96 rounded-xl bg-gradient-to-b from-slate-100 to-slate-200 dark:from-gray-800 dark:to-gray-900 animate-pulse" />
       ) : (
         <>
           {indicator === 'none' && (

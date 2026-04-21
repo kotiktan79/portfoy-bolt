@@ -40,8 +40,10 @@ export function AchievementBadges({ stats }: AchievementBadgesProps) {
     return (
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-gray-100 mb-4">Başarılar</h3>
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-700 dark:border-gray-300"></div>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          ))}
         </div>
       </div>
     );

@@ -166,9 +166,10 @@ export default function BinancePage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <RefreshCw size={24} className="text-amber-500 animate-spin mb-3" />
-            <p className="text-sm text-gray-500">Binance'den bakiye çekiliyor...</p>
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-14 rounded-xl bg-slate-100 dark:bg-gray-800 animate-pulse" />
+            ))}
           </div>
         )}
 

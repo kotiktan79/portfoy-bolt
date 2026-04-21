@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Plus, RefreshCw, Moon, Sun, Bell, BarChart3,
   Activity, Download, Shield, Palette,
-  PieChart, Scale, Zap, Database,
-  Target, Menu, X, Trash2, MoreHorizontal, Wallet, Eye, Globe
+  PieChart, Database,
+  Target, Menu, X, Trash2, MoreHorizontal, Globe
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -23,8 +23,8 @@ interface DashboardHeaderProps {
   onShow2FA: () => void;
   onShowAnalytics: () => void;
   onShowAllocation: () => void;
-  onShowRebalancing: () => void;
-  onShowScenario: () => void;
+  onShowRebalancing?: () => void;
+  onShowScenario?: () => void;
   onShowAIAdvisor: () => void;
   onShowPerformance: () => void;
   onShowRebalanceModal: () => void;
@@ -46,8 +46,6 @@ export function DashboardHeader({
   onShow2FA,
   onShowAnalytics,
   onShowAllocation,
-  onShowRebalancing,
-  onShowScenario,
   onShowAIAdvisor,
   onShowPerformance,
   onShowRebalanceModal,
@@ -311,166 +309,103 @@ export function DashboardHeader({
 
       {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div
-          className={`lg:hidden border-t px-4 py-3 ${
-            isDark ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'
-          }`}
-        >
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-            {/* Navigation items */}
-            <button
-              onClick={() => { onShowAIAdvisor(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Activity size={18} className="flex-shrink-0" /> AI Danışman
-            </button>
-            <button
-              onClick={() => { onShowAnalytics(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <BarChart3 size={18} className="flex-shrink-0" /> Analitik
-            </button>
-            <button
-              onClick={() => { onShowAllocation(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <PieChart size={18} className="flex-shrink-0" /> Dağılım
-            </button>
-            <button
-              onClick={() => { onShowRebalancing(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Scale size={18} className="flex-shrink-0" /> Rebalance
-            </button>
-            <button
-              onClick={() => { onShowScenario(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Zap size={18} className="flex-shrink-0" /> Senaryo
-            </button>
-            <button
-              onClick={() => { onShowPerformance(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <TrendingUp size={18} className="flex-shrink-0" /> Performans
-            </button>
-            <button
-              onClick={() => { navigate('/binance'); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Wallet size={18} className="flex-shrink-0" /> Binance
-            </button>
-            <button
-              onClick={() => { navigate('/watchlist'); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Eye size={18} className="flex-shrink-0" /> İzleme
-            </button>
+        <>
+          <div
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden fixed inset-0 bg-black/50 z-40 animate-fade-in"
+          />
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-3xl z-50 shadow-2xl animate-slide-up safe-area-inset-bottom max-h-[85vh] overflow-y-auto">
+            <div className="pt-3 pb-1">
+              <div className="mx-auto w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Hızlı Erişim</h3>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                aria-label="Kapat"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            {/* Divider */}
-            <div
-              className={`col-span-2 sm:col-span-3 border-t my-1 ${
-                isDark ? 'border-gray-800' : 'border-gray-200'
-              }`}
-            />
+            {/* Modal-trigger actions */}
+            <div className="px-4 pb-3">
+              <p className="t-eyebrow mb-2 px-1">İşlemler</p>
+              <div className="grid grid-cols-2 gap-2">
+                <DrawerItem icon={Bell} label="Alarmlar" tone="amber" onClick={() => { onShowAlerts(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Target} label="Hızlı Rebalance" tone="brand" onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Download} label="Yedekle / Aktar" tone="accent" onClick={() => { onShowExport(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Database} label="Backup / Restore" tone="brand" onClick={() => { onShowBackup(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Shield} label="2FA Güvenlik" tone="amber" onClick={() => { onShow2FA(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Palette} label="Tema Değiştir" tone="brand" onClick={() => { onThemeCycle(); setMobileMenuOpen(false); }} />
+              </div>
+            </div>
 
-            {/* Utility items */}
-            <button
-              onClick={() => { onShowAlerts(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Bell size={18} className="flex-shrink-0" /> Alarmlar
-            </button>
-            <button
-              onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Target size={18} className="flex-shrink-0" /> Hızlı Rebalance
-            </button>
-            <button
-              onClick={() => { onShowExport(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <Download size={18} className="flex-shrink-0" /> Dışa Aktar
-            </button>
-            <button
-              onClick={() => { onToggleDark(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              {isDark ? <Sun size={18} className="flex-shrink-0" /> : <Moon size={18} className="flex-shrink-0" />}
-              {isDark ? 'Açık Mod' : 'Karanlık Mod'}
-            </button>
-            <button
-              onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-bold transition-colors ${
-                isDark
-                  ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  : 'text-gray-700 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              {language === 'tr' ? '🌐 EN' : '🌐 TR'}
-            </button>
-            <button
-              onClick={() => { clearCache(); setMobileMenuOpen(false); }}
-              className={`flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                isDark
-                  ? 'text-red-400 hover:bg-red-900/30'
-                  : 'text-red-500 hover:bg-red-50'
-              }`}
-            >
-              <Trash2 size={18} className="flex-shrink-0" /> Cache Temizle
-            </button>
+            {/* Settings strip */}
+            <div className="px-4 pb-4 border-t border-slate-100 dark:border-gray-800 pt-3">
+              <p className="t-eyebrow mb-2 px-1">Ayarlar</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { onToggleDark(); }}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 text-sm font-semibold active:bg-slate-200 dark:active:bg-gray-700"
+                >
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                  {isDark ? 'Açık Mod' : 'Karanlık'}
+                </button>
+                <button
+                  onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 text-sm font-bold active:bg-slate-200 dark:active:bg-gray-700"
+                >
+                  🌐 {language === 'tr' ? 'EN' : 'TR'}
+                </button>
+                {!notificationsEnabled && (
+                  <button
+                    onClick={() => { onEnableNotifications(); setMobileMenuOpen(false); }}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 text-sm font-semibold active:bg-amber-200"
+                  >
+                    <Bell size={16} />
+                    Bildirim
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => { clearCache(); setMobileMenuOpen(false); }}
+                className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              >
+                <Trash2 size={14} />
+                Cache Temizle
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </header>
+  );
+}
+
+interface DrawerItemProps {
+  icon: typeof Bell;
+  label: string;
+  tone: 'brand' | 'accent' | 'amber';
+  onClick: () => void;
+}
+
+function DrawerItem({ icon: Icon, label, tone, onClick }: DrawerItemProps) {
+  const toneClass =
+    tone === 'amber' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400' :
+    tone === 'accent' ? 'bg-accent-100 dark:bg-accent-950/40 text-accent-700 dark:text-accent-400' :
+    'bg-brand-100 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400';
+
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl bg-slate-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 active:bg-slate-100 dark:active:bg-gray-800 transition-colors"
+    >
+      <div className={`p-2 rounded-xl ${toneClass}`}>
+        <Icon size={18} />
+      </div>
+      <span className="text-xs font-medium text-center leading-tight">{label}</span>
+    </button>
   );
 }

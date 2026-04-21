@@ -34,10 +34,12 @@ export function RiskMetrics() {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Risk Metrikleri</h3>
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-700"></div>
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-800">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Risk Metrikleri</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          ))}
         </div>
       </div>
     );

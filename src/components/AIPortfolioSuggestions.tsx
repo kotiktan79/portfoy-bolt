@@ -342,9 +342,12 @@ export function AIPortfolioSuggestions({ holdings, totalValue }: AIPortfolioSugg
       )}
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mb-4"></div>
-          <p className="text-slate-500 dark:text-gray-400">
+        <div className="space-y-3">
+          <div className="h-4 w-48 rounded bg-slate-200 dark:bg-gray-800 animate-pulse" />
+          <div className="h-20 rounded-xl bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          <div className="h-20 rounded-xl bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          <div className="h-20 rounded-xl bg-slate-100 dark:bg-gray-800 animate-pulse" />
+          <p className="text-xs text-center text-slate-400 italic">
             {useAI ? 'AI analiz yapıyor...' : 'Analiz ediliyor...'}
           </p>
         </div>
