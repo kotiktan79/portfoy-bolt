@@ -135,7 +135,7 @@ export default function ScenarioSimulator() {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <div className="card-secondary p-6">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
           <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
@@ -148,7 +148,7 @@ export default function ScenarioSimulator() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <div className="card-secondary p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Zap className="w-6 h-6 text-brand-600" />
@@ -289,7 +289,7 @@ export default function ScenarioSimulator() {
       </div>
 
       {scenarioResult && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
             Senaryo Sonuçları: {scenarioResult.scenario_name}
           </h3>
@@ -442,7 +442,7 @@ export default function ScenarioSimulator() {
       )}
 
       {showMonteCarlo && monteCarloResult && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
             Monte Carlo Simülasyonu (1000 İterasyon)
           </h3>

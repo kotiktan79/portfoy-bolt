@@ -95,7 +95,7 @@ export default function ComprehensiveAnalytics() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="animate-pulse space-y-4">
             <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -111,7 +111,7 @@ export default function ComprehensiveAnalytics() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <div className="card-secondary p-6">
         <div className="flex items-center gap-3 mb-6">
           <BarChart3 className="w-6 h-6 text-brand-600" />
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Gelişmiş Analitik</h2>
@@ -225,7 +225,7 @@ export default function ComprehensiveAnalytics() {
       </div>
 
       {techIndicators && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+        <div className="card-secondary p-6">
           <div className="flex items-center gap-3 mb-6">
             <Activity className="w-6 h-6 text-brand-600" />
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Teknik Göstergeler</h2>
@@ -291,7 +291,7 @@ export default function ComprehensiveAnalytics() {
             </div>
 
             {/* Bollinger Bands */}
-            <div className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-xl p-5 border border-amber-200 dark:border-amber-800">
+            <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-xl p-5 border border-amber-200 dark:border-amber-800">
               <h3 className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-2">Bollinger Bantları</h3>
               <p className="text-3xl font-bold text-amber-900 dark:text-amber-300 mb-2">
                 %{techIndicators.bollingerPctB.toFixed(0)}
