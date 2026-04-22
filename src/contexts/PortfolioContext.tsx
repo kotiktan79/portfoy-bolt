@@ -8,6 +8,8 @@ import {
   resetAndReconnectWebSocket,
   subscribeToConnectionStatus,
   subscribeToPriceUpdates,
+  fetchUSDTRYRate,
+  fetchEURTRYRate,
   ConnectionStatus,
   PriceUpdate
 } from '../services/priceService';
@@ -121,6 +123,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [totalCashValue, setTotalCashValue] = useState(0);
+  const [liveUsdRate, setLiveUsdRate] = useState<number>(DEFAULT_USD_TRY_RATE);
+  const [liveEurRate, setLiveEurRate] = useState<number>(DEFAULT_USD_TRY_RATE * 1.08);
 
   // Filter/Sort
   const [searchQuery, setSearchQuery] = useState('');
@@ -137,6 +141,25 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   // Keep ref in sync
   useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
+
+  // Live FX rates (TRY-base) — refreshed every 5 min, used in portfolioMetrics normalization
+  useEffect(() => {
+    let cancelled = false;
+    const loadRates = async () => {
+      try {
+        const [usd, eur] = await Promise.all([fetchUSDTRYRate(), fetchEURTRYRate()]);
+        if (!cancelled) {
+          if (usd > 1) setLiveUsdRate(usd);
+          if (eur > 1) setLiveEurRate(eur);
+        }
+      } catch {
+        // keep previous rates on failure
+      }
+    };
+    loadRates();
+    const id = setInterval(loadRates, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   async function loadCashValue() {
     const val = await getTotalCashValue();
@@ -603,15 +626,15 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     // Separate investment holdings from cash holdings
     const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
 
-    // FX rates (TRY-base) — read from cash holdings if present, else fallback
+    // FX rates (TRY-base) — prefer live fetched rate, fallback to USD cash holding, then default
     const usdHolding = holdings.find(h => h.symbol === 'USD');
-    const usdRate = usdHolding?.current_price && usdHolding.current_price > 1
-      ? usdHolding.current_price
-      : DEFAULT_USD_TRY_RATE;
+    const usdRate = liveUsdRate > 1
+      ? liveUsdRate
+      : (usdHolding?.current_price && usdHolding.current_price > 1 ? usdHolding.current_price : DEFAULT_USD_TRY_RATE);
     const eurHolding = holdings.find(h => h.symbol === 'EUR');
-    const eurRate = eurHolding?.current_price && eurHolding.current_price > 1
-      ? eurHolding.current_price
-      : usdRate * 1.08;
+    const eurRate = liveEurRate > 1
+      ? liveEurRate
+      : (eurHolding?.current_price && eurHolding.current_price > 1 ? eurHolding.current_price : usdRate * 1.08);
     const gbpHolding = holdings.find(h => h.symbol === 'GBP');
     const gbpRate = gbpHolding?.current_price && gbpHolding.current_price > 1
       ? gbpHolding.current_price
@@ -647,7 +670,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       totalCurrentValueUSD: totalCurrentValue / usdRate,
       grandTotalUSD: grandTotal / usdRate,
     };
-  }, [holdings, totalCashValue]);
+  }, [holdings, totalCashValue, liveUsdRate, liveEurRate]);
 
   const filteredAndSortedHoldings = useMemo(() => {
     return holdings
