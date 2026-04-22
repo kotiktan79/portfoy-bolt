@@ -603,8 +603,30 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     // Separate investment holdings from cash holdings
     const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
 
-    const totalInvestment = investmentHoldings.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
-    const totalCurrentValue = investmentHoldings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+    // FX rates (TRY-base) — read from cash holdings if present, else fallback
+    const usdHolding = holdings.find(h => h.symbol === 'USD');
+    const usdRate = usdHolding?.current_price && usdHolding.current_price > 1
+      ? usdHolding.current_price
+      : DEFAULT_USD_TRY_RATE;
+    const eurHolding = holdings.find(h => h.symbol === 'EUR');
+    const eurRate = eurHolding?.current_price && eurHolding.current_price > 1
+      ? eurHolding.current_price
+      : usdRate * 1.08;
+    const gbpHolding = holdings.find(h => h.symbol === 'GBP');
+    const gbpRate = gbpHolding?.current_price && gbpHolding.current_price > 1
+      ? gbpHolding.current_price
+      : usdRate * 1.27;
+    const toTRY = (amount: number, ccy?: string | null) => {
+      const c = (ccy || 'TRY').toUpperCase();
+      if (c === 'TRY') return amount;
+      if (c === 'USD') return amount * usdRate;
+      if (c === 'EUR') return amount * eurRate;
+      if (c === 'GBP') return amount * gbpRate;
+      return amount; // unknown ccy → treat as TRY (safe fallback)
+    };
+
+    const totalInvestment = investmentHoldings.reduce((sum, h) => sum + toTRY(h.purchase_price * h.quantity, h.currency), 0);
+    const totalCurrentValue = investmentHoldings.reduce((sum, h) => sum + toTRY(h.current_price * h.quantity, h.currency), 0);
     const totalRealized = holdings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
     const unrealizedPnl = totalCurrentValue - totalInvestment;
     const totalProfitLoss = unrealizedPnl + totalRealized;
@@ -612,11 +634,6 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
     // Grand total includes cash
     const grandTotal = totalCurrentValue + totalCashValue;
-
-    const usdHolding = holdings.find(h => h.symbol === 'USD');
-    const usdRate = usdHolding?.current_price && usdHolding.current_price > 1
-      ? usdHolding.current_price
-      : DEFAULT_USD_TRY_RATE;
     return {
       totalInvestment,
       totalCurrentValue,
