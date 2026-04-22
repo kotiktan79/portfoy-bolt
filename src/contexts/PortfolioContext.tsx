@@ -56,7 +56,7 @@ interface PortfolioContextType {
   enableNotifications: () => Promise<void>;
 
   // Actions
-  handleAddHolding: (newHolding: { symbol: string; asset_type: AssetType; purchase_price: number; quantity: number; current_price: number }) => Promise<void>;
+  handleAddHolding: (newHolding: { symbol: string; asset_type: AssetType; purchase_price: number; quantity: number; current_price: number; currency?: string; source?: string; price_notes?: string }) => Promise<void>;
   handleUpdateHolding: (id: string, updates: { symbol: string; asset_type: AssetType; purchase_price: number; quantity: number }) => Promise<void>;
   handleDeleteHolding: (id: string) => void;
   pendingDeleteId: string | null;
@@ -525,10 +525,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     purchase_price: number;
     quantity: number;
     current_price: number;
+    currency?: string;
+    source?: string;
+    price_notes?: string;
   }) => {
     const { data, error } = await supabase
       .from('holdings')
-      .insert([{ ...newHolding, currency: 'TRY' }])
+      .insert([{ currency: 'TRY', ...newHolding }])
       .select()
       .maybeSingle();
 

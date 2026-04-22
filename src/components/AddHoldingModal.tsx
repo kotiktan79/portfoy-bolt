@@ -10,17 +10,32 @@ interface AddHoldingModalProps {
     purchase_price: number;
     quantity: number;
     current_price: number;
+    currency?: string;
+    source?: string;
+    price_notes?: string;
   }) => Promise<void>;
 }
+
+const ASSET_CURRENCIES = ['TRY', 'USD', 'EUR', 'GBP', 'CHF', 'RON', 'RUB'] as const;
+const PLATFORMS = ['Manuel', 'Revolut', 'Binance', 'Garanti', 'İş Bankası', 'Ziraat', 'Midas', 'Gedik', 'Diğer'] as const;
 
 export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
   const [symbol, setSymbol] = useState('');
   const [assetType, setAssetType] = useState<AssetType>('stock');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [assetCurrency, setAssetCurrency] = useState<string>('TRY');
+  const [platform, setPlatform] = useState<string>('Manuel');
   const [cashAmount, setCashAmount] = useState('');
   const [cashCurrency, setCashCurrency] = useState('TRY');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (assetType === 'crypto') setAssetCurrency('USD');
+    else if (assetType === 'eurobond') setAssetCurrency('USD');
+    else if (assetType === 'commodity') setAssetCurrency('USD');
+    else setAssetCurrency('TRY');
+  }, [assetType]);
 
   const isCash = assetType === 'cash';
 
@@ -86,6 +101,9 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
         purchase_price: price,
         quantity: qty,
         current_price: price,
+        currency: assetCurrency,
+        source: platform === 'Manuel' ? 'manual' : platform.toLowerCase(),
+        price_notes: platform === 'Manuel' ? undefined : platform,
       });
       onClose();
     } catch (err) {
@@ -187,9 +205,36 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Para Birimi
+                  </label>
+                  <select
+                    value={assetCurrency}
+                    onChange={(e) => setAssetCurrency(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  >
+                    {ASSET_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Platform
+                  </label>
+                  <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  >
+                    {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Alış Fiyatı
+                  Alış Fiyatı ({assetCurrency})
                 </label>
                 <input
                   type="number"
