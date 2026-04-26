@@ -188,7 +188,7 @@ export async function getAllCashBalanceTotals(): Promise<{
   try {
     const { data: cashBalances, error } = await supabase
       .from('cash_balances')
-      .select('total_deposits, total_withdrawals, balance')
+      .select('total_deposits, total_withdrawals, balance, currency')
       .eq('user_id', ANON_USER_ID);
 
     if (error) throw error;
@@ -196,9 +196,22 @@ export async function getAllCashBalanceTotals(): Promise<{
       return { totalDeposits: 0, totalWithdrawals: 0, totalBalance: 0 };
     }
 
-    const totalDeposits = cashBalances.reduce((sum, cb) => sum + (cb.total_deposits || 0), 0);
-    const totalWithdrawals = cashBalances.reduce((sum, cb) => sum + (cb.total_withdrawals || 0), 0);
-    const totalBalance = cashBalances.reduce((sum, cb) => sum + (cb.balance || 0), 0);
+    const ratePromises = cashBalances.map(cb =>
+      cb.currency === 'TRY'
+        ? Promise.resolve(1)
+        : getExchangeRate(cb.currency, 'TRY').then(r => r || 1)
+    );
+    const rates = await Promise.all(ratePromises);
+
+    let totalDeposits = 0;
+    let totalWithdrawals = 0;
+    let totalBalance = 0;
+    for (let i = 0; i < cashBalances.length; i++) {
+      const rate = rates[i];
+      totalDeposits += (cashBalances[i].total_deposits || 0) * rate;
+      totalWithdrawals += (cashBalances[i].total_withdrawals || 0) * rate;
+      totalBalance += (cashBalances[i].balance || 0) * rate;
+    }
 
     return { totalDeposits, totalWithdrawals, totalBalance };
   } catch (error) {

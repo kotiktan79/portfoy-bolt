@@ -239,17 +239,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     if (holdings.length > 0) {
       calculateAndUpdatePnL();
       calculateLivePnL();
-
-      const investmentOnly = holdings.filter(h => h.asset_type !== 'cash');
-      const totalInvestment = investmentOnly.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
-      const totalCurrentValue = investmentOnly.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
-      const totalRealized = holdings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
-      const unrealizedPnl = totalCurrentValue - totalInvestment;
-      const totalProfitLoss = unrealizedPnl + totalRealized;
-
-      checkAchievements(totalCurrentValue, totalProfitLoss);
+      checkAchievements(portfolioMetrics.totalCurrentValue, portfolioMetrics.totalProfitLoss);
     }
-  }, [holdings]);
+  }, [holdings, liveUsdRate, liveEurRate]);
 
   useEffect(() => {
     if (holdings.length > 0 && pnlData) {
@@ -407,7 +399,18 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const investmentOnly = holdings.filter(h => h.asset_type !== 'cash');
     if (investmentOnly.length === 0) { setLivePnlData(null); return; }
 
-    const currentTotalValue = investmentOnly.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+    const usdRate = liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE;
+    const eurRate = liveEurRate > 1 ? liveEurRate : usdRate * 1.08;
+    const fxToTRY = (amount: number, ccy?: string | null) => {
+      const c = (ccy || 'TRY').toUpperCase();
+      if (c === 'TRY') return amount;
+      if (c === 'USD') return amount * usdRate;
+      if (c === 'EUR') return amount * eurRate;
+      if (c === 'GBP') return amount * usdRate * 1.27;
+      return amount;
+    };
+
+    const currentTotalValue = investmentOnly.reduce((sum, h) => sum + fxToTRY(h.current_price * h.quantity, h.currency), 0);
 
     // Calculate daily open value from stored open prices (per-holding)
     const openPrices = dailyOpenPricesRef.current;
@@ -420,14 +423,14 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         // Sanity check: open price shouldn't differ from current by more than 50%
         const ratio = h.current_price > 0 ? op / h.current_price : 1;
         if (ratio > 0.5 && ratio < 2.0) {
-          dailyOpenValue += op * h.quantity;
+          dailyOpenValue += fxToTRY(op * h.quantity, h.currency);
           holdingsWithOpenPrice++;
         } else {
           // Open price seems stale/wrong, use current
-          dailyOpenValue += h.current_price * h.quantity;
+          dailyOpenValue += fxToTRY(h.current_price * h.quantity, h.currency);
         }
       } else {
-        dailyOpenValue += h.current_price * h.quantity;
+        dailyOpenValue += fxToTRY(h.current_price * h.quantity, h.currency);
       }
     }
 
@@ -650,7 +653,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
     const totalInvestment = investmentHoldings.reduce((sum, h) => sum + toTRY(h.purchase_price * h.quantity, h.currency), 0);
     const totalCurrentValue = investmentHoldings.reduce((sum, h) => sum + toTRY(h.current_price * h.quantity, h.currency), 0);
-    const totalRealized = holdings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
+    const totalRealized = holdings.reduce((sum, h) => sum + toTRY(h.total_realized_pnl || 0, h.currency), 0);
     const unrealizedPnl = totalCurrentValue - totalInvestment;
     const totalProfitLoss = unrealizedPnl + totalRealized;
     const totalProfitLossPercent = totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
@@ -673,6 +676,14 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }, [holdings, totalCashValue, liveUsdRate, liveEurRate]);
 
   const filteredAndSortedHoldings = useMemo(() => {
+    const fxToTRY = (amount: number, ccy?: string | null) => {
+      const c = (ccy || 'TRY').toUpperCase();
+      if (c === 'TRY') return amount;
+      if (c === 'USD') return amount * (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE);
+      if (c === 'EUR') return amount * (liveEurRate > 1 ? liveEurRate : (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.08);
+      if (c === 'GBP') return amount * (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.27;
+      return amount;
+    };
     return holdings
       .filter((holding) => {
         const matchesSearch = searchQuery === '' || holding.symbol.toLowerCase().includes(searchQuery.toLowerCase());
@@ -680,10 +691,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         return matchesSearch && matchesType;
       })
       .sort((a, b) => {
-        const aValue = a.current_price * a.quantity;
-        const bValue = b.current_price * b.quantity;
-        const aInvestment = a.purchase_price * a.quantity;
-        const bInvestment = b.purchase_price * b.quantity;
+        const aValue = fxToTRY(a.current_price * a.quantity, a.currency);
+        const bValue = fxToTRY(b.current_price * b.quantity, b.currency);
+        const aInvestment = fxToTRY(a.purchase_price * a.quantity, a.currency);
+        const bInvestment = fxToTRY(b.purchase_price * b.quantity, b.currency);
         const aPnl = aValue - aInvestment;
         const bPnl = bValue - bInvestment;
         const aPnlPercent = aInvestment > 0 ? (aPnl / aInvestment) * 100 : 0;
@@ -697,7 +708,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
         return sortOrder === 'asc' ? comparison : -comparison;
       });
-  }, [holdings, searchQuery, selectedAssetType, sortBy, sortOrder]);
+  }, [holdings, searchQuery, selectedAssetType, sortBy, sortOrder, liveUsdRate, liveEurRate]);
 
   const value: PortfolioContextType = {
     holdings, setHoldings, loading, refreshing,
