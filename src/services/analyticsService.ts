@@ -90,9 +90,10 @@ export async function getPnLData(): Promise<{
   try {
     const { data: snapshots, error } = await supabase
       .from('portfolio_snapshots')
-      .select('snapshot_date, total_value, total_investment, total_deposits, total_withdrawals')
+      .select('snapshot_date, total_value, total_investment, total_deposits, total_withdrawals, created_at')
       .order('snapshot_date', { ascending: false })
-      .limit(35);
+      .order('created_at', { ascending: false })
+      .limit(500);
 
     if (error || !snapshots || snapshots.length === 0) {
       if (error) console.error('Error fetching snapshots:', error);

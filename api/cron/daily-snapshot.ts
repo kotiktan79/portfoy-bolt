@@ -74,21 +74,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pnl_percentage: pnlPercentage,
     };
 
-    // Upsert dene, constraint yoksa delete+insert fallback
-    const { error: snapshotError } = await supabase
+    // Aynı gün için tek satır garanti: önce sil, sonra ekle.
+    // (Supabase tablosunda snapshot_date UNIQUE constraint'ı yok; upsert sessizce
+    // duplicate üretebiliyordu, bu yüzden delete-then-insert yapıyoruz.)
+    const { error: deleteError } = await supabase
       .from('portfolio_snapshots')
-      .upsert([snapshotData], { onConflict: 'snapshot_date' });
+      .delete()
+      .eq('snapshot_date', today);
+    if (deleteError) {
+      log.push(`Eski snapshot silme uyarı: ${deleteError.message}`);
+    }
 
-    if (snapshotError) {
-      // Constraint hatası → delete+insert fallback
-      log.push(`Upsert hata (${snapshotError.message}), delete+insert deneniyor...`);
-      await supabase.from('portfolio_snapshots').delete().eq('snapshot_date', today);
-      const { error: insertError } = await supabase.from('portfolio_snapshots').insert([snapshotData]);
-      if (insertError) {
-        log.push(`Snapshot kayıt hatası: ${insertError.message}`);
-      } else {
-        log.push(`Snapshot kaydedildi (fallback): ${totalValue.toFixed(0)} TL`);
-      }
+    const { error: insertError } = await supabase
+      .from('portfolio_snapshots')
+      .insert([snapshotData]);
+
+    if (insertError) {
+      log.push(`Snapshot kayıt hatası: ${insertError.message}`);
     } else {
       log.push(`Snapshot kaydedildi: ${totalValue.toFixed(0)} TL`);
     }
