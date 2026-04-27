@@ -38,6 +38,9 @@ interface Plan {
   passiveBreakdown: { label: string; monthly: number }[];
   scenarios: Scenario[];
   notes: string[];
+  recommendedMaxUsd: number;       // pasif + max trim, buffer'a düşmeden
+  recommendedSafeUsd: number;      // %4/yıl klasik kural
+  usdRate: number;
 }
 
 const STAKING_APR: Record<string, number> = {
@@ -187,6 +190,14 @@ function computePlan(holdings: Holding[], totalCashValue: number, targetUsd: num
     notes.push('Pasif gelir + trim hedefin yarısını karşılamıyor; daha çok temettü/staking şart.');
   }
 
+  // Mevcut portföyle sürdürülebilir maksimum çekim:
+  // Pasif gelir + maksimum makul trim (kaynaklara dokunmadan)
+  const maxTrimYearly = trimCandidates.reduce((s, x) => s + x.value * baseTrimByPnl(x.pnlPct), 0);
+  const recommendedMaxYearlyTry = passiveYearly + maxTrimYearly;
+  const recommendedMaxUsd = Math.max(0, Math.round((recommendedMaxYearlyTry / 12 / usd) / 50) * 50);
+  // Klasik %4 kuralı (Trinity study) — çok muhafazakâr, USD-eşdeğer
+  const recommendedSafeUsd = Math.max(0, Math.round((totalValueTry * 0.04 / 12 / usd) / 50) * 50);
+
   const yearlyWithdrawTry = targetMonthlyTry * 12;
   const projectScenario = (label: string, growthPct: number): Scenario => {
     const r = growthPct / 100;
@@ -228,6 +239,9 @@ function computePlan(holdings: Holding[], totalCashValue: number, targetUsd: num
     passiveBreakdown,
     scenarios,
     notes,
+    recommendedMaxUsd,
+    recommendedSafeUsd,
+    usdRate: usd,
   };
 }
 
@@ -274,6 +288,33 @@ export default function SalarySimulator({ holdings, totalCashValue }: Props) {
 
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
+          <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-gradient-to-br from-emerald-50 to-brand-50 dark:from-emerald-950/20 dark:to-brand-950/20">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-1">
+              Mevcut Portföyden Çekebileceğin
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setTarget(plan.recommendedSafeUsd)}
+                className="text-left hover:opacity-80 transition-opacity"
+              >
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">Güvenli (%4 kuralı)</div>
+                <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">${plan.recommendedSafeUsd}<span className="text-[10px] font-medium text-gray-400">/ay</span></div>
+                <div className="text-[10px] text-gray-500">{formatCurrency(plan.recommendedSafeUsd * plan.usdRate, 0)} ₺</div>
+              </button>
+              <button
+                onClick={() => setTarget(plan.recommendedMaxUsd)}
+                className="text-left hover:opacity-80 transition-opacity"
+              >
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">Maksimum (pasif+trim)</div>
+                <div className="text-lg font-black text-brand-700 dark:text-brand-300">${plan.recommendedMaxUsd}<span className="text-[10px] font-medium text-gray-400">/ay</span></div>
+                <div className="text-[10px] text-gray-500">buffer'a inmeden</div>
+              </button>
+            </div>
+            <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 italic">
+              Tıklayınca hedef olarak ayarlanır.
+            </div>
+          </div>
+
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Hedef ($/ay):</span>
             <input
