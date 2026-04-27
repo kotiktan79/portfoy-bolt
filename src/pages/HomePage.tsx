@@ -26,6 +26,8 @@ import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
 import IncomeWidget from '../components/IncomeWidget';
 import PortfolioXRay from '../components/PortfolioXRay';
 import SalarySimulator from '../components/SalarySimulator';
+import MonthlyWithdrawalPlan from '../components/MonthlyWithdrawalPlan';
+import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
 
 // Lazy loaded components (charts, modals - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
@@ -185,11 +187,13 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Right rail: X-Ray + IncomeWidget + SalarySimulator (1/3) */}
+                {/* Right rail: X-Ray + IncomeWidget + maaş/yatırım planları (1/3) */}
                 <div className="space-y-4">
                   <PortfolioXRay />
                   <IncomeWidget />
+                  <MonthlyWithdrawalPlan holdings={holdings} totalCashValue={totalCashValue} />
                   <SalarySimulator holdings={holdings} totalCashValue={totalCashValue} />
+                  <DividendInvestmentPlanner holdings={holdings} totalCashValue={totalCashValue} />
                 </div>
               </div>
             )}
