@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { sendEmail, buildDailyEmail } from '../lib/email';
 
 // Kullanıcı maaş hedefi — env ile override edilebilir
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
@@ -166,6 +167,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`Maaş hesap hatası: ${salaryError.message}`);
     } else {
       log.push(`Aylık maaş: güvenli=${safeMonthly.toFixed(0)} TL, dengeli=${moderateMonthly.toFixed(0)} TL`);
+    }
+
+    // ========================================
+    // 7. Email gönder (RESEND_API_KEY varsa)
+    // ========================================
+    try {
+      const usdRateForEmail = (() => {
+        const u = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
+        return u?.current_price || marketData.usd_try || 45;
+      })();
+      // 7 gün ve 30 gün öncesi snapshot
+      const sortedSnapshots = [...snapshots].sort(
+        (a: any, b: any) => new Date(b.snapshot_date).getTime() - new Date(a.snapshot_date).getTime()
+      );
+      const findDaysAgo = (days: number) => {
+        const target = new Date();
+        target.setDate(target.getDate() - days);
+        const targetStr = target.toISOString().split('T')[0];
+        return sortedSnapshots.find((s: any) => s.snapshot_date <= targetStr) || null;
+      };
+      const weekAgo = findDaysAgo(7);
+      const monthAgo = findDaysAgo(30);
+      const weeklyChange = weekAgo ? totalValue - Number(weekAgo.total_value) : 0;
+      const weeklyChangePct = weekAgo && Number(weekAgo.total_value) > 0
+        ? (weeklyChange / Number(weekAgo.total_value)) * 100 : 0;
+      const monthlyChange = monthAgo ? totalValue - Number(monthAgo.total_value) : 0;
+      const monthlyChangePct = monthAgo && Number(monthAgo.total_value) > 0
+        ? (monthlyChange / Number(monthAgo.total_value)) * 100 : 0;
+
+      const yieldByType: Record<string, number> = {
+        stock: 0.03, fund: 0.02, eurobond: 0.05, crypto: 0.02, commodity: 0, currency: 0.01,
+      };
+      const passiveYearly = holdings.reduce((s: number, h: any) => {
+        const v = (h.current_price || 0) * (h.quantity || 0);
+        return s + v * (yieldByType[h.asset_type] || 0);
+      }, 0);
+      const passiveMonthlyUsd = (passiveYearly / 12) / usdRateForEmail;
+
+      const { subject, html } = buildDailyEmail({
+        date: todayStr,
+        totalValueTry: totalValue,
+        totalValueUsd: totalValue / usdRateForEmail,
+        dailyChangeTry: dailyChange,
+        dailyChangePct: dailyChangePct,
+        weeklyChangeTry: weeklyChange,
+        weeklyChangePct: weeklyChangePct,
+        monthlyChangeTry: monthlyChange,
+        monthlyChangePct: monthlyChangePct,
+        topPick: aiResponse.top_pick || '',
+        portfolioDiagnosis: aiResponse.portfolio_diagnosis || '',
+        marketOutlook: aiResponse.market_outlook || '',
+        actions: aiResponse.actions || [],
+        safeMonthly,
+        moderateMonthly,
+        passiveMonthlyUsd,
+        salaryTargetUsd: SALARY_TARGET_USD,
+      });
+      const emailRes = await sendEmail(subject, html);
+      log.push(emailRes.sent ? `Email gönderildi: ${emailRes.id}` : `Email atlandı: ${emailRes.reason}`);
+    } catch (emailErr: any) {
+      log.push(`Email gönderim hatası: ${emailErr.message}`);
     }
 
     const elapsed = Date.now() - startTime;
