@@ -100,14 +100,14 @@ export interface RebalancingSimulation {
 
 export const PRESET_STRATEGIES: Record<string, RebalancingStrategy> = {
   income: {
-    name: 'Gelir Odaklı (Maaş)',
+    name: 'Total Return (Maaş + Büyüme)',
     target_allocations: {
-      stock: 30,      // temettü hisseler (Revolut: SCHD/VYM/JNJ/KO + BIST: TUPRS/GARAN)
-      eurobond: 25,   // ~%5 kupon
-      fund: 15,       // BIST temettü fonları
-      commodity: 12,  // altın stabilizatör
-      currency: 10,   // yastık (acil)
-      crypto: 8,      // staking + uzun vade
+      stock: 35,      // temettü artıran kalite hisseler (SCHD/JNJ/KO + TUPRS/BIMAS)
+      eurobond: 20,   // sigorta + %5 kupon
+      fund: 12,       // BIST temettü fonları
+      commodity: 10,  // altın stabilizatör
+      currency: 10,   // 12+ ay yastık
+      crypto: 13,     // büyüme tilt (BTC/ETH ana, %2 staking)
     },
     deviation_threshold: 10,
     is_active: true,

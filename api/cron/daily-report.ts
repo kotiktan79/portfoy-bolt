@@ -3,15 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 
 // Kullanıcı maaş hedefi — env ile override edilebilir
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
-const SALARY_STRATEGY = process.env.SALARY_STRATEGY || 'income'; // income|growth|balanced
-// Gelir odaklı hedef allokasyon (Maaş Simülatörü ve Rebalancing'in "Gelir" preset'i ile uyumlu)
+const SALARY_STRATEGY = process.env.SALARY_STRATEGY || 'total_return'; // total_return|growth|income
+// "Total Return" hedef allokasyon: gelir + büyüme + denge.
+// Maaş = mevcut temettü/kupon + kâra geçmiş hisseden trim. Sermaye uzun vadede büyür.
 const TARGET_ALLOCATION = {
-  stock: 30,
-  eurobond: 25,
-  fund: 15,
-  commodity: 12,
-  currency: 10,
-  crypto: 8,
+  stock: 35,      // temettü artıran kalite hisseler (SCHD/JNJ/KO + TUPRS/BIMAS/GARAN)
+  eurobond: 20,   // sigorta + %5 kupon
+  fund: 12,       // BIST temettü fonları
+  commodity: 10,  // altın stabilizatör
+  currency: 10,   // 12+ ay buffer
+  crypto: 13,     // büyüme tilt (BTC/ETH ana, %2 staking)
 };
 
 function getSupabase() {
@@ -566,12 +567,13 @@ Nakit: ${totalCash.toFixed(0)} TL
 Günlük Değişim: ${dailyChange >= 0 ? '+' : ''}${dailyChange.toFixed(0)} TL (%${dailyChangePct.toFixed(1)})
 Pozisyon Sayısı: ${holdings.length}
 
-KULLANICININ MAAŞ HEDEFİ:
+KULLANICININ HEDEFİ — TOTAL RETURN (Maaş + Büyüme):
 Aylık çekim hedefi: $${SALARY_TARGET_USD} (${salaryTargetTry.toFixed(0)} TL)
 Yıllık çekim oranı: %${withdrawalRatePctYearly.toFixed(1)} (sürdürülebilir bant: ≤%6/yıl, sınır: %6-8, riskli: >%8)
-Strateji: ${SALARY_STRATEGY === 'income' ? 'Gelir Odaklı (sermaye eritmeden maaş)' : SALARY_STRATEGY}
+Strateji: Total Return — gelir + sermaye büyümesi + denge (saf gelir DEĞİL)
 Tahmini mevcut pasif gelir: ~$${passiveMonthlyUsd.toFixed(0)}/ay (${(passiveYearly).toFixed(0)} TL/yıl) — temettü+kupon+staking
 Maaş açığı: ${SALARY_TARGET_USD - passiveMonthlyUsd > 0 ? '$' + (SALARY_TARGET_USD - passiveMonthlyUsd).toFixed(0) + '/ay (trim ve buffer ile karşılanır)' : 'pasif gelir maaşı karşılıyor ✓'}
+Beklenen yıllık toplam getiri (total return): hisse+ETF %8-12, eurobond %5, kripto %15+, altın %5 — denge bunları harmanlar
 
 DAĞILIM:
 ${dist}
@@ -612,25 +614,31 @@ ${news.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
 async function callClaudeForDailyReport(apiKey: string, portfolioContext: string, marketContext: string): Promise<any> {
   const systemPrompt = `Sen profesyonel bir portföy yöneticisisin. Her sabah müşterine kapsamlı günlük brifing hazırlıyorsun.
 
-KULLANICININ ÖNCELİKLİ HEDEFİ — GELİR / MAAŞ:
-Müşteri portföyden aylık $${SALARY_TARGET_USD} maaş çekmek istiyor — sermayeyi eritmeden, sürdürülebilir.
-Stratejisi "GELİR ODAKLI": pasif gelir (temettü/kupon/staking) maximize, kâr trim'i ikincil, nakit buffer 12+ ay.
-Bütün öneriler bu hedefe HİZMET etmeli — büyüme spekülasyonu değil.
+KULLANICININ ÖNCELİKLİ HEDEFİ — TOTAL RETURN (Maaş + Büyüme + Denge):
+Müşteri portföyden aylık $${SALARY_TARGET_USD} maaş çekmek istiyor — AMA aynı zamanda sermayenin uzun vadede büyümesini istiyor.
+Bu yüzden strateji SAF GELİR DEĞİL — "TOTAL RETURN" yaklaşımı: temettü + sermaye değer artışı + denge.
+
+FELSEFE (anla ve uygula):
+- Temettü artıran kalite hisseler (SCHD, JNJ, KO, TUPRS, BIMAS, GARAN) MÜKEMMEL — hem %3 yield hem %7-8 büyüme = toplam %10+ yıllık
+- Eurobond %20-25 sigorta için (yüksek değil) — büyüme yapmaz, sadece kupon ve stabil
+- Büyüme dilim %10-15 (BTC/ETH/teknoloji) GEREKLİ — yarın daha büyük portföy = yarın daha büyük maaş
+- Saf temettü hissesi (%6+ yield) yerine "kalite + ortalama yield" daha iyi — uzun vadede kazandırır
 
 GÖREVIN:
-1. Portföy durumunu maaş hedefine göre analiz et (mevcut pasif gelir vs hedef)
+1. Portföy durumunu hem maaş hem büyüme açısından değerlendir
 2. Piyasa verilerini değerlendir (SADECE sana verilen CANLI verileri kullan)
 3. Haberlerin portföye etkisini yorumla
-4. Somut günlük aksiyon planı hazırla — gelir hedefine ilerleten alımlar/trimler
-5. Maaş hesapla: mevcut pasif + kâr trim'i + buffer ihtiyacı (3 katmanlı dağıt)
-6. Rebalance: hedef "Gelir" allokasyonuna göre (stock 30 / eurobond 25 / fund 15 / commodity 12 / currency 10 / crypto 8)
+4. Somut aksiyon planı: total return'e hizmet eden alımlar (kalite temettü hisseleri, dengeli ETF'ler, kontrollü kripto)
+5. Maaş hesapla: mevcut pasif + kâr trim'i + buffer (sermayeyi eritmeden)
+6. Rebalance hedefi: stock 35 / eurobond 20 / fund 12 / commodity 10 / currency 10 / crypto 13
 
-ÖNERİ ÖNCELİKLERİ (MAAŞ HEDEFİNE GÖRE):
-- ✅ ÖNCELİK 1: Cash fazlasını temettü ETF'i (SCHD, VYM, O), eurobond, BIST temettü hisselerine dönüştür
-- ✅ ÖNCELİK 2: Kâra geçmiş pozisyondan (ASELS, TUPRS, ENKAI gibi +%60 üstü) düşük oranlı trim — maaş için
-- ✅ ÖNCELİK 3: Eurobond/temettü pozisyonlarını koru, satma
-- ⚠️ DİKKAT: Spekülatif büyüme önerme (NVDA/BTC accumulate gibi) — kullanıcı maaş arıyor, kazanç değil
-- ⚠️ Top pick gelir üreten varlık olsun (temettü hissesi/eurobond/REIT) — momentum hissesi değil
+ÖNERİ ÖNCELİKLERİ:
+- ✅ ÖNCELİK 1: Cash fazlasını TOTAL RETURN hisselere dönüştür: SCHD (kalite + %3.5 + büyüme), JNJ (savunmacı + %3 + büyüme), VYM (geniş havuz). Saf REIT (%6 ama 0 büyüme) yerine kalite tercih et.
+- ✅ ÖNCELİK 2: Mevcut +%60 üstü kazançtaki BIST hisselerinden (ASELS/TUPRS/AKSEN/ENKAI/BIMAS) trim — ama %20'den fazla satma, çünkü bunlar TEMETTÜ + BÜYÜME hibridi (total return çekirdeği)
+- ✅ ÖNCELİK 3: Eurobond %1.2 → %20-25 (Revolut'tan US Treasury ekle) — sigorta + kupon
+- ✅ ÖNCELİK 4: Kripto %6.6 → %12-13 (BTC/ETH ana, sadece %2'si staking) — uzun vade büyüme tilt
+- ⚠️ DİKKAT: Saf spekülasyon (NVDA momentum, AKSEN top pick gibi) önerme — kalite + temettü + büyüme tercih et
+- ⚠️ Top pick: yüksek total return potansiyeli olan kalite varlık (SCHD/JNJ/dividend grower BIST hissesi)
 
 KURALLAR:
 - Bilgi kesim tarihin Mayıs 2025. Sadece CANLI VERİLERE dayan.
