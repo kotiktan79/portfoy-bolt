@@ -1,5 +1,6 @@
 import { supabase, Holding } from '../lib/supabase';
 import type { RiskProfile, AIRecommendation } from './aiAdvisorService';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 export interface TechnicalIndicators {
   rsi: number;
@@ -276,8 +277,8 @@ function determineSignal(holding: Holding, indicators: TechnicalIndicators, pric
     signalStrength -= 15;
   }
 
-  const currentValue = holding.current_price * holding.quantity;
-  const invested = holding.purchase_price * holding.quantity;
+  const currentValue = holdingValueTRY(holding, getFxRatesFromHoldings(holdings));
+  const invested = holdingCostTRY(holding, getFxRatesFromHoldings(holdings));
   const pnl = ((currentValue - invested) / invested) * 100;
 
   if (pnl < -15) {
@@ -313,8 +314,8 @@ function determineSignal(holding: Holding, indicators: TechnicalIndicators, pric
 }
 
 export async function calculatePortfolioScore(holdings: Holding[]): Promise<PortfolioScore> {
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
-  const totalInvested = holdings.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
+  const totalInvested = holdings.reduce((sum, h) => sum + holdingCostTRY(h, getFxRatesFromHoldings(holdings)), 0);
   const totalPnL = ((totalValue - totalInvested) / totalInvested) * 100;
 
   const assetTypes = new Set(holdings.map((h) => h.asset_type));
@@ -329,7 +330,7 @@ export async function calculatePortfolioScore(holdings: Holding[]): Promise<Port
   let weightedVolatility = 0;
   const assetTypeValues = new Map<string, number>();
   holdings.forEach((h) => {
-    const value = h.current_price * h.quantity;
+    const value = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     assetTypeValues.set(h.asset_type, (assetTypeValues.get(h.asset_type) || 0) + value);
   });
 
@@ -340,14 +341,14 @@ export async function calculatePortfolioScore(holdings: Holding[]): Promise<Port
   const riskManagementScore = Math.max(0, 100 - weightedVolatility * 1.5);
 
   const avgPnL = holdings.reduce((sum, h) => {
-    const invested = h.purchase_price * h.quantity;
-    const current = h.current_price * h.quantity;
+    const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+    const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     return sum + ((current - invested) / invested) * 100;
   }, 0) / holdings.length;
 
   const consistencyScore = Math.max(0, 100 - holdings.reduce((sum, h) => {
-    const invested = h.purchase_price * h.quantity;
-    const current = h.current_price * h.quantity;
+    const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+    const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     const pnl = ((current - invested) / invested) * 100;
     return sum + Math.abs(pnl - avgPnL);
   }, 0) / holdings.length);
@@ -393,11 +394,11 @@ export async function generateSmartSuggestions(
   holdings: Array<{ symbol: string; asset_type: string; current_price: number; quantity: number; purchase_price: number }>
 ): Promise<SmartSuggestion[]> {
   const suggestions: SmartSuggestion[] = [];
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
 
   const assetTypes = new Map<string, number>();
   holdings.forEach((h) => {
-    const value = h.current_price * h.quantity;
+    const value = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     assetTypes.set(h.asset_type, (assetTypes.get(h.asset_type) || 0) + value);
   });
 
@@ -437,7 +438,7 @@ export async function generateSmartSuggestions(
   });
 
   holdings.forEach((holding) => {
-    const value = holding.current_price * holding.quantity;
+    const value = holdingValueTRY(holding, getFxRatesFromHoldings(holdings));
     const allocation = (value / totalValue) * 100;
 
     if (allocation > 25) {
@@ -461,7 +462,7 @@ export async function generateSmartSuggestions(
       });
     }
 
-    const invested = holding.purchase_price * holding.quantity;
+    const invested = holdingCostTRY(holding, getFxRatesFromHoldings(holdings));
     const current = value;
     const pnl = ((current - invested) / invested) * 100;
 

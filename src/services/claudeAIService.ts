@@ -1,5 +1,6 @@
 import { Holding } from '../lib/supabase';
 import { getTotalCashValue } from './cashService';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -8,17 +9,19 @@ interface ConversationMessage {
 
 function buildPortfolioData(holdings: Holding[], cashBalance: number, riskScore: number) {
   const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
-  const totalValue = investmentHoldings.reduce((s, h) => s + h.current_price * h.quantity, 0);
-  const totalInvested = investmentHoldings.reduce((s, h) => s + h.purchase_price * h.quantity, 0);
+  const rates = getFxRatesFromHoldings(holdings);
+  const totalValue = investmentHoldings.reduce((s, h) => s + holdingValueTRY(h, rates), 0);
+  const totalInvested = investmentHoldings.reduce((s, h) => s + holdingCostTRY(h, rates), 0);
 
   return {
     holdings: investmentHoldings.map(h => {
-      const value = h.current_price * h.quantity;
-      const invested = h.purchase_price * h.quantity;
+      const value = holdingValueTRY(h, rates);
+      const invested = holdingCostTRY(h, rates);
       const pnl = value - invested;
       return {
         symbol: h.symbol,
         asset_type: h.asset_type,
+        currency: h.currency || 'TRY',
         quantity: h.quantity,
         purchase_price: h.purchase_price,
         current_price: h.current_price,

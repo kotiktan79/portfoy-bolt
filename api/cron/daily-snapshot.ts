@@ -298,8 +298,12 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
       const symbols = bistHoldings.map(h => `${h.symbol}.IS`).join(',');
       const prices = await fetchYahooPrices(symbols);
       for (const h of bistHoldings) {
+        // manual_price=true olan pozisyonları kullanıcı kilitlemiş, dokunma
+        if (h.manual_price) {
+          result.details[h.symbol] = h.current_price;
+          continue;
+        }
         const price = prices[`${h.symbol}.IS`];
-        // Sanity guard: eski fiyattan %80+ düşüş anomali sayılır (Yahoo stale data)
         const oldPrice = Number(h.current_price) || 0;
         const isAnomalous = oldPrice > 0 && price && (price < oldPrice * 0.2 || price > oldPrice * 5);
         if (price && !isAnomalous) {
@@ -337,21 +341,25 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
       const eurTry = await fetchEurTry();
 
       for (const h of intlHoldings) {
+        // manual_price=true ise dokunma
+        if (h.manual_price) {
+          result.details[h.symbol] = h.current_price;
+          continue;
+        }
         const sym = h.symbol.toUpperCase();
         const yahooTicker = tickerMap[sym];
         const price = prices[yahooTicker];
         if (price) {
           const isEuropean = yahooTicker in EURO_YAHOO || yahooTicker !== sym;
-          // Holding'in currency field'ı ne diyorsa o currency'de yaz.
-          // currency=USD ise price USD olarak; currency=EUR ise EUR; currency=TRY ise TRY'ye çevirip yaz.
-          // Frontend FX'i sadece currency=USD/EUR ise uygular, kontrat budur.
+          // Kontrat: holdings.current_price her zaman holdings.currency cinsinden tutulur.
+          // Yahoo USD borsasından USD, EU borsasından EUR verir → currency'e göre yaz.
           const holdingCurrency = (h.currency || 'TRY').toUpperCase();
           let priceToWrite: number;
-          if (holdingCurrency === 'USD') priceToWrite = price; // Yahoo USD verir
-          else if (holdingCurrency === 'EUR') priceToWrite = price; // Yahoo EU borsalarında EUR
+          if (holdingCurrency === 'USD') priceToWrite = price;
+          else if (holdingCurrency === 'EUR') priceToWrite = price;
           else priceToWrite = price * (isEuropean ? eurTry : usdTry); // currency=TRY ise çevir
 
-          // Sanity guard — aynı currency içinde karşılaştır
+          // Sanity guard — aynı currency içinde karşılaştır (eski/yeni aynı birimde)
           const oldPrice = Number(h.current_price) || 0;
           const isAnomalous = oldPrice > 0 && (priceToWrite < oldPrice * 0.2 || priceToWrite > oldPrice * 5);
           if (!isAnomalous) {

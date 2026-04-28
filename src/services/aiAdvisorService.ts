@@ -1,4 +1,5 @@
 import { supabase, Holding } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 export interface RiskProfile {
   level: 'conservative' | 'moderate' | 'aggressive' | 'very_aggressive';
@@ -69,11 +70,11 @@ export async function analyzeRiskProfile(holdings: Holding[]): Promise<RiskProfi
     };
   }
 
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
 
   const assetTypes = new Map<string, number>();
   holdings.forEach((h) => {
-    const value = h.current_price * h.quantity;
+    const value = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     assetTypes.set(h.asset_type, (assetTypes.get(h.asset_type) || 0) + value);
   });
 
@@ -147,11 +148,11 @@ export async function generateAIRecommendations(
   riskProfile: RiskProfile
 ): Promise<AIRecommendation[]> {
   const recommendations: AIRecommendation[] = [];
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
 
   const assetTypes = new Map<string, number>();
   holdings.forEach((h) => {
-    const value = h.current_price * h.quantity;
+    const value = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     assetTypes.set(h.asset_type, (assetTypes.get(h.asset_type) || 0) + value);
   });
 
@@ -198,16 +199,16 @@ export async function generateAIRecommendations(
   }
 
   const holdingsWithLoss = holdings.filter((h) => {
-    const invested = h.purchase_price * h.quantity;
-    const current = h.current_price * h.quantity;
+    const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+    const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     const loss = ((current - invested) / invested) * 100;
     return loss < -20;
   });
 
   if (holdingsWithLoss.length > 0) {
     holdingsWithLoss.forEach((h) => {
-      const invested = h.purchase_price * h.quantity;
-      const current = h.current_price * h.quantity;
+      const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+      const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
       const loss = ((current - invested) / invested) * 100;
 
       recommendations.push({
@@ -226,16 +227,16 @@ export async function generateAIRecommendations(
   }
 
   const holdingsWithBigGain = holdings.filter((h) => {
-    const invested = h.purchase_price * h.quantity;
-    const current = h.current_price * h.quantity;
+    const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+    const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     const gain = ((current - invested) / invested) * 100;
     return gain > 50;
   });
 
   if (holdingsWithBigGain.length > 0) {
     holdingsWithBigGain.slice(0, 2).forEach((h) => {
-      const invested = h.purchase_price * h.quantity;
-      const current = h.current_price * h.quantity;
+      const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+      const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
       const gain = ((current - invested) / invested) * 100;
 
       recommendations.push({
@@ -293,17 +294,17 @@ export async function generateAIRecommendations(
 
 export async function analyzeMarketSentiment(holdings: Holding[]): Promise<MarketSentiment> {
   const assetTypes = new Map<string, number>();
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
 
   holdings.forEach((h) => {
-    const value = h.current_price * h.quantity;
+    const value = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
     assetTypes.set(h.asset_type, (assetTypes.get(h.asset_type) || 0) + value);
   });
 
   const avgPnL =
     holdings.reduce((sum, h) => {
-      const invested = h.purchase_price * h.quantity;
-      const current = h.current_price * h.quantity;
+      const invested = holdingCostTRY(h, getFxRatesFromHoldings(holdings));
+      const current = holdingValueTRY(h, getFxRatesFromHoldings(holdings));
       return sum + ((current - invested) / invested) * 100;
     }, 0) / holdings.length;
 
@@ -362,8 +363,8 @@ export async function generatePortfolioInsights(
     });
   }
 
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
-  const totalInvested = holdings.reduce((sum, h) => sum + h.purchase_price * h.quantity, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
+  const totalInvested = holdings.reduce((sum, h) => sum + holdingCostTRY(h, getFxRatesFromHoldings(holdings)), 0);
   const totalPnL = ((totalValue - totalInvested) / totalInvested) * 100;
 
   if (totalPnL > 20) {

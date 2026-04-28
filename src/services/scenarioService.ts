@@ -1,5 +1,5 @@
-import { supabase } from '../lib/supabase';
-import { Holding } from './rebalancingService';
+import { supabase, Holding } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 export interface ScenarioResult {
   scenario_name: string;
@@ -80,13 +80,13 @@ export function calculateScenario(
   holdings: Holding[],
   priceChanges: Record<string, number>
 ): ScenarioResult {
-  const currentValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const currentValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);
 
+  const rates = getFxRatesFromHoldings(holdings);
   const assetImpacts: AssetImpact[] = holdings.map((holding) => {
     const changePercent = priceChanges[holding.asset_type] || 0;
-    const newPrice = holding.current_price * (1 + changePercent / 100);
-    const currentVal = holding.current_price * holding.quantity;
-    const projectedVal = newPrice * holding.quantity;
+    const currentVal = holdingValueTRY(holding, rates);
+    const projectedVal = currentVal * (1 + changePercent / 100);
     const change = projectedVal - currentVal;
 
     return {
@@ -125,7 +125,8 @@ export function runMonteCarloSimulation(
     eurobond: 5,
   }
 ): MonteCarloResult {
-  const currentValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const rates = getFxRatesFromHoldings(holdings);
+  const currentValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, rates), 0);
 
   const results: number[] = [];
 
@@ -135,8 +136,8 @@ export function runMonteCarloSimulation(
     holdings.forEach((holding) => {
       const volatility = volatilityByType[holding.asset_type] || 20;
       const randomChange = (Math.random() - 0.5) * 2 * volatility;
-      const newPrice = holding.current_price * (1 + randomChange / 100);
-      simulatedValue += newPrice * holding.quantity;
+      const currentVal = holdingValueTRY(holding, rates);
+      simulatedValue += currentVal * (1 + randomChange / 100);
     });
 
     results.push(simulatedValue);

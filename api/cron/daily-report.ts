@@ -62,17 +62,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     log.push(`Veri: ${holdings.length} holding, ${snapshots.length} snapshot, ${cashBalances.length} cüzdan`);
 
-    // Portföy özeti hesapla
-    const totalValue = holdings.reduce((sum, h) => sum + (h.current_price || 0) * (h.quantity || 0), 0);
-    const totalInvestment = holdings.reduce((sum, h) => sum + (h.purchase_price || 0) * (h.quantity || 0), 0);
+    // FX kurları — holdings'teki USD/EUR pozisyonlarından
+    const usdHolding = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
+    const eurHolding = holdings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const usdRate = Number(usdHolding?.current_price) > 1 ? Number(usdHolding.current_price) : 45;
+    const eurRate = Number(eurHolding?.current_price) > 1 ? Number(eurHolding.current_price) : 51;
+    // Yardımcı kurlar (RUB/RON/GBP/CHF için yaklaşık)
+    const fxRate = (ccy: string): number => {
+      const c = (ccy || 'TRY').toUpperCase();
+      if (c === 'TRY') return 1;
+      if (c === 'USD') return usdRate;
+      if (c === 'EUR') return eurRate;
+      if (c === 'GBP') return usdRate * 1.27;
+      if (c === 'CHF') return usdRate * 1.13;
+      if (c === 'RON') return eurRate / 4.95;
+      if (c === 'RUB') return usdRate / 100;
+      return 1;
+    };
+    const tryValue = (h: any, field: 'current_price' | 'purchase_price' = 'current_price') => {
+      const p = Number(h[field]) || (field === 'current_price' ? Number(h.purchase_price) : 0) || 0;
+      const q = Number(h.quantity) || 0;
+      return p * q * fxRate(h.currency || 'TRY');
+    };
+
+    // Portföy özeti — currency-aware
+    const totalValue = holdings.reduce((sum: number, h: any) => sum + tryValue(h, 'current_price'), 0);
+    const totalInvestment = holdings.reduce((sum: number, h: any) => sum + tryValue(h, 'purchase_price'), 0);
     const totalPnl = totalValue - totalInvestment;
     const totalPnlPct = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
 
-    // Likit nakit = cash_balances + currency tipi holdings (USD/EURO/USDC vb. TRY karşılığı)
-    const cashBalancesValue = cashBalances.reduce((sum, c) => sum + (c.balance || 0), 0);
+    // Likit nakit = cash_balances (FX'li) + currency tipi holdings (TRY karşılığı)
+    const cashBalancesValue = cashBalances.reduce((sum: number, c: any) => sum + (Number(c.balance) || 0) * fxRate(c.currency), 0);
     const currencyHoldingsValue = holdings
-      .filter(h => h.asset_type === 'currency')
-      .reduce((sum, h) => sum + (h.current_price || 0) * (h.quantity || 0), 0);
+      .filter((h: any) => h.asset_type === 'currency')
+      .reduce((sum: number, h: any) => sum + tryValue(h, 'current_price'), 0);
     const totalCash = cashBalancesValue + currencyHoldingsValue;
 
     // Sürdürülebilir aylık çekim (deterministik, AI'dan bağımsız)
@@ -390,7 +413,8 @@ async function fetchComprehensiveMarketData(log: string[]): Promise<MarketData> 
 
   // ABD Hisseleri
   try {
-    const usSymbols = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JNJ', 'KO', 'PG', 'JPM', 'V', 'WMT', 'ASML', 'O', 'SCHD'];
+    // Total Return hedefli liste: temettü ETF + kalite temettü hisse + bir miktar büyüme
+    const usSymbols = ['SCHD', 'VYM', 'VIG', 'HDV', 'O', 'JNJ', 'KO', 'PG', 'PEP', 'MCD', 'WMT', 'JPM', 'V', 'NVDA', 'MSFT', 'AAPL'];
     const yahooRes = await fetch(
       `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${usSymbols.join(',')}&fields=regularMarketPrice,regularMarketChangePercent,fiftyTwoWeekLow,fiftyTwoWeekHigh`,
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
