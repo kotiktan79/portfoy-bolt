@@ -47,19 +47,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: updatedHoldings } = await supabase.from('holdings').select('*');
     const allHoldings = updatedHoldings || holdings;
 
-    // 4. Portfolio snapshot hesapla ve kaydet
-    const totalValue = allHoldings.reduce((sum, h) => {
-      const price = Number(h.current_price) || Number(h.purchase_price) || 0;
+    // 4. Portfolio snapshot hesapla ve kaydet — currency-aware
+    // current_price holding'in currency field'ı cinsinden tutuluyor.
+    // TRY toplamı için USD/EUR fiyatları FX ile çevriliyor.
+    const usdHolding = allHoldings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
+    const eurHolding = allHoldings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const usdRateForTotal = Number(usdHolding?.current_price) || 45;
+    const eurRateForTotal = Number(eurHolding?.current_price) || 51;
+
+    const tryValueOf = (h: any, priceField: 'current_price' | 'purchase_price') => {
+      const price = Number(h[priceField]) || (priceField === 'current_price' ? Number(h.purchase_price) : 0) || 0;
       const qty = Number(h.quantity) || 0;
-      const value = price * qty;
-      return sum + (isFinite(value) ? value : 0);
+      const raw = price * qty;
+      const cur = (h.currency || 'TRY').toUpperCase();
+      if (cur === 'USD') return raw * usdRateForTotal;
+      if (cur === 'EUR') return raw * eurRateForTotal;
+      return raw;
+    };
+
+    const totalValue = allHoldings.reduce((sum: number, h: any) => {
+      const v = tryValueOf(h, 'current_price');
+      return sum + (isFinite(v) ? v : 0);
     }, 0);
 
-    const totalInvestment = allHoldings.reduce((sum, h) => {
-      const price = Number(h.purchase_price) || 0;
-      const qty = Number(h.quantity) || 0;
-      const value = price * qty;
-      return sum + (isFinite(value) ? value : 0);
+    const totalInvestment = allHoldings.reduce((sum: number, h: any) => {
+      const v = tryValueOf(h, 'purchase_price');
+      return sum + (isFinite(v) ? v : 0);
     }, 0);
 
     const totalPnl = totalValue - totalInvestment;
@@ -329,16 +342,24 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
         const price = prices[yahooTicker];
         if (price) {
           const isEuropean = yahooTicker in EURO_YAHOO || yahooTicker !== sym;
-          const tryPrice = price * (isEuropean ? eurTry : usdTry);
-          // Sanity guard
+          // Holding'in currency field'ı ne diyorsa o currency'de yaz.
+          // currency=USD ise price USD olarak; currency=EUR ise EUR; currency=TRY ise TRY'ye çevirip yaz.
+          // Frontend FX'i sadece currency=USD/EUR ise uygular, kontrat budur.
+          const holdingCurrency = (h.currency || 'TRY').toUpperCase();
+          let priceToWrite: number;
+          if (holdingCurrency === 'USD') priceToWrite = price; // Yahoo USD verir
+          else if (holdingCurrency === 'EUR') priceToWrite = price; // Yahoo EU borsalarında EUR
+          else priceToWrite = price * (isEuropean ? eurTry : usdTry); // currency=TRY ise çevir
+
+          // Sanity guard — aynı currency içinde karşılaştır
           const oldPrice = Number(h.current_price) || 0;
-          const isAnomalous = oldPrice > 0 && (tryPrice < oldPrice * 0.2 || tryPrice > oldPrice * 5);
+          const isAnomalous = oldPrice > 0 && (priceToWrite < oldPrice * 0.2 || priceToWrite > oldPrice * 5);
           if (!isAnomalous) {
-            await supabase.from('holdings').update({ current_price: tryPrice, updated_at: new Date().toISOString() }).eq('id', h.id);
+            await supabase.from('holdings').update({ current_price: priceToWrite, updated_at: new Date().toISOString() }).eq('id', h.id);
             result.updated++;
-            result.details[h.symbol] = tryPrice;
+            result.details[h.symbol] = priceToWrite;
           } else {
-            log.push(`${h.symbol}: anomali reddedildi (${oldPrice} → ${tryPrice})`);
+            log.push(`${h.symbol}: anomali reddedildi (${oldPrice} → ${priceToWrite})`);
             result.failed++;
           }
         } else {
