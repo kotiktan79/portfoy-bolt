@@ -1,6 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
+// Kullanıcı maaş hedefi — env ile override edilebilir
+const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
+const SALARY_STRATEGY = process.env.SALARY_STRATEGY || 'income'; // income|growth|balanced
+// Gelir odaklı hedef allokasyon (Maaş Simülatörü ve Rebalancing'in "Gelir" preset'i ile uyumlu)
+const TARGET_ALLOCATION = {
+  stock: 30,
+  eurobond: 25,
+  fund: 15,
+  commodity: 12,
+  currency: 10,
+  crypto: 8,
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -519,16 +532,52 @@ function buildPortfolioContext(
     .filter(r => !r.is_projected)
     .reduce((sum, r) => sum + (r.amount_try || 0), 0);
 
+  // Allokasyon sapması (hedef = Gelir preset)
+  const usdRate = (() => {
+    const u = holdings.find(h => h.symbol === 'USD' && h.asset_type === 'currency');
+    return u?.current_price || 45;
+  })();
+  const salaryTargetTry = SALARY_TARGET_USD * usdRate;
+  const yearlyWithdrawTry = salaryTargetTry * 12;
+  const withdrawalRatePctYearly = totalValue > 0 ? (yearlyWithdrawTry / totalValue) * 100 : 0;
+
+  const allocationGap = Object.entries(TARGET_ALLOCATION).map(([type, target]) => {
+    const current = byType[type] ? (byType[type].value / totalValue * 100) : 0;
+    const diff = current - target;
+    const status = Math.abs(diff) < 3 ? 'OK' : diff > 0 ? 'FAZLA' : 'EKSİK';
+    return `${typeNames[type] || type}: %${current.toFixed(1)} → hedef %${target} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}, ${status})`;
+  }).join('\n');
+
+  // Pasif gelir tahmini (yieldlere göre)
+  const yieldByType: Record<string, number> = {
+    stock: 0.03, fund: 0.02, eurobond: 0.05,
+    crypto: 0.02, commodity: 0, currency: 0.01,
+  };
+  const passiveYearly = Object.entries(byType).reduce((sum, [type, d]) => {
+    return sum + d.value * (yieldByType[type] || 0);
+  }, 0);
+  const passiveMonthlyUsd = (passiveYearly / 12) / usdRate;
+
   return `PORTFÖY DURUMU (${new Date().toISOString().split('T')[0]}):
-Toplam Değer: ${totalValue.toFixed(0)} TL
+Toplam Değer: ${totalValue.toFixed(0)} TL (${(totalValue / usdRate).toFixed(0)} USD)
 Toplam Yatırım: ${totalInvestment.toFixed(0)} TL
 Toplam K/Z: %${totalPnlPct.toFixed(1)} (${(totalValue - totalInvestment).toFixed(0)} TL)
 Nakit: ${totalCash.toFixed(0)} TL
 Günlük Değişim: ${dailyChange >= 0 ? '+' : ''}${dailyChange.toFixed(0)} TL (%${dailyChangePct.toFixed(1)})
 Pozisyon Sayısı: ${holdings.length}
 
+KULLANICININ MAAŞ HEDEFİ:
+Aylık çekim hedefi: $${SALARY_TARGET_USD} (${salaryTargetTry.toFixed(0)} TL)
+Yıllık çekim oranı: %${withdrawalRatePctYearly.toFixed(1)} (sürdürülebilir bant: ≤%6/yıl, sınır: %6-8, riskli: >%8)
+Strateji: ${SALARY_STRATEGY === 'income' ? 'Gelir Odaklı (sermaye eritmeden maaş)' : SALARY_STRATEGY}
+Tahmini mevcut pasif gelir: ~$${passiveMonthlyUsd.toFixed(0)}/ay (${(passiveYearly).toFixed(0)} TL/yıl) — temettü+kupon+staking
+Maaş açığı: ${SALARY_TARGET_USD - passiveMonthlyUsd > 0 ? '$' + (SALARY_TARGET_USD - passiveMonthlyUsd).toFixed(0) + '/ay (trim ve buffer ile karşılanır)' : 'pasif gelir maaşı karşılıyor ✓'}
+
 DAĞILIM:
 ${dist}
+
+HEDEF VS MEVCUT ALLOKASYON (Gelir Odaklı strateji — Maaş Simülatörü ile uyumlu):
+${allocationGap}
 
 POZİSYONLAR (Top 20):
 ${topHoldings}
@@ -563,21 +612,34 @@ ${news.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
 async function callClaudeForDailyReport(apiKey: string, portfolioContext: string, marketContext: string): Promise<any> {
   const systemPrompt = `Sen profesyonel bir portföy yöneticisisin. Her sabah müşterine kapsamlı günlük brifing hazırlıyorsun.
 
+KULLANICININ ÖNCELİKLİ HEDEFİ — GELİR / MAAŞ:
+Müşteri portföyden aylık $${SALARY_TARGET_USD} maaş çekmek istiyor — sermayeyi eritmeden, sürdürülebilir.
+Stratejisi "GELİR ODAKLI": pasif gelir (temettü/kupon/staking) maximize, kâr trim'i ikincil, nakit buffer 12+ ay.
+Bütün öneriler bu hedefe HİZMET etmeli — büyüme spekülasyonu değil.
+
 GÖREVIN:
-1. Portföy durumunu analiz et
+1. Portföy durumunu maaş hedefine göre analiz et (mevcut pasif gelir vs hedef)
 2. Piyasa verilerini değerlendir (SADECE sana verilen CANLI verileri kullan)
 3. Haberlerin portföye etkisini yorumla
-4. Somut, uygulanabilir günlük aksiyon planı hazırla
-5. Dinamik maaş hesapla (portföyün %0.3-0.5/ay sürdürülebilir çekim)
-6. Rebalance ihtiyacını değerlendir
+4. Somut günlük aksiyon planı hazırla — gelir hedefine ilerleten alımlar/trimler
+5. Maaş hesapla: mevcut pasif + kâr trim'i + buffer ihtiyacı (3 katmanlı dağıt)
+6. Rebalance: hedef "Gelir" allokasyonuna göre (stock 30 / eurobond 25 / fund 15 / commodity 12 / currency 10 / crypto 8)
+
+ÖNERİ ÖNCELİKLERİ (MAAŞ HEDEFİNE GÖRE):
+- ✅ ÖNCELİK 1: Cash fazlasını temettü ETF'i (SCHD, VYM, O), eurobond, BIST temettü hisselerine dönüştür
+- ✅ ÖNCELİK 2: Kâra geçmiş pozisyondan (ASELS, TUPRS, ENKAI gibi +%60 üstü) düşük oranlı trim — maaş için
+- ✅ ÖNCELİK 3: Eurobond/temettü pozisyonlarını koru, satma
+- ⚠️ DİKKAT: Spekülatif büyüme önerme (NVDA/BTC accumulate gibi) — kullanıcı maaş arıyor, kazanç değil
+- ⚠️ Top pick gelir üreten varlık olsun (temettü hissesi/eurobond/REIT) — momentum hissesi değil
 
 KURALLAR:
 - Bilgi kesim tarihin Mayıs 2025. Sadece CANLI VERİLERE dayan.
 - Uydurma yapma. Veri olmayan hakkında yorum yapma.
-- Müşteri Türkiye'de. BIST + Revolut (ABD/AB) + Binance (kripto) kullanıyor.
-- Her öneri: NEDEN, NE KADAR, HANGİ PLATFORM, CANLI FİYAT içermeli.
+- Müşteri Romanya'da yaşıyor (Türk vatandaşı). BIST + Revolut (USD/EUR) + Binance kullanıyor.
+- Her öneri: NEDEN, NE KADAR, HANGİ PLATFORM, CANLI FİYAT, BEKLENEN TEMETTÜ/KUPON içermeli.
 - Portföy maaşı hesaplarken: temettü + faiz + staking + kupon gelirlerini ayrı ayrı belirt.
-- Riskleri somut belirt: "kripto %22 ama hedefiniz %15" gibi.
+- Mevcut allokasyon farkını "Gelir hedef allokasyonuna" göre değerlendir (context'te verildi).
+- Çekim oranı ≤%6/yıl sürdürülebilir, %6-8 sınırda, >%8 riskli — bunu hesaba kat.
 
 PİYASA ARAŞTIRMASI YAPMAN GEREKENLER:
 - Verilen piyasa verilerindeki trendleri analiz et (yükselen/düşen sektörler)
@@ -634,7 +696,9 @@ JSON FORMATI (başka metin ekleme):
 
 ${marketContext}
 
-Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Piyasa araştırması yap, trendleri analiz et, portföye özel somut öneriler ver.`;
+Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin öncelikli hedefi $${SALARY_TARGET_USD}/ay sürdürülebilir maaş çekmek — sermayeyi eritmeden. Tüm öneriler bu hedefe hizmet etmeli: cash fazlasını temettü/eurobond'a dönüştürme, kâra geçmiş hisselerden trim, gelir maximizasyonu. Spekülatif büyüme tavsiyesi (BTC accumulate, NVDA momentum) verme — bu kullanıcının hedefi DEĞİL.
+
+Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bilinçli öneriler ver. Top pick: gelir üreten bir varlık (temettü ETF, eurobond, REIT, temettü hissesi).`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
