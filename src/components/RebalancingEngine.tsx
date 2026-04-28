@@ -9,10 +9,12 @@ import {
   generateRebalancingTrades,
   saveRebalancingSimulation,
   executeRebalancing,
+  calculatePassiveIncome,
   PRESET_STRATEGIES,
   type Holding,
   type Allocation,
   type Trade,
+  type TradePlatform,
 } from '../services/rebalancingService';
 
 export default function RebalancingEngine() {
@@ -155,6 +157,26 @@ export default function RebalancingEngine() {
 
   const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
 
+  // Mevcut + hedef allocation'a göre pasif gelir
+  const currentAllocMap: Record<string, number> = {};
+  allocations.forEach(a => { currentAllocMap[a.asset_type] = a.current_percent; });
+  const targetAllocMap = selectedStrategy === 'custom'
+    ? customAllocations
+    : (PRESET_STRATEGIES[selectedStrategy]?.target_allocations || {});
+  const incomeNow = calculatePassiveIncome(currentAllocMap, totalValue);
+  const incomeAfter = calculatePassiveIncome(targetAllocMap, totalValue);
+  const usdRate = holdings.find(h => h.symbol === 'USD' && h.asset_type === 'currency')?.current_price || 45;
+  const incomeNowUsdMonthly = incomeNow.monthly / usdRate;
+  const incomeAfterUsdMonthly = incomeAfter.monthly / usdRate;
+  const incomeDiffUsdMonthly = incomeAfterUsdMonthly - incomeNowUsdMonthly;
+
+  // Trade'leri platforma göre grupla
+  const tradesByPlatform: Record<TradePlatform, Trade[]> = { Revolut: [], BIST: [], Genel: [] };
+  trades.forEach(t => {
+    const p = t.platform || 'Genel';
+    tradesByPlatform[p].push(t);
+  });
+
   return (
     <div className="space-y-6">
       <div className="card-secondary p-6">
@@ -264,6 +286,40 @@ export default function RebalancingEngine() {
           </div>
         )}
 
+        {/* Pasif Gelir Etkisi — strateji uygulanırsa */}
+        <div className="mb-6 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-gradient-to-br from-emerald-50 to-brand-50 dark:from-emerald-950/20 dark:to-brand-950/20">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-widest">
+              Bu Strateji Pasif Gelirini Nasıl Etkiler?
+            </h3>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Şimdi (aylık pasif)</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">${incomeNowUsdMonthly.toFixed(0)}</p>
+              <p className="text-[10px] text-gray-500">{incomeNow.monthly.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} ₺/ay</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Sonra (aylık pasif)</p>
+              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">${incomeAfterUsdMonthly.toFixed(0)}</p>
+              <p className="text-[10px] text-gray-500">{incomeAfter.monthly.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} ₺/ay</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Fark</p>
+              <p className={`text-lg font-bold ${incomeDiffUsdMonthly >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
+                {incomeDiffUsdMonthly >= 0 ? '+' : ''}${incomeDiffUsdMonthly.toFixed(0)}<span className="text-xs font-medium">/ay</span>
+              </p>
+              <p className="text-[10px] text-gray-500">
+                ${(incomeAfter.yearly / usdRate).toFixed(0)}/yıl
+              </p>
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 italic">
+            Yieldlar: hisse %3, fon %2, eurobond %5, kripto %2 (staking), nakit %1, altın %0.
+          </p>
+        </div>
+
         <div className="space-y-3 mb-6">
           {allocations.map((allocation) => (
             <div key={allocation.asset_type} className="space-y-2">
@@ -328,42 +384,76 @@ export default function RebalancingEngine() {
             </h3>
           </div>
 
-          <div className="space-y-3 mb-6">
-            {trades.map((trade, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
-              >
-                <div className="flex items-center gap-4">
-                  {trade.action === 'buy' ? (
-                    <TrendingUp className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <X className="w-5 h-5 text-red-600" />
-                  )}
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {trade.symbol}
-                      <span
-                        className={`ml-2 text-sm ${
-                          trade.action === 'buy' ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        {trade.action === 'buy' ? 'AL' : 'SAT'}
-                      </span>
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{trade.reason}</p>
+          <div className="space-y-4 mb-6">
+            {(['Revolut', 'BIST', 'Genel'] as TradePlatform[]).map(platform => {
+              const platformTrades = tradesByPlatform[platform];
+              if (platformTrades.length === 0) return null;
+              const platformIcon = platform === 'Revolut' ? '🇪🇺' : platform === 'BIST' ? '🇹🇷' : '⚙️';
+              const platformDesc =
+                platform === 'Revolut' ? 'USD/EUR · Revolut Trading' :
+                platform === 'BIST' ? 'TRY · Borsa İstanbul' :
+                'Kripto / Nakit / Emtia';
+              const platformBuyTotal = platformTrades.filter(t => t.action === 'buy').reduce((s, t) => s + t.amount, 0);
+              const platformSellTotal = platformTrades.filter(t => t.action === 'sell').reduce((s, t) => s + t.amount, 0);
+              return (
+                <div key={platform} className="border border-slate-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                  <div className="bg-slate-50 dark:bg-gray-800/60 px-4 py-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-gray-900 dark:text-white text-sm">
+                        <span className="mr-1.5">{platformIcon}</span>{platform}
+                      </p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{platformDesc}</p>
+                    </div>
+                    <div className="text-right text-[11px]">
+                      {platformBuyTotal > 0 && (
+                        <p className="text-green-600 dark:text-green-400 font-semibold">
+                          AL: ₺{platformBuyTotal.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+                        </p>
+                      )}
+                      {platformSellTotal > 0 && (
+                        <p className="text-red-600 dark:text-red-400 font-semibold">
+                          SAT: ₺{platformSellTotal.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-gray-800">
+                    {platformTrades.map((trade, index) => (
+                      <div key={index} className="flex items-center justify-between p-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {trade.action === 'buy' ? (
+                            <TrendingUp className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          ) : (
+                            <X className="w-4 h-4 text-red-600 flex-shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 dark:text-white text-sm">
+                              {trade.symbol}
+                              <span
+                                className={`ml-2 text-xs ${
+                                  trade.action === 'buy' ? 'text-green-600' : 'text-red-600'
+                                }`}
+                              >
+                                {trade.action === 'buy' ? 'AL' : 'SAT'}
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{trade.reason}</p>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-2">
+                          <p className="font-bold text-gray-900 dark:text-white text-sm">
+                            ₺{trade.amount.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+                          </p>
+                          <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                            {trade.shares >= 1 ? trade.shares.toFixed(0) : trade.shares.toFixed(2)} adet
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-gray-900 dark:text-white">
-                    ₺{trade.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {trade.shares.toFixed(4)} adet
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex gap-3">

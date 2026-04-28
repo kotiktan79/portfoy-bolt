@@ -17,6 +17,8 @@ export interface Allocation {
   deviation: number;
 }
 
+export type TradePlatform = 'Revolut' | 'BIST' | 'Genel';
+
 export interface Trade {
   symbol: string;
   asset_type: string;
@@ -25,6 +27,53 @@ export interface Trade {
   shares: number;
   current_price: number;
   reason: string;
+  platform?: TradePlatform;
+}
+
+// Asset type başına ortalama yıllık temettü/kupon/staking yield (USD-eşdeğer)
+export const ASSET_TYPE_YIELD: Record<string, number> = {
+  stock: 0.03,      // BIST + US dividend hisse karışımı, ortalama %3
+  fund: 0.02,       // BIST temettü fonu ortalaması
+  eurobond: 0.05,   // US Treasury kupon ~%5
+  crypto: 0.02,     // sadece staking yapılan kısım için
+  commodity: 0,     // altın temettü vermez
+  currency: 0.01,   // USDC staking + minimal mevduat faizi
+  cash: 0,
+};
+
+// Strateji uygulanırsa beklenen yıllık pasif gelir
+export function calculatePassiveIncome(
+  targetAllocations: Record<string, number>,
+  totalValue: number,
+): { yearly: number; monthly: number } {
+  const yearly = Object.entries(targetAllocations).reduce((sum, [type, pct]) => {
+    const yld = ASSET_TYPE_YIELD[type] ?? 0;
+    return sum + (totalValue * (pct / 100)) * yld;
+  }, 0);
+  return { yearly, monthly: yearly / 12 };
+}
+
+function formatPercent(v?: number): string {
+  return `%${(v ?? 0).toFixed(1)}`;
+}
+
+// Sembolden platform tahmini
+export function inferPlatform(symbol: string, assetType: string): TradePlatform {
+  if (assetType === 'crypto') return 'Genel';
+  if (assetType === 'currency') return 'Genel';
+  if (assetType === 'commodity') return 'Genel';
+  if (assetType === 'eurobond') return 'Revolut';
+  // Hisse: 4-5 harf büyük TR ticker → BIST, aksi → Revolut
+  const trBistRegex = /^[A-Z]{3,5}$/;
+  const knownTR = ['ASELS', 'TUPRS', 'GARAN', 'BIMAS', 'TCELL', 'CCOLA', 'SAHOL', 'EREGL', 'EKGYO', 'TOASO', 'TTKOM', 'AKSEN', 'ENKAI', 'THYAO', 'SISE'];
+  if (knownTR.includes(symbol)) return 'BIST';
+  if (trBistRegex.test(symbol) && symbol.length <= 5) {
+    // Bilinen US tickerlar
+    const knownUS = ['JNJ', 'AAPL', 'MSFT', 'GOOGL', 'NVDA', 'AMZN', 'META', 'TSLA', 'KO', 'PEP', 'PG', 'WMT', 'JPM', 'V', 'MCD', 'O', 'SCHD', 'VYM', 'VIG', 'HDV', 'ASML'];
+    if (knownUS.includes(symbol)) return 'Revolut';
+    return 'BIST'; // varsayılan kısa ticker → BIST
+  }
+  return 'Revolut';
 }
 
 export interface RebalancingStrategy {
@@ -50,6 +99,19 @@ export interface RebalancingSimulation {
 }
 
 export const PRESET_STRATEGIES: Record<string, RebalancingStrategy> = {
+  income: {
+    name: 'Gelir Odaklı (Maaş)',
+    target_allocations: {
+      stock: 30,      // temettü hisseler (Revolut: SCHD/VYM/JNJ/KO + BIST: TUPRS/GARAN)
+      eurobond: 25,   // ~%5 kupon
+      fund: 15,       // BIST temettü fonları
+      commodity: 12,  // altın stabilizatör
+      currency: 10,   // yastık (acil)
+      crypto: 8,      // staking + uzun vade
+    },
+    deviation_threshold: 10,
+    is_active: true,
+  },
   conservative: {
     name: 'Muhafazakar',
     target_allocations: {
@@ -178,23 +240,60 @@ export function generateRebalancingTrades(
     const holdingsOfType = currentByType.get(assetType)?.holdings || [];
 
     if (difference > 0) {
-      const symbol = holdingsOfType.length > 0 ? holdingsOfType[0].symbol : `${assetType.toUpperCase()}_INDEX`;
-      const currentPrice = holdingsOfType.length > 0 ? holdingsOfType[0].current_price : 100;
+      // currency tipi için "buy" anlamsız (USD/EUR alımı bir trade değil, transfer)
+      // Sadece holdings'i azaltarak hedefe ulaşılır.
+      if (assetType === 'currency') {
+        return;
+      }
+
+      // Asset tipi için varsayılan öneri sembolü (yoksa kategorik öneri ver)
+      const defaultSymbolByType: Record<string, { sym: string; price: number; platform: TradePlatform; note: string }> = {
+        stock:    { sym: 'SCHD',  price: 28,  platform: 'Revolut', note: 'temettü ETF' },
+        fund:     { sym: 'GPA',   price: 21,  platform: 'BIST',    note: 'BIST temettü fonu' },
+        eurobond: { sym: 'US-T',  price: 100, platform: 'Revolut', note: 'US Treasury 5y' },
+        crypto:   { sym: 'BTC',   price: 0,   platform: 'Genel',   note: 'mevcut pozisyona ekle' },
+        commodity:{ sym: 'ALTIN', price: 6800, platform: 'Genel',  note: 'gram altın' },
+      };
+      const defaults = defaultSymbolByType[assetType];
+
+      const symbol = holdingsOfType.length > 0 ? holdingsOfType[0].symbol : (defaults?.sym ?? assetType.toUpperCase());
+      const currentPrice = holdingsOfType.length > 0
+        ? holdingsOfType[0].current_price
+        : (defaults?.price && defaults.price > 0 ? defaults.price : 100);
+      const platform = inferPlatform(symbol, assetType);
 
       trades.push({
         symbol,
         asset_type: assetType,
         action: 'buy',
         amount: difference,
-        shares: difference / currentPrice,
+        shares: currentPrice > 0 ? difference / currentPrice : 0,
         current_price: currentPrice,
-        reason: `Hedef: %${targetAllocations[assetType]?.toFixed(1) || 0}, Mevcut: %${((currentValue / totalValue) * 100).toFixed(1)}`,
+        reason: `Hedef: %${targetAllocations[assetType]?.toFixed(1) || 0}, Mevcut: %${((currentValue / totalValue) * 100).toFixed(1)}${defaults && holdingsOfType.length === 0 ? ` · öneri: ${defaults.note}` : ''}`,
+        platform,
       });
     } else if (difference < 0) {
+      // currency tipi azaltma → "sat" değil, "transfer/yatır" mantığında
+      if (assetType === 'currency') {
+        const symbol = holdingsOfType.length > 0 ? holdingsOfType[0].symbol : 'USD';
+        const currentPrice = holdingsOfType.length > 0 ? holdingsOfType[0].current_price : 1;
+        trades.push({
+          symbol,
+          asset_type: assetType,
+          action: 'sell',
+          amount: Math.abs(difference),
+          shares: currentPrice > 0 ? Math.abs(difference) / currentPrice : 0,
+          current_price: currentPrice,
+          reason: `Cash fazla — ${formatPercent(targetAllocations[assetType])} hedef için yatırıma yönlendir`,
+          platform: 'Genel',
+        });
+        return;
+      }
+
       const sortedHoldings = [...holdingsOfType].sort((a, b) => {
         const profitA = ((a.current_price - a.purchase_price) / a.purchase_price) * 100;
         const profitB = ((b.current_price - b.purchase_price) / b.purchase_price) * 100;
-        return profitA - profitB;
+        return profitB - profitA; // önce kâra geçmiş olanı sat
       });
 
       let remainingToSell = Math.abs(difference);
@@ -204,7 +303,7 @@ export function generateRebalancingTrades(
 
         const holdingValue = holding.current_price * holding.quantity;
         const sellValue = Math.min(holdingValue, remainingToSell);
-        const sellShares = sellValue / holding.current_price;
+        const sellShares = holding.current_price > 0 ? sellValue / holding.current_price : 0;
 
         trades.push({
           symbol: holding.symbol,
@@ -214,6 +313,7 @@ export function generateRebalancingTrades(
           shares: sellShares,
           current_price: holding.current_price,
           reason: `Hedef: %${targetAllocations[assetType]?.toFixed(1) || 0}, Mevcut: %${((currentValue / totalValue) * 100).toFixed(1)}`,
+          platform: inferPlatform(holding.symbol, assetType),
         });
 
         remainingToSell -= sellValue;
