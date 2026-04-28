@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { sendEmail, buildDailyEmail } from '../lib/email';
+import { sendEmail, buildDailyEmail } from '../lib/email.js';
 
 // Kullanıcı maaş hedefi — env ile override edilebilir
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);

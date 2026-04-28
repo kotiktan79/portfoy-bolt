@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { sendEmail, buildWeeklyEmail } from '../lib/email';
+import { sendEmail, buildWeeklyEmail } from '../lib/email.js';
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

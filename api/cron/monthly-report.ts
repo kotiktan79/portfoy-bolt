@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { sendEmail, buildMonthlyEmail } from '../lib/email';
+import { sendEmail, buildMonthlyEmail } from '../lib/email.js';
 
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
 
