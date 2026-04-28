@@ -648,6 +648,8 @@ KURALLAR:
 - Portföy maaşı hesaplarken: temettü + faiz + staking + kupon gelirlerini ayrı ayrı belirt.
 - Mevcut allokasyon farkını "Gelir hedef allokasyonuna" göre değerlendir (context'te verildi).
 - Çekim oranı ≤%6/yıl sürdürülebilir, %6-8 sınırda, >%8 riskli — bunu hesaba kat.
+- ⛔ ÖNEMLİ KISIT: ALTIN pozisyonu PHYSICAL (fiziki külçe/gram) — parça parça SATILAMAZ. Altın azaltma önerisi VERME. Allokasyonu düşürmek için sadece "yeni alımları başka kategorilere yönlendir" de.
+- Maaş trim'i için sadece kâğıt varlıkları öner: hisse, fon, ETF. ALTIN ve fiziki varlık trim'e dahil edilemez.
 
 PİYASA ARAŞTIRMASI YAPMAN GEREKENLER:
 - Verilen piyasa verilerindeki trendleri analiz et (yükselen/düşen sektörler)

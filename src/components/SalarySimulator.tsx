@@ -124,8 +124,9 @@ function computePlan(holdings: Holding[], totalCashValue: number, targetUsd: num
 
   const passiveMonthly = passiveYearly / 12;
 
+  // Trim adayları: sadece likit kâğıt varlıklar — physical altın (commodity) hariç
   const trimCandidates = holdings
-    .filter(h => (h.asset_type === 'stock' || h.asset_type === 'commodity') && h.purchase_price > 0)
+    .filter(h => h.asset_type === 'stock' && h.purchase_price > 0)
     .map(h => {
       const v = tryValue(h);
       const pnlPct = ((h.current_price - h.purchase_price) / h.purchase_price) * 100;

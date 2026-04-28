@@ -445,7 +445,9 @@ export default function RebalancingEngine() {
                             ₺{trade.amount.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
                           </p>
                           <p className="text-[11px] text-gray-600 dark:text-gray-400">
-                            {trade.shares >= 1 ? trade.shares.toFixed(0) : trade.shares.toFixed(2)} adet
+                            {trade.shares > 0
+                              ? `${trade.shares >= 1 ? trade.shares.toFixed(0) : trade.shares.toFixed(2)} adet`
+                              : 'bilgi'}
                           </p>
                         </div>
                       </div>

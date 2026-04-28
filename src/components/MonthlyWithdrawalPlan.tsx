@@ -88,9 +88,9 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
     // 2. Trim ihtiyacı — pasiften sonra kalan
     const remainingAfterPassive = Math.max(0, targetMonthlyTry - passiveTry);
 
-    // Trim adayları: kazançlı hisse/altın/fon (+%30 üstü, min 5K TL)
+    // Trim adayları: kazançlı kâğıt varlık (hisse + fon). Physical altın hariç.
     const trimCandidates = holdings
-      .filter(h => (h.asset_type === 'stock' || h.asset_type === 'commodity' || h.asset_type === 'fund') && h.purchase_price > 0)
+      .filter(h => (h.asset_type === 'stock' || h.asset_type === 'fund') && h.purchase_price > 0)
       .map(h => {
         const v = tryValue(h);
         const pnlPct = ((h.current_price - h.purchase_price) / h.purchase_price) * 100;

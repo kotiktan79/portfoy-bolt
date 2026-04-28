@@ -289,6 +289,23 @@ export function generateRebalancingTrades(
         });
         return;
       }
+      // Physical altın (commodity) parça parça satılamaz — sadece yeni alımları
+      // başka kategorilere yönlendirerek dengelenir.
+      if (assetType === 'commodity') {
+        const symbol = holdingsOfType.length > 0 ? holdingsOfType[0].symbol : 'ALTIN';
+        const currentPrice = holdingsOfType.length > 0 ? holdingsOfType[0].current_price : 0;
+        trades.push({
+          symbol,
+          asset_type: assetType,
+          action: 'sell',
+          amount: Math.abs(difference),
+          shares: 0, // satış yok, sadece bilgi
+          current_price: currentPrice,
+          reason: `Physical altın parça parça satılamaz — yeni yatırımları başka kategorilere yönlendir, doğal denge kurulur`,
+          platform: 'Genel',
+        });
+        return;
+      }
 
       const sortedHoldings = [...holdingsOfType].sort((a, b) => {
         const profitA = ((a.current_price - a.purchase_price) / a.purchase_price) * 100;
