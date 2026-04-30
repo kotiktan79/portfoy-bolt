@@ -187,13 +187,12 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Right rail: X-Ray + IncomeWidget + maaş/yatırım planları (1/3) */}
-                <div className="space-y-4">
-                  <PortfolioXRay />
-                  <IncomeWidget />
-                  <MonthlyWithdrawalPlan holdings={holdings} totalCashValue={totalCashValue} />
-                  <SalarySimulator holdings={holdings} totalCashValue={totalCashValue} />
-                  <DividendInvestmentPlanner holdings={holdings} totalCashValue={totalCashValue} />
+                {/* Right rail: Tab'lı tek kart — X-Ray, Gelir, Çekim, Maaş, Temettü */}
+                <div>
+                  <RightRailTabs
+                    holdings={holdings}
+                    totalCashValue={totalCashValue}
+                  />
                 </div>
               </div>
             )}
@@ -444,6 +443,47 @@ export default function HomePage() {
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
       <InstallPWA />
       <PriceUpdateNotification />
+    </div>
+  );
+}
+
+// Sağ ray'deki 5 widget'ı tab'lı tek kart olarak göster
+type RightRailTab = 'xray' | 'income' | 'withdrawal' | 'salary' | 'dividend';
+
+function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; totalCashValue: number }) {
+  const [tab, setTab] = useState<RightRailTab>('xray');
+  const tabs: { key: RightRailTab; label: string }[] = [
+    { key: 'xray', label: 'X-Ray' },
+    { key: 'income', label: 'Gelir' },
+    { key: 'withdrawal', label: 'Çekim' },
+    { key: 'salary', label: 'Maaş' },
+    { key: 'dividend', label: 'Temettü' },
+  ];
+
+  return (
+    <div className="card-secondary p-3 md:p-4">
+      <div className="flex gap-1 mb-3 overflow-x-auto pb-1 -mx-1 px-1">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+              tab === t.key
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div>
+        {tab === 'xray' && <PortfolioXRay />}
+        {tab === 'income' && <IncomeWidget />}
+        {tab === 'withdrawal' && <MonthlyWithdrawalPlan holdings={holdings} totalCashValue={totalCashValue} />}
+        {tab === 'salary' && <SalarySimulator holdings={holdings} totalCashValue={totalCashValue} />}
+        {tab === 'dividend' && <DividendInvestmentPlanner holdings={holdings} totalCashValue={totalCashValue} />}
+      </div>
     </div>
   );
 }
