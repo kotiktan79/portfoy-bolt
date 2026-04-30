@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Wallet, PieChart, Coins, Package, LucideIcon } from 'lucide-react';
 import { Holding } from '../lib/supabase';
-import { formatCurrency, getCachedUSDRate } from '../services/priceService';
+import { formatCurrency, formatCurrencyUSD, getCachedUSDRate } from '../services/priceService';
 import { DEFAULT_USD_TRY_RATE } from '../config';
 
 interface Props {
@@ -107,6 +107,11 @@ export function PortfolioSummaryCard({
               <p className={`text-[11px] font-semibold tabular-nums ${
                 pos ? 'text-accent-600 dark:text-accent-400' : 'text-red-600 dark:text-red-400'
               }`}>
+                {pos ? '+' : ''}${formatCurrencyUSD(val, usdRate)}
+              </p>
+              <p className={`text-[10px] font-medium tabular-nums opacity-75 ${
+                pos ? 'text-accent-600 dark:text-accent-400' : 'text-red-600 dark:text-red-400'
+              }`}>
                 {pos ? '+' : ''}{pct.toFixed(2)}%
               </p>
             </div>
@@ -125,6 +130,7 @@ export function PortfolioSummaryCard({
           icon={PieChart}
           label="Toplam K/Z"
           value={`${isPositivePnL ? '+' : ''}${formatCurrency(totalProfitLoss, 0)} ₺`}
+          subUsd={`${isPositivePnL ? '+' : ''}$${formatCurrencyUSD(totalProfitLoss, usdRate)}`}
           sub={`${isPositivePnL ? '+' : ''}${totalProfitLossPercent.toFixed(2)}%`}
           tone={isPositivePnL ? 'positive' : 'negative'}
         />
@@ -148,12 +154,14 @@ function MiniStat({
   label,
   value,
   sub,
+  subUsd,
   tone = 'neutral',
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   sub?: string;
+  subUsd?: string;
   tone?: 'neutral' | 'positive' | 'negative';
 }) {
   const toneClass =
@@ -169,7 +177,8 @@ function MiniStat({
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium text-slate-500 dark:text-gray-500 uppercase tracking-wide">{label}</p>
         <p className={`text-sm font-bold tabular-nums truncate ${toneClass}`}>{value}</p>
-        {sub && <p className={`text-[10px] font-semibold tabular-nums ${toneClass} opacity-80`}>{sub}</p>}
+        {subUsd && <p className={`text-[10px] font-semibold tabular-nums ${toneClass} opacity-80`}>{subUsd}</p>}
+        {sub && <p className={`text-[10px] font-medium tabular-nums ${toneClass} opacity-70`}>{sub}</p>}
       </div>
     </div>
   );
