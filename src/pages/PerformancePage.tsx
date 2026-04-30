@@ -14,6 +14,9 @@ import {
 } from 'recharts';
 import { getHistoricalSnapshots, PortfolioSnapshot } from '../services/analyticsService';
 import { formatCurrency } from '../services/priceService';
+import { usePortfolio } from '../contexts/PortfolioContext';
+import { DailyGainPanel } from '../components/DailyGainPanel';
+import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import {
   getBenchmarkHistory,
   BENCHMARK_OPTIONS,
@@ -46,6 +49,7 @@ function formatTooltipDate(dateStr: string): string {
 }
 
 export default function PerformancePage() {
+  const { holdings, livePnlData } = usePortfolio();
   const [period, setPeriod] = useState<Period>(30);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -331,6 +335,18 @@ export default function PerformancePage() {
               label="Veri noktası"
               value={`${snapshots.length} gün`}
             />
+          </div>
+        )}
+
+        {/* Bugünün kazananları/kaybedenleri + günlük/haftalık/aylık geçmiş tablosu */}
+        {holdings.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+            <DailyGainPanel
+              holdings={holdings}
+              totalDailyChange={livePnlData?.daily.change ?? 0}
+              totalDailyPct={livePnlData?.daily.percentage ?? 0}
+            />
+            <DailyMonthlyPnL />
           </div>
         )}
       </div>

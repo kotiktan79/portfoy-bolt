@@ -18,8 +18,6 @@ import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
 import { DailyActionPlan } from '../components/DailyActionPlan';
 import { SmartAlerts } from '../components/SmartAlerts';
-import { DailyGainPanel } from '../components/DailyGainPanel';
-import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import { PortfolioSummaryCard } from '../components/PortfolioSummaryCard';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -156,18 +154,6 @@ export default function HomePage() {
 
             {/* Alerts strip */}
             {holdings.length > 0 && <SmartAlerts />}
-
-            {/* Bugünün kazananları/kaybedenleri + Geçmiş K/Z tabloları */}
-            {holdings.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <DailyGainPanel
-                  holdings={holdings}
-                  totalDailyChange={livePnlData?.daily.change ?? 0}
-                  totalDailyPct={livePnlData?.daily.percentage ?? 0}
-                />
-                <DailyMonthlyPnL />
-              </div>
-            )}
 
             {/* Main 2-col grid: Chart left + Right rail */}
             {holdings.length > 0 && (
