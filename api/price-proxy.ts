@@ -126,8 +126,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json({ success: true, data: { symbol, series } });
       }
 
+      case 'tefas': {
+        // GET /api/price-proxy?type=tefas&code=IPV
+        // TEFAS resmi BindHistoryInfo endpoint'i — son 7 günün son satırından fiyat
+        const code = ((req.query.code as string) || '').toUpperCase().trim();
+        if (!code) return res.status(400).json({ error: 'code parametresi gerekli' });
+
+        const today = new Date();
+        const start = new Date(today); start.setDate(today.getDate() - 7);
+        const fmt = (d: Date) =>
+          `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+
+        const body = new URLSearchParams({
+          fontip: 'YAT',
+          sfontur: '',
+          fonkod: code,
+          fongrup: '',
+          bastarih: fmt(start),
+          bittarih: fmt(today),
+          fonturkod: '',
+          fonunvantip: '',
+        });
+
+        const r = await fetch('https://www.tefas.gov.tr/api/DB/BindHistoryInfo', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8',
+            'Origin': 'https://www.tefas.gov.tr',
+            'Referer': 'https://www.tefas.gov.tr/TarihselVeriler.aspx',
+          },
+          body,
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!r.ok) {
+          return res.json({ success: false, status: r.status, error: `TEFAS upstream ${r.status}` });
+        }
+
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('json')) {
+          const text = (await r.text()).slice(0, 200);
+          return res.json({ success: false, error: 'TEFAS non-JSON response (bot block?)', preview: text });
+        }
+
+        const d = await r.json();
+        const rows = (d?.data || []) as any[];
+        if (rows.length === 0) {
+          return res.json({ success: false, code, error: 'TEFAS rows=0 (kod bulunamadı veya tarih aralığında veri yok)' });
+        }
+        // Son satır en güncel
+        const latest = rows[rows.length - 1];
+        return res.json({
+          success: true,
+          code,
+          price: Number(latest.FIYAT),
+          date: latest.TARIH,
+          name: latest.FONUNVAN,
+          rowCount: rows.length,
+        });
+      }
+
       default:
-        return res.status(400).json({ error: 'Invalid type. Use: bist, us, european, usd, eur, gold, silver, crypto, benchmark-history' });
+        return res.status(400).json({ error: 'Invalid type. Use: bist, us, european, usd, eur, gold, silver, crypto, tefas, benchmark-history' });
     }
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
