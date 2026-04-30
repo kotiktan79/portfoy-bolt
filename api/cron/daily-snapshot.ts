@@ -390,6 +390,7 @@ async function updateCurrencyPrices(supabase: any, holdings: any[], result: Pric
     const rateMap: Record<string, number> = {
       USD: usdTry,
       EUR: eurTry,
+      EURO: eurTry, // db'de bazı holding'ler 'EURO' sembolüyle tutuluyor
       GBP: usdTry * 1.27, // Approximate, will be refined
       CHF: usdTry * 1.12,
     };
@@ -564,10 +565,22 @@ async function fetchYahooPrices(symbols: string): Promise<Record<string, number>
 
 async function fetchGoldPrice(): Promise<number | null> {
   try {
-    const res = await fetch('https://api.metals.live/v1/spot/gold');
+    const res = await fetch('https://api.metals.live/v1/spot/gold', { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const data = await res.json();
-      return data[0]?.price || null;
+      const p = data[0]?.price;
+      if (p && isFinite(p) && p > 0) return p;
+    }
+  } catch { /* fall through to Yahoo */ }
+  try {
+    const r = await fetch(
+      'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d',
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) }
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (p && isFinite(p) && p > 0) return p;
     }
   } catch { /* skip */ }
   return null;
@@ -575,10 +588,22 @@ async function fetchGoldPrice(): Promise<number | null> {
 
 async function fetchSilverPrice(): Promise<number | null> {
   try {
-    const res = await fetch('https://api.metals.live/v1/spot/silver');
+    const res = await fetch('https://api.metals.live/v1/spot/silver', { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const data = await res.json();
-      return data[0]?.price || null;
+      const p = data[0]?.price;
+      if (p && isFinite(p) && p > 0) return p;
+    }
+  } catch { /* fall through to Yahoo */ }
+  try {
+    const r = await fetch(
+      'https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d',
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) }
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (p && isFinite(p) && p > 0) return p;
     }
   } catch { /* skip */ }
   return null;
