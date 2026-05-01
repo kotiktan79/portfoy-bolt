@@ -36,6 +36,7 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
   const [target, setTarget] = useState<number>(DEFAULT_TARGET_USD);
   const [income, setIncome] = useState<IncomeRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [growth, setGrowth] = useState<{ startValue: number; currentValue: number; daysSpan: number; annualPct: number } | null>(null);
 
   const monthStart = new Date().toISOString().substring(0, 7) + '-01';
   const monthEnd = (() => {
@@ -61,6 +62,45 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
     })();
     return () => { cancelled = true; };
   }, [monthStart, monthEnd]);
+
+  // Dinamik çekim kuralı: son ≤365 günün büyüme oranını hesapla
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('portfolio_snapshots')
+        .select('snapshot_date, total_value, total_investment, total_pnl')
+        .order('snapshot_date', { ascending: true });
+      if (cancelled || !data || data.length < 2) return;
+
+      // Date dedupe (aynı tarih çift kayıt korumalı)
+      const dedup = new Map<string, typeof data[0]>();
+      for (const r of data) dedup.set(r.snapshot_date, r);
+      const rows = Array.from(dedup.values());
+
+      const last = rows[rows.length - 1];
+      const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const earliestPossible = oneYearAgo.toISOString().substring(0, 10);
+      // 1 yıl önceki en yakın snapshot (yoksa elimizdeki en eskisi)
+      const start = rows.find(r => r.snapshot_date >= earliestPossible) || rows[0];
+
+      const startValue = Number(start.total_value) || 0;
+      const startInvestment = Number(start.total_investment) || 0;
+      const currentValue = Number(last.total_value) || 0;
+      const currentInvestment = Number(last.total_investment) || 0;
+      if (startValue <= 0) return;
+
+      const days = Math.max(1, (new Date(last.snapshot_date).getTime() - new Date(start.snapshot_date).getTime()) / 86400000);
+      // Yatırılan yeni para'yı çıkar (gerçek piyasa kazancı)
+      const realPnl = (currentValue - startValue) - (currentInvestment - startInvestment);
+      const periodPct = (realPnl / startValue) * 100;
+      // Yıllıklandır
+      const annualPct = (periodPct * 365) / days;
+
+      if (!cancelled) setGrowth({ startValue, currentValue, daysSpan: Math.round(days), annualPct });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const usdRate = holdings.find(h => h.symbol === 'USD' && h.asset_type === 'currency')?.current_price ?? 45;
   const eurRate = holdings.find(h => h.symbol === 'EURO' && h.asset_type === 'currency')?.current_price ?? 51;
@@ -284,6 +324,56 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
                   </div>
                 )}
               </section>
+
+              {/* Dinamik çekim önerisi — son 1 yılın büyüme oranına dayalı */}
+              {growth && (() => {
+                const SAFETY = 0.85; // büyümenin %85'i çekilirse sermaye yavaşça büyür
+                const dynamicMaxUsdYear = (growth.currentValue * (growth.annualPct / 100) * SAFETY) / usdRate;
+                const dynamicMaxUsdMonth = Math.max(0, dynamicMaxUsdYear / 12);
+                const negative = growth.annualPct < 0;
+                const lowGrowth = growth.annualPct >= 0 && growth.annualPct < 5;
+                return (
+                  <div className={`p-3 rounded-xl border ${negative ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' : lowGrowth ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900' : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'}`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ${negative ? 'text-red-700 dark:text-red-400' : lowGrowth ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                      Dinamik Çekim Kuralı
+                    </div>
+                    <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                      <div>
+                        Son <span className="font-semibold">{growth.daysSpan} gün</span> reel büyüme:{' '}
+                        <span className={`font-bold ${growth.annualPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                          {growth.annualPct >= 0 ? '+' : ''}{growth.annualPct.toFixed(1)}% yıllık
+                        </span>
+                      </div>
+                      {negative ? (
+                        <div className="text-red-700 dark:text-red-400 font-semibold">
+                          Negatif büyüme — anaparaya dokunma. Sadece pasif gelir + trim al.
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            Önerilen güvenli max çekim:{' '}
+                            <span className="font-bold text-blue-700 dark:text-blue-400">
+                              ${dynamicMaxUsdMonth.toFixed(0)}/ay
+                            </span>
+                          </div>
+                          {dynamicMaxUsdMonth >= 50 && Math.abs(target - dynamicMaxUsdMonth) > 50 && (
+                            <button
+                              onClick={() => setTarget(Math.round(dynamicMaxUsdMonth))}
+                              className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:underline"
+                            >
+                              → Hedefi ${Math.round(dynamicMaxUsdMonth)}'a ayarla
+                            </button>
+                          )}
+                        </>
+                      )}
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-1.5 leading-relaxed">
+                        Kural: yıllık reel büyümenin %85'i çekilirse sermaye yavaşça büyür, %100'ü çekilirse sabit kalır,
+                        üzerine çıkarsan anaparayı yersin. Sadece son {growth.daysSpan} günün verisine dayalı — kötü piyasada azalır.
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Summary */}
               <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-brand-50 dark:from-emerald-950/20 dark:to-brand-950/20 border border-emerald-200 dark:border-emerald-900">
