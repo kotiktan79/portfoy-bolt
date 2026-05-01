@@ -87,17 +87,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pnl_percentage: pnlPercentage,
     };
 
-    // Aynı gün için tek satır garanti: önce sil, sonra ekle.
-    // (Supabase tablosunda snapshot_date UNIQUE constraint'ı yok; upsert sessizce
-    // duplicate üretebiliyordu, bu yüzden delete-then-insert yapıyoruz.)
-    const { error: deleteError } = await supabase
-      .from('portfolio_snapshots')
-      .delete()
-      .eq('snapshot_date', today);
-    if (deleteError) {
-      log.push(`Eski snapshot silme uyarı: ${deleteError.message}`);
-    }
-
+    // Aynı gün için tek satır garanti.
+    // Eski "önce sil, sonra ekle" yaklaşımı race-condition'a açıktı —
+    // 3 paralel cron çağrısı DELETE'i çalıştırıp sonra hep birlikte INSERT
+    // yapınca 3 satır kalıyordu. Yeni mantık:
+    //   1) Insert (yeni satır oluşur)
+    //   2) Bugünkü tüm satırları çek, en yeni created_at olan hariç sil.
+    // Paralel yarışta bile bir satır mutlaka "en yeni" olur, diğerleri silinir.
     const { error: insertError } = await supabase
       .from('portfolio_snapshots')
       .insert([snapshotData]);
@@ -106,6 +102,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`Snapshot kayıt hatası: ${insertError.message}`);
     } else {
       log.push(`Snapshot kaydedildi: ${totalValue.toFixed(0)} TL`);
+    }
+
+    // Race-safe dedupe: bugün için 1'den fazla satır varsa en sonu hariç sil
+    const { data: todays } = await supabase
+      .from('portfolio_snapshots')
+      .select('id, created_at')
+      .eq('snapshot_date', today)
+      .order('created_at', { ascending: false });
+
+    if (todays && todays.length > 1) {
+      const stale = todays.slice(1).map(r => r.id);
+      const { error: cleanupError } = await supabase
+        .from('portfolio_snapshots')
+        .delete()
+        .in('id', stale);
+      if (cleanupError) {
+        log.push(`Duplicate cleanup uyarı: ${cleanupError.message}`);
+      } else {
+        log.push(`${stale.length} duplicate snapshot temizlendi`);
+      }
     }
 
     // 5. Fiyat geçmişine kaydet

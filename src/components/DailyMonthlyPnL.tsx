@@ -83,15 +83,25 @@ export function DailyMonthlyPnL() {
 
   async function loadData() {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('portfolio_snapshots')
-      .select('snapshot_date, total_value, total_pnl, pnl_percentage, total_deposits, total_withdrawals')
-      .order('snapshot_date', { ascending: true });
+      .select('snapshot_date, total_value, total_pnl, pnl_percentage, total_deposits, total_withdrawals, created_at')
+      .order('snapshot_date', { ascending: true })
+      .order('created_at', { ascending: false });
 
-    if (error || !data) {
+    if (error || !rawData) {
       setLoading(false);
       return;
     }
+
+    // Defansif: aynı tarihte birden çok satır varsa en yenisini tut
+    const dedup = new Map<string, typeof rawData[0]>();
+    for (const r of rawData) {
+      if (!dedup.has(r.snapshot_date)) dedup.set(r.snapshot_date, r);
+    }
+    const data = Array.from(dedup.values()).sort(
+      (a, b) => a.snapshot_date.localeCompare(b.snapshot_date)
+    );
 
     const daily: DayRecord[] = data.map((row, i) => {
       const prev = i > 0 ? data[i - 1] : null;
