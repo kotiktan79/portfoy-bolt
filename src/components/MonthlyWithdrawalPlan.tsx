@@ -63,41 +63,83 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
     return () => { cancelled = true; };
   }, [monthStart, monthEnd]);
 
-  // Dinamik çekim kuralı: son ≤365 günün büyüme oranını hesapla
+  // Dinamik çekim kuralı: USD bazlı reel büyüme (TL enflasyonu otomatik dışarda)
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('portfolio_snapshots')
-        .select('snapshot_date, total_value, total_investment, total_pnl')
-        .order('snapshot_date', { ascending: true });
-      if (cancelled || !data || data.length < 2) return;
+      const [{ data: snaps }, { data: usdHist }] = await Promise.all([
+        supabase
+          .from('portfolio_snapshots')
+          .select('snapshot_date, total_value, total_investment, total_pnl')
+          .order('snapshot_date', { ascending: true }),
+        supabase
+          .from('price_history')
+          .select('recorded_at, price')
+          .eq('symbol', 'USD')
+          .order('recorded_at', { ascending: true }),
+      ]);
+      if (cancelled || !snaps || snaps.length < 2) return;
 
       // Date dedupe (aynı tarih çift kayıt korumalı)
-      const dedup = new Map<string, typeof data[0]>();
-      for (const r of data) dedup.set(r.snapshot_date, r);
+      const dedup = new Map<string, typeof snaps[0]>();
+      for (const r of snaps) dedup.set(r.snapshot_date, r);
       const rows = Array.from(dedup.values());
 
+      // Snapshot tarihine en yakın USD kurunu bulan helper
+      const usdRows = (usdHist || [])
+        .map(r => ({ ts: new Date(r.recorded_at).getTime(), price: Number(r.price) }))
+        .filter(r => isFinite(r.price) && r.price > 0)
+        .sort((a, b) => a.ts - b.ts);
+
+      const usdAt = (dateStr: string): number | null => {
+        if (!usdRows.length) return null;
+        const target = new Date(dateStr + 'T12:00:00').getTime();
+        let best = usdRows[0];
+        let bestDiff = Math.abs(best.ts - target);
+        for (const r of usdRows) {
+          const d = Math.abs(r.ts - target);
+          if (d < bestDiff) { bestDiff = d; best = r; }
+        }
+        // 7 günden uzak eşleşme reddedilir
+        return bestDiff <= 7 * 86400000 ? best.price : null;
+      };
+
       const last = rows[rows.length - 1];
+      // En eski kur kaydımız hangi tarihten? Onun öncesine snapshot olsa bile kullanamayız.
+      const oldestUsdDate = usdRows.length ? new Date(usdRows[0].ts).toISOString().substring(0, 10) : null;
       const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const earliestPossible = oneYearAgo.toISOString().substring(0, 10);
-      // 1 yıl önceki en yakın snapshot (yoksa elimizdeki en eskisi)
+      const earliestPossible = [oneYearAgo.toISOString().substring(0, 10), oldestUsdDate].filter(Boolean).sort().reverse()[0]!;
       const start = rows.find(r => r.snapshot_date >= earliestPossible) || rows[0];
 
-      const startValue = Number(start.total_value) || 0;
-      const startInvestment = Number(start.total_investment) || 0;
-      const currentValue = Number(last.total_value) || 0;
-      const currentInvestment = Number(last.total_investment) || 0;
-      if (startValue <= 0) return;
+      const startRateUsd = usdAt(start.snapshot_date);
+      const lastRateUsd = usdAt(last.snapshot_date);
+      const startValueTry = Number(start.total_value) || 0;
+      const startInvestmentTry = Number(start.total_investment) || 0;
+      const currentValueTry = Number(last.total_value) || 0;
+      const currentInvestmentTry = Number(last.total_investment) || 0;
+
+      if (!startRateUsd || !lastRateUsd || startValueTry <= 0) return;
+
+      // USD bazına çevir
+      const startValueUsd = startValueTry / startRateUsd;
+      const currentValueUsd = currentValueTry / lastRateUsd;
+      // Yatırılan yeni para — başlangıç ve bitiş tarihinin kurlarının ortalamasıyla yaklaşık USD karşılığı
+      const avgRate = (startRateUsd + lastRateUsd) / 2;
+      const investmentChangeUsd = (currentInvestmentTry - startInvestmentTry) / avgRate;
+      const realPnlUsd = (currentValueUsd - startValueUsd) - investmentChangeUsd;
+      const periodPct = (realPnlUsd / startValueUsd) * 100;
 
       const days = Math.max(1, (new Date(last.snapshot_date).getTime() - new Date(start.snapshot_date).getTime()) / 86400000);
-      // Yatırılan yeni para'yı çıkar (gerçek piyasa kazancı)
-      const realPnl = (currentValue - startValue) - (currentInvestment - startInvestment);
-      const periodPct = (realPnl / startValue) * 100;
-      // Yıllıklandır
       const annualPct = (periodPct * 365) / days;
 
-      if (!cancelled) setGrowth({ startValue, currentValue, daysSpan: Math.round(days), annualPct });
+      if (!cancelled) {
+        setGrowth({
+          startValue: startValueUsd,
+          currentValue: currentValueUsd,
+          daysSpan: Math.round(days),
+          annualPct,
+        });
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -325,21 +367,21 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
                 )}
               </section>
 
-              {/* Dinamik çekim önerisi — son 1 yılın büyüme oranına dayalı */}
+              {/* Dinamik çekim önerisi — USD bazlı reel büyüme (TL enflasyonu hariç) */}
               {growth && (() => {
                 const SAFETY = 0.85; // büyümenin %85'i çekilirse sermaye yavaşça büyür
-                const dynamicMaxUsdYear = (growth.currentValue * (growth.annualPct / 100) * SAFETY) / usdRate;
+                const dynamicMaxUsdYear = growth.currentValue * (growth.annualPct / 100) * SAFETY;
                 const dynamicMaxUsdMonth = Math.max(0, dynamicMaxUsdYear / 12);
                 const negative = growth.annualPct < 0;
                 const lowGrowth = growth.annualPct >= 0 && growth.annualPct < 5;
                 return (
                   <div className={`p-3 rounded-xl border ${negative ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' : lowGrowth ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900' : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'}`}>
                     <div className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ${negative ? 'text-red-700 dark:text-red-400' : lowGrowth ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
-                      Dinamik Çekim Kuralı
+                      Dinamik Çekim Kuralı (USD bazlı)
                     </div>
                     <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
                       <div>
-                        Son <span className="font-semibold">{growth.daysSpan} gün</span> reel büyüme:{' '}
+                        Son <span className="font-semibold">{growth.daysSpan} gün</span> USD reel büyüme:{' '}
                         <span className={`font-bold ${growth.annualPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
                           {growth.annualPct >= 0 ? '+' : ''}{growth.annualPct.toFixed(1)}% yıllık
                         </span>
@@ -367,8 +409,8 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
                         </>
                       )}
                       <div className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-1.5 leading-relaxed">
-                        Kural: yıllık reel büyümenin %85'i çekilirse sermaye yavaşça büyür, %100'ü çekilirse sabit kalır,
-                        üzerine çıkarsan anaparayı yersin. Sadece son {growth.daysSpan} günün verisine dayalı — kötü piyasada azalır.
+                        Hesap USD bazlı: portföyü o günkü USD/TRY kuruyla USD'ye çeviriyoruz, TL enflasyonu otomatik düşülmüş oluyor.
+                        Yıllık reel büyümenin %85'i çekilirse sermaye yavaşça büyür. Negatif büyümede anaparaya dokunma.
                       </div>
                     </div>
                   </div>
