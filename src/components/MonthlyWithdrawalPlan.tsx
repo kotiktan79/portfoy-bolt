@@ -36,7 +36,15 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
   const [target, setTarget] = useState<number>(DEFAULT_TARGET_USD);
   const [income, setIncome] = useState<IncomeRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [growth, setGrowth] = useState<{ startValue: number; currentValue: number; daysSpan: number; annualPct: number } | null>(null);
+  const [growth, setGrowth] = useState<{
+    startValue: number;
+    currentValue: number;
+    daysSpan: number;
+    annualPct: number;
+    // Son 30 günün USD bazlı net kazancı (TL enflasyonu hariç)
+    last30DaysGainUsd: number | null;
+    last30DaysPct: number | null;
+  } | null>(null);
 
   const monthStart = new Date().toISOString().substring(0, 7) + '-01';
   const monthEnd = (() => {
@@ -132,12 +140,34 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
       const days = Math.max(1, (new Date(last.snapshot_date).getTime() - new Date(start.snapshot_date).getTime()) / 86400000);
       const annualPct = (periodPct * 365) / days;
 
+      // Son 30 gün USD bazlı net kazanç (yıllığa çevrilmemiş, gerçek 30 günlük)
+      let last30DaysGainUsd: number | null = null;
+      let last30DaysPct: number | null = null;
+      const thirtyDaysAgoTs = new Date(last.snapshot_date).getTime() - 30 * 86400000;
+      const start30 = rows.find(r => new Date(r.snapshot_date).getTime() >= thirtyDaysAgoTs);
+      if (start30 && start30.snapshot_date !== last.snapshot_date) {
+        const r1 = usdAt(start30.snapshot_date);
+        const r2 = usdAt(last.snapshot_date);
+        if (r1 && r2) {
+          const v1Usd = (Number(start30.total_value) || 0) / r1;
+          const v2Usd = (Number(last.total_value) || 0) / r2;
+          const inv1 = (Number(start30.total_investment) || 0);
+          const inv2 = (Number(last.total_investment) || 0);
+          const avgR = (r1 + r2) / 2;
+          const investDeltaUsd = (inv2 - inv1) / avgR;
+          last30DaysGainUsd = (v2Usd - v1Usd) - investDeltaUsd;
+          last30DaysPct = v1Usd > 0 ? (last30DaysGainUsd / v1Usd) * 100 : 0;
+        }
+      }
+
       if (!cancelled) {
         setGrowth({
           startValue: startValueUsd,
           currentValue: currentValueUsd,
           daysSpan: Math.round(days),
           annualPct,
+          last30DaysGainUsd,
+          last30DaysPct,
         });
       }
     })();
@@ -369,49 +399,88 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
 
               {/* Dinamik çekim önerisi — USD bazlı reel büyüme (TL enflasyonu hariç) */}
               {growth && (() => {
-                const SAFETY = 0.85; // büyümenin %85'i çekilirse sermaye yavaşça büyür
-                const dynamicMaxUsdYear = growth.currentValue * (growth.annualPct / 100) * SAFETY;
-                const dynamicMaxUsdMonth = Math.max(0, dynamicMaxUsdYear / 12);
-                const negative = growth.annualPct < 0;
-                const lowGrowth = growth.annualPct >= 0 && growth.annualPct < 5;
+                const SAFETY = 0.85;
+                // Yıllık sürdürülebilir aylık max (uzun vadeli ortalama)
+                const sustainableMonthlyUsd = Math.max(0, (growth.currentValue * (growth.annualPct / 100) * SAFETY) / 12);
+                // Bu ay için spesifik max — son 30 günün gerçek kazancının %85'i
+                const thisMonthMaxUsd = growth.last30DaysGainUsd != null
+                  ? Math.max(0, growth.last30DaysGainUsd * SAFETY)
+                  : null;
+
+                const monthlyNegative = growth.last30DaysGainUsd != null && growth.last30DaysGainUsd < 0;
+                const annualNegative = growth.annualPct < 0;
+
+                // Önerilen max = ikisinden DAHA KÜÇÜK olanı (güvenli taraf)
+                const recommendedMax = thisMonthMaxUsd != null
+                  ? Math.min(thisMonthMaxUsd, sustainableMonthlyUsd)
+                  : sustainableMonthlyUsd;
+
                 return (
-                  <div className={`p-3 rounded-xl border ${negative ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' : lowGrowth ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900' : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'}`}>
-                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ${negative ? 'text-red-700 dark:text-red-400' : lowGrowth ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                  <div className={`p-3 rounded-xl border ${monthlyNegative || annualNegative ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'}`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${monthlyNegative || annualNegative ? 'text-red-700 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'}`}>
                       Dinamik Çekim Kuralı (USD bazlı)
                     </div>
-                    <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
-                      <div>
-                        Son <span className="font-semibold">{growth.daysSpan} gün</span> USD reel büyüme:{' '}
-                        <span className={`font-bold ${growth.annualPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
-                          {growth.annualPct >= 0 ? '+' : ''}{growth.annualPct.toFixed(1)}% yıllık
-                        </span>
-                      </div>
-                      {negative ? (
-                        <div className="text-red-700 dark:text-red-400 font-semibold">
-                          Negatif büyüme — anaparaya dokunma. Sadece pasif gelir + trim al.
-                        </div>
-                      ) : (
+
+                    {/* BU AY MAX — büyük ve net */}
+                    <div className="mb-2 p-2 rounded-lg bg-white dark:bg-gray-900/50 border border-blue-300 dark:border-blue-800">
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">Bu Ay İçin Max</div>
+                      {monthlyNegative ? (
                         <>
-                          <div>
-                            Önerilen güvenli max çekim:{' '}
-                            <span className="font-bold text-blue-700 dark:text-blue-400">
-                              ${dynamicMaxUsdMonth.toFixed(0)}/ay
-                            </span>
+                          <div className="text-base font-bold text-red-600 dark:text-red-400">$0/ay</div>
+                          <div className="text-[11px] text-red-700 dark:text-red-400 font-semibold">
+                            Son 30 gün USD bazlı {growth.last30DaysGainUsd!.toFixed(0)} kayıp — bu ay anaparaya dokunma.
                           </div>
-                          {dynamicMaxUsdMonth >= 50 && Math.abs(target - dynamicMaxUsdMonth) > 50 && (
+                        </>
+                      ) : thisMonthMaxUsd != null ? (
+                        <>
+                          <div className="text-xl font-bold text-blue-700 dark:text-blue-400">
+                            ${thisMonthMaxUsd.toFixed(0)}
+                          </div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                            Son 30 günde +${growth.last30DaysGainUsd!.toFixed(0)} kazandın × %85 güvenlik
+                          </div>
+                          {thisMonthMaxUsd >= 50 && Math.abs(target - thisMonthMaxUsd) > 50 && (
                             <button
-                              onClick={() => setTarget(Math.round(dynamicMaxUsdMonth))}
-                              className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:underline"
+                              onClick={() => setTarget(Math.round(thisMonthMaxUsd))}
+                              className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:underline mt-1"
                             >
-                              → Hedefi ${Math.round(dynamicMaxUsdMonth)}'a ayarla
+                              → Hedefi ${Math.round(thisMonthMaxUsd)}'a ayarla
                             </button>
                           )}
                         </>
+                      ) : (
+                        <div className="text-[11px] text-gray-500">30 günlük veri yok — yıllık ortalama kullan</div>
                       )}
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-1.5 leading-relaxed">
-                        Hesap USD bazlı: portföyü o günkü USD/TRY kuruyla USD'ye çeviriyoruz, TL enflasyonu otomatik düşülmüş oluyor.
-                        Yıllık reel büyümenin %85'i çekilirse sermaye yavaşça büyür. Negatif büyümede anaparaya dokunma.
+                    </div>
+
+                    {/* Yıllık ortalama referans */}
+                    <div className="text-xs text-gray-700 dark:text-gray-300 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">Yıllık ortalama (referans):</span>
+                        <span className={`text-[11px] font-bold ${growth.annualPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                          {growth.annualPct >= 0 ? '+' : ''}{growth.annualPct.toFixed(1)}% / yıl
+                        </span>
                       </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">Sürdürülebilir aylık (uzun vadeli):</span>
+                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                          ${sustainableMonthlyUsd.toFixed(0)}
+                        </span>
+                      </div>
+                      {thisMonthMaxUsd != null && (
+                        <div className="flex items-center justify-between pt-1 mt-1 border-t border-blue-200 dark:border-blue-900/50">
+                          <span className="text-[11px] text-blue-700 dark:text-blue-400 font-semibold">Önerilen (ikisinden küçük olan):</span>
+                          <span className="text-sm font-bold text-blue-700 dark:text-blue-400">
+                            ${recommendedMax.toFixed(0)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-2 leading-relaxed">
+                      Hesap USD bazlı: portföyü o günkü USD/TRY kuruyla USD'ye çeviriyoruz, TL enflasyonu otomatik düşüyor.
+                      Bu ay max = son 30 günün gerçek kazancının %85'i. Yıllık ortalama da referans olarak gösteriliyor —
+                      ikisinden daha küçük olan en güvenli seçim.
                     </div>
                   </div>
                 );
