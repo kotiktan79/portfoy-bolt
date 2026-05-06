@@ -453,6 +453,42 @@ export default function MonthlyWithdrawalPlan({ holdings, totalCashValue }: Prop
                       )}
                     </div>
 
+                    {/* Yıllık Maaş Eşdeğeri — büyük ve net */}
+                    {(() => {
+                      const yearlyEarningUsd = growth.currentValue * (growth.annualPct / 100);
+                      const monthlySalaryUsd = yearlyEarningUsd / 12;
+                      const negative = yearlyEarningUsd < 0;
+                      return (
+                        <div className={`mb-2 p-2 rounded-lg border ${negative ? 'bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-800' : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'}`}>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">
+                            💼 Yıllık Maaş Eşdeğeri
+                          </div>
+                          <div className="flex items-baseline gap-3">
+                            <div>
+                              <div className={`text-xl font-bold ${negative ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                {negative ? '-' : '+'}${Math.abs(monthlySalaryUsd).toFixed(0)}/ay
+                              </div>
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                                aylık eşdeğer
+                              </div>
+                            </div>
+                            <div className="border-l border-gray-300 dark:border-gray-700 pl-3">
+                              <div className={`text-base font-bold ${negative ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                {negative ? '-' : '+'}${Math.abs(yearlyEarningUsd).toFixed(0)}/yıl
+                              </div>
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                                yıllık tahmini {negative ? 'kayıp' : 'kazanç'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-1">
+                            Son {growth.daysSpan} günün USD reel kazancı yıllığa ölçeklendirildi.
+                            {growth.daysSpan < 365 && ' Tam 365 gün veri toplandığında bu rakam daha sağlam olur.'}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Yıllık ortalama referans */}
                     <div className="text-xs text-gray-700 dark:text-gray-300 space-y-0.5">
                       <div className="flex items-center justify-between">
