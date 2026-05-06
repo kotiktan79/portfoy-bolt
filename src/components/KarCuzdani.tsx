@@ -17,6 +17,8 @@ interface SalaryWithdrawal {
   reservoir_after_usd: number;
   portfolio_value_usd: number;
   note: string | null;
+  source_symbol: string | null;
+  source_quantity_deducted: number | null;
 }
 
 interface Props {
@@ -30,6 +32,7 @@ export default function KarCuzdani({ holdings }: Props) {
   const [editingTarget, setEditingTarget] = useState(false);
   const [newTarget, setNewTarget] = useState('2000');
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+  const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
 
   useEffect(() => {
     loadAll();
@@ -57,8 +60,6 @@ export default function KarCuzdani({ holdings }: Props) {
     return totalTry / fxRates.usd;
   }, [holdings, fxRates]);
 
-  // Cüzdan hesabı:
-  // available = max(0, current_portfolio - baseline - total_withdrawn)
   const totalWithdrawnUsd = withdrawals.reduce((sum, w) => sum + Number(w.amount_usd), 0);
   const baseline = Number(settings?.baseline_usd ?? 0);
   const reservoirUsd = Math.max(0, portfolioUsd - baseline - totalWithdrawnUsd);
@@ -67,17 +68,61 @@ export default function KarCuzdani({ holdings }: Props) {
   const canWithdraw = reservoirUsd >= target;
   const portfolioAboveBaseline = portfolioUsd > baseline + totalWithdrawnUsd;
 
+  // Likit kaynaklar (cash & cash equivalents)
+  const cashSources = useMemo(() => {
+    const sources = holdings
+      .filter(h => h.asset_type === 'currency' && h.quantity > 0)
+      .map(h => {
+        const ccy = h.currency || 'TRY';
+        const ratePerUnit = ccy === 'USD' ? 1 : ccy === 'EUR' ? fxRates.eur / fxRates.usd : 1 / fxRates.usd;
+        const valueUsd = h.quantity * (h.symbol === 'USD' ? 1 : h.symbol === 'EURO' ? fxRates.eur / fxRates.usd : ratePerUnit);
+        return {
+          symbol: h.symbol,
+          quantity: h.quantity,
+          valueUsd,
+          ccyDisplay: h.symbol === 'EURO' ? 'EUR' : h.symbol,
+          unitsPerUsd: h.symbol === 'USD' ? 1 : h.symbol === 'EURO' ? fxRates.usd / fxRates.eur : fxRates.usd,
+        };
+      })
+      .filter(s => s.valueUsd >= 100)
+      .sort((a, b) => b.valueUsd - a.valueUsd);
+    return sources;
+  }, [holdings, fxRates]);
+
+  const selectedSource = cashSources.find(s => s.symbol === sourceSymbol) || cashSources[0];
+  const targetSourceQty = selectedSource ? target * selectedSource.unitsPerUsd : 0;
+  const sourceSufficient = selectedSource ? selectedSource.valueUsd >= target : false;
+
   async function handleWithdraw() {
-    if (!canWithdraw || !settings) return;
+    if (!canWithdraw || !settings || !selectedSource || !sourceSufficient) return;
     const newReservoir = reservoirUsd - target;
+
+    // 1. Kaynak holding'in quantity'sini düşür
+    const sourceHolding = holdings.find(h => h.symbol === selectedSource.symbol && h.asset_type === 'currency');
+    if (!sourceHolding) return;
+    const newQty = sourceHolding.quantity - targetSourceQty;
+    const { error: updErr } = await supabase
+      .from('holdings')
+      .update({ quantity: newQty })
+      .eq('id', sourceHolding.id);
+    if (updErr) {
+      alert('Kaynak holding güncellenemedi: ' + updErr.message);
+      return;
+    }
+
+    // 2. Çekim kaydını yaz
     const { error } = await supabase.from('salary_withdrawals').insert({
       amount_usd: target,
       reservoir_after_usd: newReservoir,
       portfolio_value_usd: portfolioUsd,
+      source_symbol: selectedSource.symbol,
+      source_quantity_deducted: targetSourceQty,
     });
     if (!error) {
       setConfirmWithdraw(false);
       await loadAll();
+      // Sayfayı yenile ki holdings de tazelensin
+      window.location.reload();
     }
   }
 
@@ -222,10 +267,34 @@ export default function KarCuzdani({ holdings }: Props) {
             <TrendingUp size={11} className="inline" /> Cüzdanda <strong>{monthsAvailable.toFixed(1)} ay</strong> daha hak var
           </p>
 
+          {/* Kaynak seçici */}
+          {canWithdraw && cashSources.length > 0 && (
+            <div className="mb-2">
+              <label className="text-[10px] text-slate-500 dark:text-gray-400 uppercase tracking-wide">Kaynak</label>
+              <select
+                value={sourceSymbol}
+                onChange={(e) => setSourceSymbol(e.target.value)}
+                className="w-full mt-0.5 px-2 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded"
+              >
+                {cashSources.map((s) => (
+                  <option key={s.symbol} value={s.symbol}>
+                    {s.ccyDisplay} cash — {s.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} {s.ccyDisplay} (${s.valueUsd.toFixed(0)})
+                  </option>
+                ))}
+              </select>
+              {selectedSource && (
+                <p className="text-[10px] text-slate-500 dark:text-gray-400 mt-0.5">
+                  Düşülecek: <strong>{targetSourceQty.toFixed(0)} {selectedSource.ccyDisplay}</strong>
+                </p>
+              )}
+            </div>
+          )}
+
           {confirmWithdraw ? (
             <div className="space-y-2">
               <p className="text-xs text-slate-700 dark:text-gray-300">
-                ${target.toFixed(0)} çekildiğinde cüzdan ${(reservoirUsd - target).toFixed(0)} olacak. Emin misin?
+                <strong>{targetSourceQty.toFixed(0)} {selectedSource?.ccyDisplay}</strong> ({selectedSource?.symbol} cash) düşülecek.
+                <br/>Cüzdan: ${reservoirUsd.toFixed(0)} → ${(reservoirUsd - target).toFixed(0)}
               </p>
               <div className="flex gap-2">
                 <button
@@ -245,14 +314,14 @@ export default function KarCuzdani({ holdings }: Props) {
           ) : (
             <button
               onClick={() => setConfirmWithdraw(true)}
-              disabled={!canWithdraw}
+              disabled={!canWithdraw || !sourceSufficient}
               className={`mt-auto py-3 rounded-lg font-bold text-sm transition-colors ${
-                canWithdraw
+                canWithdraw && sourceSufficient
                   ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md'
                   : 'bg-slate-200 dark:bg-gray-700 text-slate-400 dark:text-gray-500 cursor-not-allowed'
               }`}
             >
-              {canWithdraw ? `💸 ${target.toFixed(0)}$ Maaşı Çek` : 'Cüzdan Yetersiz'}
+              {!canWithdraw ? 'Cüzdan Yetersiz' : !sourceSufficient ? `Kaynak Yetersiz (${selectedSource?.ccyDisplay})` : `💸 ${target.toFixed(0)}$ Maaşı Çek`}
             </button>
           )}
         </div>
@@ -263,19 +332,27 @@ export default function KarCuzdani({ holdings }: Props) {
         <div className="px-5 pb-5">
           <p className="text-xs text-slate-500 dark:text-gray-400 uppercase tracking-wide mb-2">Son Çekimler</p>
           <div className="max-h-32 overflow-y-auto space-y-1">
-            {withdrawals.slice(0, 5).map((w) => (
-              <div key={w.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-white/60 dark:bg-gray-900/30 border border-slate-200 dark:border-gray-700">
-                <span className="text-slate-600 dark:text-gray-400">
-                  {new Date(w.withdrawn_at).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  -${Number(w.amount_usd).toFixed(0)}
-                </span>
-                <span className="text-slate-500 dark:text-gray-500">
-                  Kalan: ${Number(w.reservoir_after_usd).toFixed(0)}
-                </span>
-              </div>
-            ))}
+            {withdrawals.slice(0, 5).map((w) => {
+              const sourceLabel = w.source_symbol === 'EURO' ? 'EUR' : w.source_symbol;
+              return (
+                <div key={w.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-white/60 dark:bg-gray-900/30 border border-slate-200 dark:border-gray-700">
+                  <span className="text-slate-600 dark:text-gray-400 w-20">
+                    {new Date(w.withdrawn_at).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}
+                  </span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    -${Number(w.amount_usd).toFixed(0)}
+                  </span>
+                  {w.source_symbol && (
+                    <span className="text-[10px] text-slate-500 dark:text-gray-500 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-gray-800">
+                      {Number(w.source_quantity_deducted).toFixed(0)} {sourceLabel}
+                    </span>
+                  )}
+                  <span className="text-slate-500 dark:text-gray-500">
+                    Kalan: ${Number(w.reservoir_after_usd).toFixed(0)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           {withdrawals.length > 5 && (
             <p className="text-[10px] text-slate-400 mt-1 text-center">+{withdrawals.length - 5} eski çekim</p>

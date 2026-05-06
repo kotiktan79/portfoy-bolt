@@ -25,5 +25,7 @@ ALTER TABLE salary_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE salary_withdrawals ENABLE ROW LEVEL SECURITY;
 
 -- Tek kullanıcı, permissive RLS
+DROP POLICY IF EXISTS "salary_settings all" ON salary_settings;
 CREATE POLICY "salary_settings all" ON salary_settings FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "salary_withdrawals all" ON salary_withdrawals;
 CREATE POLICY "salary_withdrawals all" ON salary_withdrawals FOR ALL USING (true) WITH CHECK (true);
