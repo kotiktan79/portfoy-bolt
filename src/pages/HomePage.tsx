@@ -25,8 +25,7 @@ import InstallPWA from '../components/InstallPWA';
 import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
 import IncomeWidget from '../components/IncomeWidget';
 import PortfolioXRay from '../components/PortfolioXRay';
-import SalarySimulator from '../components/SalarySimulator';
-import MonthlyWithdrawalPlan from '../components/MonthlyWithdrawalPlan';
+import KarCuzdani from '../components/KarCuzdani';
 import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
 
 // Lazy loaded components (charts, modals - loaded on demand)
@@ -151,6 +150,9 @@ export default function HomePage() {
                 monthlyChangePct={livePnlData?.monthly.percentage}
               />
             )}
+
+            {/* 💰 Kâr Cüzdanı — ana maaş paneli */}
+            {holdings.length > 0 && <KarCuzdani holdings={holdings} />}
 
             {/* Alerts strip */}
             {holdings.length > 0 && <SmartAlerts />}
@@ -447,16 +449,14 @@ export default function HomePage() {
   );
 }
 
-// Sağ ray'deki 5 widget'ı tab'lı tek kart olarak göster
-type RightRailTab = 'xray' | 'income' | 'withdrawal' | 'salary' | 'dividend';
+// Sağ ray: X-Ray, Gelir, Temettü tab'ları (Çekim ve Maaş tab'ları Kâr Cüzdanı'na taşındı)
+type RightRailTab = 'xray' | 'income' | 'dividend';
 
 function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; totalCashValue: number }) {
   const [tab, setTab] = useState<RightRailTab>('xray');
   const tabs: { key: RightRailTab; label: string }[] = [
     { key: 'xray', label: 'X-Ray' },
     { key: 'income', label: 'Gelir' },
-    { key: 'withdrawal', label: 'Çekim' },
-    { key: 'salary', label: 'Maaş' },
     { key: 'dividend', label: 'Temettü' },
   ];
 
@@ -480,8 +480,6 @@ function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; tota
       <div>
         {tab === 'xray' && <PortfolioXRay />}
         {tab === 'income' && <IncomeWidget />}
-        {tab === 'withdrawal' && <MonthlyWithdrawalPlan holdings={holdings} totalCashValue={totalCashValue} />}
-        {tab === 'salary' && <SalarySimulator holdings={holdings} totalCashValue={totalCashValue} />}
         {tab === 'dividend' && <DividendInvestmentPlanner holdings={holdings} totalCashValue={totalCashValue} />}
       </div>
     </div>
