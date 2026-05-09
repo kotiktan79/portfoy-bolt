@@ -31,7 +31,7 @@ export function NotificationSettings() {
   const [configs, setConfigs] = useState<NotificationConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfigs();
@@ -72,38 +72,8 @@ export function NotificationSettings() {
     }
   }
 
-  async function testNotification(config: NotificationConfig) {
-    setTestingId(config.id);
-
-    try {
-      // Edge Function yeni projede mevcut değil — Vercel API kullan
-      const apiUrl = `/api/chat`; // TODO: Bildirim endpoint'i eklenecek
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: config.notification_type,
-          message: '🧪 Test Bildirimi\n\nBu bir test mesajıdır. Bildirim sisteminiz çalışıyor!',
-          config: config.config,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success('Test bildirimi başarıyla gönderildi!');
-      } else {
-        toast.error('Hata: ' + result.error);
-      }
-    } catch (error) {
-      toast.error('Bildirim gönderilemedi: ' + (error instanceof Error ? error.message : 'Bilinmeyen hata'));
-    } finally {
-      setTestingId(null);
-    }
+  async function testNotification(_config: NotificationConfig) {
+    toast.error('Bildirim test endpoint\'i henüz aktif değil. Telegram/Discord webhook desteği eklenince çalışacak.');
   }
 
   const getIcon = (type: string) => {

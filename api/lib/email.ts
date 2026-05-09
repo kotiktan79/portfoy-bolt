@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 
 // Resend API key Vercel env'den okunur. Yoksa email atılmaz, sessizce geçer.
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const EMAIL_TO = process.env.EMAIL_TO || 'tantuncer6@gmail.com';
+const EMAIL_TO = process.env.EMAIL_TO || 'tanertuncer@yahoo.com';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Tandor Finans <onboarding@resend.dev>';
 
 export interface EmailResult {
