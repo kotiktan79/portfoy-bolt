@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { sendEmail, buildWeeklyEmail } from '../lib/email.js';
+import { sendTelegram, buildWeeklyTelegram } from '../lib/telegram.js';
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -80,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .slice(0, 5)
       .map(a => `${a.symbol || ''}${a.symbol ? ' · ' : ''}${a.instruction || a.detail || a.title || ''}`);
 
-    const { subject, html } = buildWeeklyEmail({
+    const snapshot = {
       weekStart: weekStartStr,
       weekEnd: weekEndStr,
       totalValueTry,
@@ -93,9 +94,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       weekIncomeBreakdown,
       weekActionsCompleted: [],
       thisWeekTodos,
-    });
+    };
+    const { subject, html } = buildWeeklyEmail(snapshot);
     const emailRes = await sendEmail(subject, html);
     log.push(emailRes.sent ? `Email gönderildi: ${emailRes.id}` : `Email atlandı: ${emailRes.reason}`);
+
+    const tgRes = await sendTelegram(buildWeeklyTelegram(snapshot));
+    log.push(tgRes.sent ? `Telegram gönderildi` : `Telegram atlandı: ${tgRes.reason}`);
 
     return res.status(200).json({ success: true, log });
   } catch (err: any) {

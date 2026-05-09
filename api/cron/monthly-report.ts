@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { sendEmail, buildMonthlyEmail } from '../lib/email.js';
+import { sendTelegram, buildMonthlyTelegram } from '../lib/telegram.js';
 
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
 
@@ -103,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1)
       .single();
 
-    const { subject, html } = buildMonthlyEmail({
+    const snapshot = {
       monthLabel,
       totalValueTry,
       monthStartValueTry: monthStartValue,
@@ -118,9 +119,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       topGainersThisMonth,
       withdrawalRatePctYTD,
       diagnosisAi: lastReport?.portfolio_diagnosis || '',
-    });
+    };
+    const { subject, html } = buildMonthlyEmail(snapshot);
     const emailRes = await sendEmail(subject, html);
     log.push(emailRes.sent ? `Email gönderildi: ${emailRes.id}` : `Email atlandı: ${emailRes.reason}`);
+
+    const tgRes = await sendTelegram(buildMonthlyTelegram(snapshot));
+    log.push(tgRes.sent ? `Telegram gönderildi` : `Telegram atlandı: ${tgRes.reason}`);
 
     return res.status(200).json({ success: true, log });
   } catch (err: any) {

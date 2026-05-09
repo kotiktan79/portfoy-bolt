@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { sendEmail, buildDailyEmail } from '../lib/email.js';
+import { sendTelegram, buildDailyTelegram } from '../lib/telegram.js';
 
 // Kullanıcı maaş hedefi — env ile override edilebilir
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
@@ -228,7 +229,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }, 0);
       const passiveMonthlyUsd = (passiveYearly / 12) / usdRateForEmail;
 
-      const { subject, html } = buildDailyEmail({
+      const snapshot = {
         date: todayStr,
         totalValueTry: totalValue,
         totalValueUsd: totalValue / usdRateForEmail,
@@ -246,9 +247,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         moderateMonthly,
         passiveMonthlyUsd,
         salaryTargetUsd: SALARY_TARGET_USD,
-      });
+      };
+      const { subject, html } = buildDailyEmail(snapshot);
       const emailRes = await sendEmail(subject, html);
       log.push(emailRes.sent ? `Email gönderildi: ${emailRes.id}` : `Email atlandı: ${emailRes.reason}`);
+
+      const tgRes = await sendTelegram(buildDailyTelegram(snapshot));
+      log.push(tgRes.sent ? `Telegram gönderildi` : `Telegram atlandı: ${tgRes.reason}`);
     } catch (emailErr: any) {
       log.push(`Email gönderim hatası: ${emailErr.message}`);
     }
