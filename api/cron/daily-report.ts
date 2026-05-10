@@ -724,15 +724,30 @@ GÖREVIN:
 6. Rebalance hedefi: stock 35 / eurobond 20 / fund 12 / commodity 10 / currency 10 / crypto 13
 
 ÖNERİ ÖNCELİKLERİ:
-- ✅ ÖNCELİK 1: Cash fazlasını TOTAL RETURN hisselere dönüştür: SCHD (kalite + %3.5 + büyüme), JNJ (savunmacı + %3 + büyüme), VYM (geniş havuz). Saf REIT (%6 ama 0 büyüme) yerine kalite tercih et.
-- ✅ ÖNCELİK 2: Mevcut +%60 üstü kazançtaki BIST hisselerinden (ASELS/TUPRS/AKSEN/ENKAI/BIMAS) trim — ama %20'den fazla satma, çünkü bunlar TEMETTÜ + BÜYÜME hibridi (total return çekirdeği)
-- ✅ ÖNCELİK 3: Eurobond %1.2 → %20-25 (Revolut'tan US Treasury ekle) — sigorta + kupon
-- ✅ ÖNCELİK 4: Kripto %6.6 → %12-13 (BTC/ETH ana, sadece %2'si staking) — uzun vade büyüme tilt
+- ✅ ÖNCELİK 1: Cash fazlasını TOTAL RETURN hisselere dönüştür: SCHD (kalite + %3.5 + büyüme), JNJ (savunmacı + %3 + büyüme). Saf REIT (%6 ama 0 büyüme) yerine kalite tercih et.
+- ✅ ÖNCELİK 2: Mevcut +%60 üstü kazançtaki BIST hisselerinden (ASELS/TUPRS/AKSEN/ENKAI/BIMAS) trim — ama %20-30 dilim, çünkü bunlar TEMETTÜ + BÜYÜME hibridi (total return çekirdeği)
+- ✅ ÖNCELİK 3: Eurobond %1.2 → %20 — Türkiye Hazine eurobondu (broker'dan) veya TLT/GOVT ETF (Revolut'tan). Tek seferde değil, 3-5 dilimde ladder.
+- ✅ ÖNCELİK 4: Kripto %6.6 → %12-13 (BTC/ETH ana) — DCA ile haftalık parça alım
 - ⚠️ DİKKAT: Saf spekülasyon (NVDA momentum, AKSEN top pick gibi) önerme — kalite + temettü + büyüme tercih et
 - ⚠️ Top pick: yüksek total return potansiyeli olan kalite varlık (SCHD/JNJ/dividend grower BIST hissesi)
 
+TEMPO VE MİKTAR KURALLARI (ZORUNLU):
+- ⛔ Tek seferde 1M TL üzeri alım ÖNERME. Maksimum 750K TL parça başına, sonra DCA ile büyüt.
+- ⛔ "today" urgency'sini SADECE risk/protect aksiyonları için kullan. Cash redeploy/buy için "this_week" veya "this_month" kullan.
+- ⛔ SCHD ve VYM'i AYNI ANDA önerme — birbirinin tekrarı (overlap %80). Sadece SCHD yeter.
+- ⛔ "Revolut'tan TreasuryDirect" YAZMA — TreasuryDirect ABD vatandaşları için, Revolut'tan erişim yok. Revolut'tan US Treasury için TLT veya GOVT ETF (Treasury'ye yatırım yapan ETF) yaz.
+- ⛔ Türkiye eurobondu Revolut'ta YOK. Bunun için "Türkiye broker (İş Yatırım/Garanti BBVA)" platform yaz.
+- ✅ Toplam aksiyon sayısı 4-6 arasında olsun, fazlası kullanıcıyı boğar.
+- ✅ Toplam önerilen cash redeploy miktarı portföyün %10-15'ini (yaklaşık 700K-1M TL) geçmesin, yoksa kullanıcı korkar/erteler.
+
+PLATFORM REALİTESİ (yanlış yazma):
+- **Revolut**: US/EU hisse, US ETF (SCHD/VOO/TLT/GOVT/QQQ/JNJ/KO), crypto (BTC/ETH). YOK: Türkiye eurobondu, fiziki tahvil, TreasuryDirect.
+- **Binance**: Crypto. YOK: hisse, tahvil, ETF.
+- **BIST (Türkiye broker)**: BIST hisseleri, TR fonlar (TEFAS), Türkiye eurobondu (USD), VIOP. Broker örnekleri: İş Yatırım, Garanti BBVA Yatırım, Ziraat Yatırım.
+- **Mevcut**: pozisyon var, dokunma demek.
+
 KURALLAR:
-- Bilgi kesim tarihin Mayıs 2025. Sadece CANLI VERİLERE dayan.
+- Bilgi kesim tarihin Ocak 2026. Sadece CANLI VERİLERE dayan.
 - Uydurma yapma. Veri olmayan hakkında yorum yapma.
 - Müşteri Romanya'da yaşıyor (Türk vatandaşı). BIST + Revolut (USD/EUR) + Binance kullanıyor.
 - Her öneri: NEDEN, NE KADAR, HANGİ PLATFORM, CANLI FİYAT, BEKLENEN TEMETTÜ/KUPON içermeli.
@@ -741,6 +756,7 @@ KURALLAR:
 - Çekim oranı ≤%6/yıl sürdürülebilir, %6-8 sınırda, >%8 riskli — bunu hesaba kat.
 - ⛔ ÖNEMLİ KISIT: ALTIN pozisyonu PHYSICAL (fiziki külçe/gram) — parça parça SATILAMAZ. Altın azaltma önerisi VERME. Allokasyonu düşürmek için sadece "yeni alımları başka kategorilere yönlendir" de.
 - Maaş trim'i için sadece kâğıt varlıkları öner: hisse, fon, ETF. ALTIN ve fiziki varlık trim'e dahil edilemez.
+- JNJ pozisyonu Revolut'ta tutuluyor (USD), ASML pozisyonu TRY tabanlı manuel takipte — bu ikisi için "currency conversion gerekli" türü uyarı VERME.
 
 PİYASA ARAŞTIRMASI YAPMAN GEREKENLER:
 - Verilen piyasa verilerindeki trendleri analiz et (yükselen/düşen sektörler)
@@ -798,6 +814,14 @@ JSON FORMATI (başka metin ekleme):
 ${marketContext}
 
 Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin öncelikli hedefi $${SALARY_TARGET_USD}/ay sürdürülebilir maaş çekmek — sermayeyi eritmeden. Tüm öneriler bu hedefe hizmet etmeli: cash fazlasını temettü/eurobond'a dönüştürme, kâra geçmiş hisselerden trim, gelir maximizasyonu. Spekülatif büyüme tavsiyesi (BTC accumulate, NVDA momentum) verme — bu kullanıcının hedefi DEĞİL.
+
+ZORUNLU KISITLAR:
+- Tek aksiyonda 1M TL üzeri alım önerme. Maks 750K TL parça başına.
+- SCHD ve VYM aynı raporda olmasın (overlap). Sadece SCHD.
+- "Revolut'tan TreasuryDirect" yazma — TLT/GOVT ETF yaz.
+- Türkiye eurobondu için platform "BIST broker (İş Yatırım/Garanti)" yaz, Revolut değil.
+- "today" urgency'sini sadece risk azaltma için kullan, alım için "this_week" veya "this_month".
+- 4-6 aksiyon ver, fazlası kullanıcıyı boğar.
 
 Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bilinçli öneriler ver. Top pick: gelir üreten bir varlık (temettü ETF, eurobond, REIT, temettü hissesi).`;
 
