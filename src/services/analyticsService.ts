@@ -71,6 +71,16 @@ export async function savePortfolioSnapshot(
         .from('portfolio_snapshots')
         .insert([snapshotData]);
       if (insertError) throw insertError;
+
+      const { data: allToday } = await supabase
+        .from('portfolio_snapshots')
+        .select('id,created_at')
+        .eq('snapshot_date', today)
+        .order('created_at', { ascending: false });
+      if (allToday && allToday.length > 1) {
+        const idsToDelete = allToday.slice(1).map(r => r.id);
+        await supabase.from('portfolio_snapshots').delete().in('id', idsToDelete);
+      }
     }
   } catch (error) {
     console.error('Error saving portfolio snapshot:', error);
