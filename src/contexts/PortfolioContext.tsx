@@ -634,7 +634,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const usdRate = liveUsdRate > 1
       ? liveUsdRate
       : (usdHolding?.current_price && usdHolding.current_price > 1 ? usdHolding.current_price : DEFAULT_USD_TRY_RATE);
-    const eurHolding = holdings.find(h => h.symbol === 'EUR');
+    const eurHolding = holdings.find(h => h.symbol === 'EURO' || h.symbol === 'EUR');
     const eurRate = liveEurRate > 1
       ? liveEurRate
       : (eurHolding?.current_price && eurHolding.current_price > 1 ? eurHolding.current_price : usdRate * 1.08);

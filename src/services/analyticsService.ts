@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 export interface PnLData {
   period: string;
@@ -432,6 +433,7 @@ export async function getPnLSummaryByAssetType(): Promise<AssetTypePnLSummary[]>
   if (!holdings || holdings.length === 0) return [];
 
   const summary = new Map<string, AssetTypePnLSummary>();
+  const fxRates = getFxRatesFromHoldings(holdings);
 
   for (const holding of holdings) {
     if (!holding.asset_type) continue;
@@ -445,8 +447,8 @@ export async function getPnLSummaryByAssetType(): Promise<AssetTypePnLSummary[]>
       continue;
     }
 
-    const currentValue = currentPrice * quantity;
-    const investment = purchasePrice * quantity;
+    const currentValue = holdingValueTRY(holding, fxRates);
+    const investment = holdingCostTRY(holding, fxRates);
     const unrealizedPnl = currentValue - investment;
     const realizedPnl = holding.total_realized_pnl || 0;
     const totalPnl = unrealizedPnl + realizedPnl;

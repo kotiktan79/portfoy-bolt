@@ -45,9 +45,10 @@ export async function getExchangeRate(from: string, to: string): Promise<number>
       return fetchedRate;
     }
 
+    console.error(`[FX] No rate found for ${from}→${to} — falling back to 1.0 (DANGEROUS: ${from} treated as ${to})`);
     return 1;
   } catch (error) {
-    console.error(`Error getting exchange rate ${from}/${to}:`, error);
+    console.error(`[FX] Error fetching ${from}→${to}:`, error, '— falling back to 1.0 (DANGEROUS)');
     return 1;
   }
 }
