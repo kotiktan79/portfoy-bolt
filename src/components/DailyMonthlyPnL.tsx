@@ -179,12 +179,79 @@ export function DailyMonthlyPnL() {
     return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
   };
 
-  const totals = dailyRecords.length > 0 ? {
-    bestDay: dailyRecords.reduce((best, d) => d.daily_change > best.daily_change ? d : best, dailyRecords[0]),
-    worstDay: dailyRecords.reduce((worst, d) => d.daily_change < worst.daily_change ? d : worst, dailyRecords[0]),
-    positiveDays: dailyRecords.filter(d => d.daily_change > 0).length,
-    negativeDays: dailyRecords.filter(d => d.daily_change < 0).length,
-  } : null;
+  const totals = dailyRecords.length > 0 ? (() => {
+    const asc = [...dailyRecords].reverse(); // dailyRecords UI'da yeni-eski, hesap için eski-yeni
+    const bestDay = dailyRecords.reduce((best, d) => d.daily_change > best.daily_change ? d : best, dailyRecords[0]);
+    const worstDay = dailyRecords.reduce((worst, d) => d.daily_change < worst.daily_change ? d : worst, dailyRecords[0]);
+    const positiveDays = dailyRecords.filter(d => d.daily_change > 0).length;
+    const negativeDays = dailyRecords.filter(d => d.daily_change < 0).length;
+    const winRate = positiveDays + negativeDays > 0 ? (positiveDays / (positiveDays + negativeDays)) * 100 : 0;
+
+    // Max drawdown: değeri pikten ne kadar düşmüş, en kötüsü
+    let peak = asc[0]?.total_value || 0;
+    let maxDD = 0;
+    for (const d of asc) {
+      if (d.total_value > peak) peak = d.total_value;
+      const dd = peak > 0 ? ((d.total_value - peak) / peak) * 100 : 0;
+      if (dd < maxDD) maxDD = dd;
+    }
+
+    // YTD: yılbaşından beri değişim
+    const currentYear = new Date().getFullYear();
+    const ytdFirst = asc.find(d => d.date.startsWith(String(currentYear)));
+    const latest = asc[asc.length - 1];
+    const ytdPct = ytdFirst && ytdFirst.total_value > 0
+      ? ((latest.total_value - ytdFirst.total_value) / ytdFirst.total_value) * 100
+      : 0;
+    const ytdChange = ytdFirst ? latest.total_value - ytdFirst.total_value : 0;
+
+    // Streak: en son üst üste kaç gün aynı yönde
+    let streak = 0;
+    let streakSign = 0;
+    for (const d of dailyRecords) {
+      const sign = d.daily_change > 0 ? 1 : d.daily_change < 0 ? -1 : 0;
+      if (sign === 0) break;
+      if (streakSign === 0) streakSign = sign;
+      if (sign !== streakSign) break;
+      streak++;
+    }
+
+    return { bestDay, worstDay, positiveDays, negativeDays, winRate, maxDD, ytdPct, ytdChange, streak, streakSign };
+  })() : null;
+
+  // Heatmap için son 84 günü (12 hafta) grid'e koy. Bugün sağ-alt köşede.
+  const heatmapData = (() => {
+    if (dailyRecords.length === 0) return null;
+    const map = new Map<string, number>();
+    for (const d of dailyRecords) map.set(d.date, d.daily_change_pct);
+    const days: { date: string; pct: number | null }[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 83; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      days.push({ date: dateStr, pct: map.has(dateStr) ? map.get(dateStr)! : null });
+    }
+    // 12 sütun × 7 satır. Pazartesi ilk satır.
+    const firstDay = new Date(days[0].date + 'T00:00:00');
+    const firstDow = (firstDay.getDay() + 6) % 7; // Pzt=0
+    const padded: typeof days = Array(firstDow).fill({ date: '', pct: null }).concat(days);
+    const cols: (typeof days)[] = [];
+    for (let i = 0; i < padded.length; i += 7) cols.push(padded.slice(i, i + 7));
+    return cols;
+  })();
+
+  function heatColor(pct: number | null): string {
+    if (pct === null) return 'bg-slate-100 dark:bg-gray-700/40';
+    if (pct === 0) return 'bg-slate-200 dark:bg-gray-600';
+    const abs = Math.min(Math.abs(pct), 2); // 2%+ = en koyu
+    const intensity = Math.ceil((abs / 2) * 4); // 1-4 arası ton
+    const palette = pct > 0
+      ? ['bg-green-200', 'bg-green-300', 'bg-green-500', 'bg-green-700']
+      : ['bg-red-200', 'bg-red-300', 'bg-red-500', 'bg-red-700'];
+    return palette[Math.max(0, Math.min(3, intensity - 1))] + ' dark:opacity-90';
+  }
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -242,26 +309,86 @@ export function DailyMonthlyPnL() {
           {tab === 'daily' && (
             <div>
               {totals && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 bg-slate-50 dark:bg-gray-900/30 border-b border-slate-200 dark:border-gray-700">
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Pozitif Gün</p>
-                    <p className="text-xl font-bold text-green-600">{totals.positiveDays}</p>
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 bg-slate-50 dark:bg-gray-900/30 border-b border-slate-200 dark:border-gray-700">
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">YTD (Yılbaşından)</p>
+                      <p className={`text-lg font-bold ${totals.ytdPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {totals.ytdPct >= 0 ? '+' : ''}{totals.ytdPct.toFixed(2)}%
+                      </p>
+                      <p className={`text-xs font-semibold ${totals.ytdPct >= 0 ? 'text-green-600/80' : 'text-red-600/80'}`}>
+                        {totals.ytdPct >= 0 ? '+' : ''}{formatCurrency(totals.ytdChange)} ₺
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Maks. Drawdown</p>
+                      <p className="text-lg font-bold text-red-600">
+                        {totals.maxDD.toFixed(2)}%
+                      </p>
+                      <p className="text-xs text-slate-400">pikten en kötü düşüş</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Win Rate</p>
+                      <p className="text-lg font-bold text-brand-600 dark:text-brand-400">
+                        {totals.winRate.toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {totals.positiveDays}↑ / {totals.negativeDays}↓
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Streak</p>
+                      <p className={`text-lg font-bold ${totals.streakSign >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {totals.streak} gün
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {totals.streakSign > 0 ? 'üst üste yeşil' : totals.streakSign < 0 ? 'üst üste kırmızı' : '—'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Negatif Gün</p>
-                    <p className="text-xl font-bold text-red-600">{totals.negativeDays}</p>
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50/50 dark:bg-gray-900/20 border-b border-slate-200 dark:border-gray-700">
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 dark:text-gray-400">En İyi Gün</p>
+                      <p className="text-sm font-bold text-green-600">+{formatCurrency(totals.bestDay.daily_change)} ₺ ({totals.bestDay.daily_change_pct.toFixed(2)}%)</p>
+                      <p className="text-xs text-slate-400">{formatDate(totals.bestDay.date)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 dark:text-gray-400">En Kötü Gün</p>
+                      <p className="text-sm font-bold text-red-600">{formatCurrency(totals.worstDay.daily_change)} ₺ ({totals.worstDay.daily_change_pct.toFixed(2)}%)</p>
+                      <p className="text-xs text-slate-400">{formatDate(totals.worstDay.date)}</p>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">En İyi Gün</p>
-                    <p className="text-sm font-bold text-green-600">+{formatCurrency(totals.bestDay.daily_change)} ₺</p>
-                    <p className="text-xs font-semibold text-green-600/80">+${formatCurrencyUSD(totals.bestDay.daily_change, usdRate)}</p>
-                    <p className="text-xs text-slate-400">{formatDate(totals.bestDay.date)}</p>
+                </>
+              )}
+
+              {heatmapData && (
+                <div className="p-4 border-b border-slate-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-slate-600 dark:text-gray-300 uppercase tracking-wide">
+                      Son 12 Hafta · Günlük Hareket
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                      <span>az</span>
+                      <div className="w-2.5 h-2.5 rounded bg-red-700" />
+                      <div className="w-2.5 h-2.5 rounded bg-red-300" />
+                      <div className="w-2.5 h-2.5 rounded bg-slate-200 dark:bg-gray-600" />
+                      <div className="w-2.5 h-2.5 rounded bg-green-300" />
+                      <div className="w-2.5 h-2.5 rounded bg-green-700" />
+                      <span>çok</span>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">En Kötü Gün</p>
-                    <p className="text-sm font-bold text-red-600">{formatCurrency(totals.worstDay.daily_change)} ₺</p>
-                    <p className="text-xs font-semibold text-red-600/80">${formatCurrencyUSD(totals.worstDay.daily_change, usdRate)}</p>
-                    <p className="text-xs text-slate-400">{formatDate(totals.worstDay.date)}</p>
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {heatmapData.map((col, ci) => (
+                      <div key={ci} className="flex flex-col gap-1">
+                        {col.map((cell, ri) => (
+                          <div
+                            key={ri}
+                            title={cell.date ? `${cell.date}: ${cell.pct !== null ? (cell.pct >= 0 ? '+' : '') + cell.pct.toFixed(2) + '%' : 'veri yok'}` : ''}
+                            className={`w-3 h-3 rounded-sm ${heatColor(cell.pct)}`}
+                          />
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
