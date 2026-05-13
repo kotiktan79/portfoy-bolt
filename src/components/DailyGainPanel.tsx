@@ -212,7 +212,9 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
       const rawOpenPrice = sessionPrices[h.id] ?? h.current_price;
       const currentPrice = h.current_price;
       const ratio = currentPrice > 0 ? rawOpenPrice / currentPrice : 1;
-      const openPrice = ratio < 0.1 || ratio > 10 ? currentPrice : rawOpenPrice;
+      // Single-day move >25% is implausible — treat as stale and use current.
+      // (Crypto can move 15-20%, but 25%+ in one day means cache corruption.)
+      const openPrice = ratio < 0.75 || ratio > 1.25 ? currentPrice : rawOpenPrice;
       const priceChangeTRY = currentPrice - openPrice;
       const priceChangePct = openPrice > 0 ? (priceChangeTRY / openPrice) * 100 : 0;
       const totalDayGainTRY = priceChangeTRY * h.quantity;

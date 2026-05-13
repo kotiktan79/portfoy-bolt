@@ -420,9 +420,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     for (const h of investmentOnly) {
       const op = openPrices[h.id];
       if (op && op > 0) {
-        // Sanity check: open price shouldn't differ from current by more than 50%
+        // Sanity check: single-day move >25% is implausible — treat as stale.
         const ratio = h.current_price > 0 ? op / h.current_price : 1;
-        if (ratio > 0.5 && ratio < 2.0) {
+        if (ratio > 0.75 && ratio < 1.25) {
           dailyOpenValue += fxToTRY(op * h.quantity, h.currency);
           holdingsWithOpenPrice++;
         } else {
