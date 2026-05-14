@@ -454,27 +454,30 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       dailyOpenValue = sessionOpenValueRef.current || currentTotalValue;
     }
 
-    // Sanity check: daily change shouldn't be more than 30% of portfolio
-    const dailyChange = currentTotalValue - dailyOpenValue;
-    const dailyPct = dailyOpenValue > 0 ? (dailyChange / dailyOpenValue) * 100 : 0;
+    // Intraday hesap (current - today's open) — sanity check
+    const intradayChange = currentTotalValue - dailyOpenValue;
+    const intradayPct = dailyOpenValue > 0 ? (intradayChange / dailyOpenValue) * 100 : 0;
+    const safeIntradayChange = Math.abs(intradayPct) > 30 ? 0 : intradayChange;
+    const safeIntradayPct = Math.abs(intradayPct) > 30 ? 0 : intradayPct;
 
-    // If daily change seems unreasonable (>30%), reset to 0
-    const safeDailyChange = Math.abs(dailyPct) > 30 ? 0 : dailyChange;
-    const safeDailyPct = Math.abs(dailyPct) > 30 ? 0 : dailyPct;
-
-    // Weekly and monthly: use snapshot data if available, with sanity checks
-    let weeklyChange = safeDailyChange;
-    let weeklyPct = safeDailyPct;
-    let monthlyChange = safeDailyChange;
-    let monthlyPct = safeDailyPct;
+    // PnL paneli ile tutarlı olsun diye: günlük = snapshot tabanlı (dün → bugün, 24h)
+    // İntraday yerine, ana sayfa ve PnL paneli aynı "günlük" tanımı kullanır.
+    let dailyChange = safeIntradayChange;
+    let dailyPct = safeIntradayPct;
+    let weeklyChange = safeIntradayChange;
+    let weeklyPct = safeIntradayPct;
+    let monthlyChange = safeIntradayChange;
+    let monthlyPct = safeIntradayPct;
 
     if (pnlData) {
-      // Validate weekly data
+      if (Math.abs(pnlData.daily.percentage) < 30) {
+        dailyChange = pnlData.daily.change;
+        dailyPct = pnlData.daily.percentage;
+      }
       if (Math.abs(pnlData.weekly.percentage) < 50) {
         weeklyChange = pnlData.weekly.change;
         weeklyPct = pnlData.weekly.percentage;
       }
-      // Validate monthly data
       if (Math.abs(pnlData.monthly.percentage) < 80) {
         monthlyChange = pnlData.monthly.change;
         monthlyPct = pnlData.monthly.percentage;
@@ -482,7 +485,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     }
 
     setLivePnlData({
-      daily: { period: 'Günlük', value: currentTotalValue, change: safeDailyChange, percentage: safeDailyPct },
+      daily: { period: 'Günlük', value: currentTotalValue, change: dailyChange, percentage: dailyPct },
       weekly: { period: 'Haftalık', value: currentTotalValue, change: weeklyChange, percentage: weeklyPct },
       monthly: { period: 'Aylık', value: currentTotalValue, change: monthlyChange, percentage: monthlyPct },
     });
