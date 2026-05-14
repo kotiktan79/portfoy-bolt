@@ -265,7 +265,14 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
 
   const maxAbsGain = Math.max(...allGains.map(a => Math.abs(a.totalDayGainTRY)), 1);
 
-  const isPositiveTotal = totalDailyChange >= 0;
+  // Tutarlılık: gösterilen toplam = listedeki satırların TOPLAMI olsun
+  // (Prop'tan gelen totalDailyChange snapshot-tabanlı, satırlar intraday → uyuşmuyordu)
+  const totalDailyChangeInternal = rawGains.reduce((s, a) => s + a.totalDayGainTRY, 0);
+  const totalDailyPctInternal = totalCurrentValue > 0
+    ? (totalDailyChangeInternal / (totalCurrentValue - totalDailyChangeInternal)) * 100
+    : 0;
+  void totalDailyChange; void totalDailyPct;
+  const isPositiveTotal = totalDailyChangeInternal >= 0;
   const timeStr = currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
   const bestAsset = rawGains.reduce((best, a) => a.priceChangePct > (best?.priceChangePct ?? -Infinity) ? a : best, rawGains[0]);
@@ -311,14 +318,14 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
 
           <div className="text-right">
             <p className={`text-2xl font-bold tabular-nums leading-none ${isPositiveTotal ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-              {isPositiveTotal ? '+' : ''}{formatCurrency(totalDailyChange)} ₺
+              {isPositiveTotal ? '+' : ''}{formatCurrency(totalDailyChangeInternal)} ₺
             </p>
             <div className="flex items-center justify-end gap-2 mt-0.5">
               <span className={`text-sm font-semibold tabular-nums ${isPositiveTotal ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                {isPositiveTotal ? '+' : ''}{totalDailyPct.toFixed(2)}%
+                {isPositiveTotal ? '+' : ''}{totalDailyPctInternal.toFixed(2)}%
               </span>
               <span className="text-xs text-slate-400 dark:text-gray-500">
-                ${formatCurrencyUSD(Math.abs(totalDailyChange), usdRate)}
+                ${formatCurrencyUSD(Math.abs(totalDailyChangeInternal), usdRate)}
               </span>
             </div>
           </div>
@@ -574,14 +581,14 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
               <div className="px-4 py-3 bg-slate-50 dark:bg-gray-900/30 border-t border-slate-100 dark:border-gray-700 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-slate-600 dark:text-gray-300">Toplam Günlük</span>
-                  <span className="text-xs text-slate-400 dark:text-gray-500">${formatCurrencyUSD(Math.abs(totalDailyChange), usdRate)}</span>
+                  <span className="text-xs text-slate-400 dark:text-gray-500">${formatCurrencyUSD(Math.abs(totalDailyChangeInternal), usdRate)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-base font-black tabular-nums ${isPositiveTotal ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                    {isPositiveTotal ? '+' : ''}{formatCurrency(totalDailyChange)} ₺
+                    {isPositiveTotal ? '+' : ''}{formatCurrency(totalDailyChangeInternal)} ₺
                   </span>
                   <span className={`text-sm font-bold tabular-nums px-2 py-0.5 rounded-lg ${isPositiveTotal ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300'}`}>
-                    {isPositiveTotal ? '+' : ''}{totalDailyPct.toFixed(2)}%
+                    {isPositiveTotal ? '+' : ''}{totalDailyPctInternal.toFixed(2)}%
                   </span>
                 </div>
               </div>
