@@ -43,13 +43,32 @@ export async function savePortfolioSnapshot(
 
     const today = new Date().toISOString().split('T')[0];
 
+    // Deposits/withdrawals 0 ise (cash balance hesabı başarısız döndü) → en son bilinen değeri koru.
+    // Yoksa snapshot'a 0 yazılır, sonraki günün cash flow hesabı sahte zıplama yapar.
+    let safeDeposits = totalDeposits;
+    let safeWithdrawals = totalWithdrawals;
+    if (totalDeposits === 0 && totalWithdrawals === 0) {
+      const { data: lastNonZero } = await supabase
+        .from('portfolio_snapshots')
+        .select('total_deposits,total_withdrawals')
+        .or('total_deposits.gt.0,total_withdrawals.gt.0')
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastNonZero) {
+        safeDeposits = Number(lastNonZero.total_deposits) || 0;
+        safeWithdrawals = Number(lastNonZero.total_withdrawals) || 0;
+        console.warn('[snapshot] deposits/withdrawals=0 — son bilinen değer kullanıldı', { safeDeposits, safeWithdrawals });
+      }
+    }
+
     const snapshotData = {
       total_value: totalValue,
       total_investment: totalInvestment,
       total_pnl: totalPnl,
       pnl_percentage: pnlPercentage,
-      total_deposits: totalDeposits,
-      total_withdrawals: totalWithdrawals,
+      total_deposits: safeDeposits,
+      total_withdrawals: safeWithdrawals,
       snapshot_date: today,
     };
 
