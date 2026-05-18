@@ -31,6 +31,7 @@ import { startHealthMonitoring, stopHealthMonitoring } from '../services/priceMo
 import { startPriceAlertMonitor, stopPriceAlertMonitor } from '../services/priceAlertMonitor';
 import { stopCacheCleanup } from '../services/cacheService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
+import { computePortfolioMetrics, computeIntradayChange } from '../lib/portfolioMetrics';
 import { useToast } from '../hooks/useToast';
 import { DEFAULT_USD_TRY_RATE, TIMING } from '../config';
 
@@ -399,50 +400,18 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const investmentOnly = holdings.filter(h => h.asset_type !== 'cash');
     if (investmentOnly.length === 0) { setLivePnlData(null); return; }
 
-    const usdRate = liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE;
-    const eurRate = liveEurRate > 1 ? liveEurRate : usdRate * 1.08;
-    const fxToTRY = (amount: number, ccy?: string | null) => {
-      const c = (ccy || 'TRY').toUpperCase();
-      if (c === 'TRY') return amount;
-      if (c === 'USD') return amount * usdRate;
-      if (c === 'EUR') return amount * eurRate;
-      if (c === 'GBP') return amount * usdRate * 1.27;
-      return amount;
-    };
+    // Intraday hesabı unified module'den (per-holding sanity check dahil)
+    let intraday = computeIntradayChange(holdings, dailyOpenPricesRef.current);
+    const currentTotalValue = intraday.currentValueTRY;
+    const holdingsWithOpenPrice = Object.keys(dailyOpenPricesRef.current).length;
 
-    const currentTotalValue = investmentOnly.reduce((sum, h) => sum + fxToTRY(h.current_price * h.quantity, h.currency), 0);
-
-    // Calculate daily open value from stored open prices (per-holding)
-    const openPrices = dailyOpenPricesRef.current;
-    let dailyOpenValue = 0;
-    let holdingsWithOpenPrice = 0;
-
-    for (const h of investmentOnly) {
-      const op = openPrices[h.id];
-      if (op && op > 0) {
-        // Sanity check: single-day move >25% is implausible — treat as stale.
-        const ratio = h.current_price > 0 ? op / h.current_price : 1;
-        if (ratio > 0.75 && ratio < 1.25) {
-          dailyOpenValue += fxToTRY(op * h.quantity, h.currency);
-          holdingsWithOpenPrice++;
-        } else {
-          // Open price seems stale/wrong, use current
-          dailyOpenValue += fxToTRY(h.current_price * h.quantity, h.currency);
-        }
-      } else {
-        dailyOpenValue += fxToTRY(h.current_price * h.quantity, h.currency);
-      }
-    }
-
-    // If we don't have open prices for any holding, use session storage as baseline
+    // Hiç per-holding open yoksa, portfolio-level session baseline'a düş
     if (holdingsWithOpenPrice === 0) {
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
       if (sessionOpenValueRef.current === null && currentTotalValue > 0) {
         const stored = sessionStorage.getItem('portfolio_open_value_v2');
         const storedDate = sessionStorage.getItem('portfolio_open_date_v2');
-
         if (stored && storedDate === today) {
           sessionOpenValueRef.current = parseFloat(stored);
         } else {
@@ -451,14 +420,20 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
           sessionStorage.setItem('portfolio_open_date_v2', today);
         }
       }
-      dailyOpenValue = sessionOpenValueRef.current || currentTotalValue;
+      const fallbackOpen = sessionOpenValueRef.current || currentTotalValue;
+      const fallbackChange = currentTotalValue - fallbackOpen;
+      const fallbackPct = fallbackOpen > 0 ? (fallbackChange / fallbackOpen) * 100 : 0;
+      const safe = Math.abs(fallbackPct) > 30;
+      intraday = {
+        changeTRY: safe ? 0 : fallbackChange,
+        changePct: safe ? 0 : fallbackPct,
+        prevValueTRY: fallbackOpen,
+        currentValueTRY: currentTotalValue,
+        cashFlowTRY: 0,
+      };
     }
-
-    // Intraday hesap (current - today's open) — sanity check
-    const intradayChange = currentTotalValue - dailyOpenValue;
-    const intradayPct = dailyOpenValue > 0 ? (intradayChange / dailyOpenValue) * 100 : 0;
-    const safeIntradayChange = Math.abs(intradayPct) > 30 ? 0 : intradayChange;
-    const safeIntradayPct = Math.abs(intradayPct) > 30 ? 0 : intradayPct;
+    const safeIntradayChange = intraday.changeTRY;
+    const safeIntradayPct = intraday.changePct;
 
     // PnL paneli ile tutarlı olsun diye: günlük = snapshot tabanlı (dün → bugün, 24h)
     // İntraday yerine, ana sayfa ve PnL paneli aynı "günlük" tanımı kullanır.
@@ -627,53 +602,33 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setRefreshing(false), 500);
   }, [reloadHoldings]);
 
-  // ── Memoized values ────────────────────────────────────────────
+  // ── Memoized values (unified portfolioMetrics module üzerinden) ────
   const portfolioMetrics = useMemo(() => {
-    // Separate investment holdings from cash holdings
-    const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
-
-    // FX rates (TRY-base) — prefer live fetched rate, fallback to USD cash holding, then default
-    const usdHolding = holdings.find(h => h.symbol === 'USD');
-    const usdRate = liveUsdRate > 1
-      ? liveUsdRate
-      : (usdHolding?.current_price && usdHolding.current_price > 1 ? usdHolding.current_price : DEFAULT_USD_TRY_RATE);
-    const eurHolding = holdings.find(h => h.symbol === 'EURO' || h.symbol === 'EUR');
-    const eurRate = liveEurRate > 1
-      ? liveEurRate
-      : (eurHolding?.current_price && eurHolding.current_price > 1 ? eurHolding.current_price : usdRate * 1.08);
-    const gbpHolding = holdings.find(h => h.symbol === 'GBP');
-    const gbpRate = gbpHolding?.current_price && gbpHolding.current_price > 1
-      ? gbpHolding.current_price
-      : usdRate * 1.27;
-    const toTRY = (amount: number, ccy?: string | null) => {
-      const c = (ccy || 'TRY').toUpperCase();
-      if (c === 'TRY') return amount;
-      if (c === 'USD') return amount * usdRate;
-      if (c === 'EUR') return amount * eurRate;
-      if (c === 'GBP') return amount * gbpRate;
-      return amount; // unknown ccy → treat as TRY (safe fallback)
-    };
-
-    const totalInvestment = investmentHoldings.reduce((sum, h) => sum + toTRY(h.purchase_price * h.quantity, h.currency), 0);
-    const totalCurrentValue = investmentHoldings.reduce((sum, h) => sum + toTRY(h.current_price * h.quantity, h.currency), 0);
-    const totalRealized = holdings.reduce((sum, h) => sum + toTRY(h.total_realized_pnl || 0, h.currency), 0);
-    const unrealizedPnl = totalCurrentValue - totalInvestment;
-    const totalProfitLoss = unrealizedPnl + totalRealized;
-    const totalProfitLossPercent = totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
-
-    // Grand total includes cash
-    const grandTotal = totalCurrentValue + totalCashValue;
+    const m = computePortfolioMetrics(holdings);
+    // Live FX override: API'den taze kur geldiyse onu kullan (holdings'teki son kur eski olabilir)
+    const usdRate = liveUsdRate > 1 ? liveUsdRate : (m.fxRates.usd > 1 ? m.fxRates.usd : DEFAULT_USD_TRY_RATE);
+    const totalRealized = holdings.reduce((sum, h) => {
+      const v = (h.total_realized_pnl || 0);
+      const c = (h.currency || 'TRY').toUpperCase();
+      if (c === 'TRY') return sum + v;
+      if (c === 'USD') return sum + v * usdRate;
+      if (c === 'EUR') return sum + v * (liveEurRate > 1 ? liveEurRate : m.fxRates.eur);
+      return sum + v;
+    }, 0);
+    const totalProfitLoss = m.totalPnLTRY + totalRealized;
+    const totalProfitLossPercent = m.totalCostTRY > 0 ? (totalProfitLoss / m.totalCostTRY) * 100 : 0;
+    const grandTotal = m.totalValueTRY + totalCashValue;
     return {
-      totalInvestment,
-      totalCurrentValue,
+      totalInvestment: m.totalCostTRY,
+      totalCurrentValue: m.totalValueTRY,
       totalRealized,
-      unrealizedPnl,
+      unrealizedPnl: m.totalPnLTRY,
       totalProfitLoss,
       totalProfitLossPercent,
       grandTotal,
       usdRate,
-      totalInvestmentUSD: totalInvestment / usdRate,
-      totalCurrentValueUSD: totalCurrentValue / usdRate,
+      totalInvestmentUSD: m.totalCostTRY / usdRate,
+      totalCurrentValueUSD: m.totalValueTRY / usdRate,
       grandTotalUSD: grandTotal / usdRate,
     };
   }, [holdings, totalCashValue, liveUsdRate, liveEurRate]);

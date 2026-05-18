@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Calendar, BarChart2, ArrowUp, ArrowDown, CalendarDays } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { computePeriodChange } from '../lib/portfolioMetrics';
 import { formatCurrency, formatCurrencyUSD, getCachedUSDRate } from '../services/priceService';
 import { DEFAULT_USD_TRY_RATE } from '../config';
 
@@ -105,25 +106,16 @@ export function DailyMonthlyPnL() {
 
     const daily: DayRecord[] = data.map((row, i) => {
       const prev = i > 0 ? data[i - 1] : null;
-      const prevValue = prev ? Number(prev.total_value) : Number(row.total_value);
-      const currValue = Number(row.total_value);
-
-      const currNetCash = (Number(row.total_deposits) || 0) - (Number(row.total_withdrawals) || 0);
-      const prevNetCash = prev
-        ? (Number(prev.total_deposits) || 0) - (Number(prev.total_withdrawals) || 0)
-        : currNetCash;
-      const cashFlowToday = currNetCash - prevNetCash;
-
-      const dailyChange = i === 0 ? 0 : (currValue - prevValue) - cashFlowToday;
-      const dailyChangePct = prevValue > 0 && i > 0 ? (dailyChange / prevValue) * 100 : 0;
-
+      const period = i === 0
+        ? { changeTRY: 0, changePct: 0 }
+        : computePeriodChange(row, prev, 100);
       return {
         date: row.snapshot_date,
-        total_value: currValue,
+        total_value: Number(row.total_value),
         total_pnl: Number(row.total_pnl),
         pnl_percentage: Number(row.pnl_percentage),
-        daily_change: dailyChange,
-        daily_change_pct: dailyChangePct,
+        daily_change: period.changeTRY,
+        daily_change_pct: period.changePct,
       };
     });
 

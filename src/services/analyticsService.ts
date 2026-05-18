@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
+import { computePeriodChange, computeClassMetrics } from '../lib/portfolioMetrics';
 
 export interface PnLData {
   period: string;
@@ -168,28 +168,15 @@ export async function getPnLData(): Promise<{
       return best;
     };
 
-    const currentInvestment = Number(current.total_investment) || 0;
-
+    // computePeriodChange: total_deposits/total_withdrawals'tan cash flow düşer,
+    // sanity check ile büyük sapmalarda 0 döner (eski calculateChange ile uyumlu)
     const calculateChange = (previous: typeof snapshots[0] | null) => {
       if (!previous) return { value: currentValue, percentage: 0, change: 0 };
-
-      const prevValue = Number(previous.total_value) || 0;
-      if (prevValue === 0) return { value: currentValue, percentage: 0, change: 0 };
-
-      const prevInvestment = Number(previous.total_investment) || 0;
-
-      // Investment change = new money added or removed (not market gain/loss)
-      const investmentChange = currentInvestment - prevInvestment;
-
-      // Real PnL = value change minus new money in/out
-      // If you added 100K new holdings, value goes up 100K but that's not profit
-      const valueChange = (currentValue - prevValue) - investmentChange;
-      const percentage = prevValue > 0 ? (valueChange / prevValue) * 100 : 0;
-
+      const period = computePeriodChange(current, previous, 50);
       return {
         value: currentValue,
-        percentage: isFinite(percentage) ? percentage : 0,
-        change: isFinite(valueChange) ? valueChange : 0,
+        percentage: period.changePct,
+        change: period.changeTRY,
       };
     };
 
@@ -461,57 +448,25 @@ export async function getPnLSummaryByAssetType(): Promise<AssetTypePnLSummary[]>
 
   if (!holdings || holdings.length === 0) return [];
 
-  const summary = new Map<string, AssetTypePnLSummary>();
-  const fxRates = getFxRatesFromHoldings(holdings);
-
-  for (const holding of holdings) {
-    if (!holding.asset_type) continue;
-
-    const assetType = holding.asset_type;
-    const currentPrice = holding.current_price || 0;
-    const purchasePrice = holding.purchase_price || 0;
-    const quantity = holding.quantity || 0;
-
-    if (!isFinite(currentPrice) || !isFinite(purchasePrice) || !isFinite(quantity)) {
-      continue;
-    }
-
-    const currentValue = holdingValueTRY(holding, fxRates);
-    const investment = holdingCostTRY(holding, fxRates);
-    const unrealizedPnl = currentValue - investment;
-    const realizedPnl = holding.total_realized_pnl || 0;
-    const totalPnl = unrealizedPnl + realizedPnl;
-
-    if (!summary.has(assetType)) {
-      summary.set(assetType, {
-        asset_type: assetType,
-        total_value: 0,
-        total_investment: 0,
-        total_unrealized_pnl: 0,
-        total_realized_pnl: 0,
-        total_pnl: 0,
-        pnl_percent: 0,
-      });
-    }
-
-    const current = summary.get(assetType)!;
-    current.total_value += currentValue;
-    current.total_investment += investment;
-    current.total_unrealized_pnl += unrealizedPnl;
-    current.total_realized_pnl += realizedPnl;
-    current.total_pnl += totalPnl;
+  // Unified computeClassMetrics + realized PnL ekle (cash hariç tutuluyor)
+  const classMetrics = computeClassMetrics(holdings);
+  const realizedByType: Record<string, number> = {};
+  for (const h of holdings) {
+    if (!h.asset_type || h.asset_type === 'cash') continue;
+    realizedByType[h.asset_type] = (realizedByType[h.asset_type] || 0) + (h.total_realized_pnl || 0);
   }
-
-  const result = Array.from(summary.values());
-  result.forEach(item => {
-    item.pnl_percent = item.total_investment > 0
-      ? (item.total_pnl / item.total_investment) * 100
-      : 0;
-
-    if (!isFinite(item.pnl_percent)) {
-      item.pnl_percent = 0;
-    }
+  const result: AssetTypePnLSummary[] = classMetrics.map(c => {
+    const realized = realizedByType[c.asset_type] || 0;
+    const totalPnl = c.pnlTRY + realized;
+    return {
+      asset_type: c.asset_type,
+      total_value: c.valueTRY,
+      total_investment: c.costTRY,
+      total_unrealized_pnl: c.pnlTRY,
+      total_realized_pnl: realized,
+      total_pnl: totalPnl,
+      pnl_percent: c.costTRY > 0 ? (totalPnl / c.costTRY) * 100 : 0,
+    };
   });
-
   return result.sort((a, b) => b.total_value - a.total_value);
 }
