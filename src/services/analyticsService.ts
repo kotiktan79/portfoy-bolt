@@ -41,7 +41,17 @@ export async function savePortfolioSnapshot(
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    // Market kapanışına göre snapshot tarihi:
+    // - Eğer şu an UTC < 18:00 (daily-snapshot cron öncesi) → BIST'in BUGÜNKÜ kapanışı henüz yok,
+    //   snapshot DÜN tarihine yazılsın.
+    // - Eğer şu an UTC >= 18:00 → cron çalıştı, BUGÜNKÜ kapanış mevcut → bugün tarihine yaz.
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    let snapshotDateObj = new Date(now);
+    if (utcHour < 18) {
+      snapshotDateObj.setUTCDate(now.getUTCDate() - 1);
+    }
+    const today = snapshotDateObj.toISOString().split('T')[0];
 
     // Deposits/withdrawals 0 ise (cash balance hesabı başarısız döndü) → en son bilinen değeri koru.
     // Yoksa snapshot'a 0 yazılır, sonraki günün cash flow hesabı sahte zıplama yapar.
