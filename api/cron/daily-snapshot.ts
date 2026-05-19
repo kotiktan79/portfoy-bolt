@@ -107,24 +107,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       total_withdrawals: prevWithdrawals,
     };
 
-    // Aynı gün için tek satır garanti.
-    // Eski "önce sil, sonra ekle" yaklaşımı race-condition'a açıktı —
-    // 3 paralel cron çağrısı DELETE'i çalıştırıp sonra hep birlikte INSERT
-    // yapınca 3 satır kalıyordu. Yeni mantık:
-    //   1) Insert (yeni satır oluşur)
-    //   2) Bugünkü tüm satırları çek, en yeni created_at olan hariç sil.
-    // Paralel yarışta bile bir satır mutlaka "en yeni" olur, diğerleri silinir.
-    const { error: insertError } = await supabase
+    // 1) Burst-protection: bugün için 10 saniye içinde yazılmış snapshot varsa SKIP.
+    //    Bu Vercel'in retry/concurrent invocation senaryolarında 3 satır basmasını önler.
+    const tenSecAgo = new Date(Date.now() - 10000).toISOString();
+    const { data: recentToday } = await supabase
       .from('portfolio_snapshots')
-      .insert([snapshotData]);
+      .select('id,total_value,created_at')
+      .eq('snapshot_date', today)
+      .gte('created_at', tenSecAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (insertError) {
-      log.push(`Snapshot kayıt hatası: ${insertError.message}`);
+    if (recentToday?.id) {
+      // Çok yakın zamanda yazılmış — update ile birleştir (insert race'i engelle).
+      const { error: updateError } = await supabase
+        .from('portfolio_snapshots')
+        .update(snapshotData)
+        .eq('id', recentToday.id);
+      if (updateError) {
+        log.push(`Snapshot update hatası: ${updateError.message}`);
+      } else {
+        log.push(`Snapshot güncellendi (burst-protect): ${totalValue.toFixed(0)} TL`);
+      }
     } else {
-      log.push(`Snapshot kaydedildi: ${totalValue.toFixed(0)} TL`);
+      // 2) Normal insert.
+      const { error: insertError } = await supabase
+        .from('portfolio_snapshots')
+        .insert([snapshotData]);
+      if (insertError) {
+        log.push(`Snapshot kayıt hatası: ${insertError.message}`);
+      } else {
+        log.push(`Snapshot kaydedildi: ${totalValue.toFixed(0)} TL`);
+      }
     }
 
-    // Race-safe dedupe: bugün için 1'den fazla satır varsa en sonu hariç sil
+    // 3) Dedupe — race ile yine de duplicate oluşursa en yenisini bırak.
+    //    Kısa bir bekleme: paralel invocation'ların insertlerinin yerleşmesini bekle.
+    await new Promise(r => setTimeout(r, 500));
     const { data: todays } = await supabase
       .from('portfolio_snapshots')
       .select('id, created_at')

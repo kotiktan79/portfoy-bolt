@@ -72,33 +72,51 @@ export async function savePortfolioSnapshot(
       snapshot_date: today,
     };
 
-    const { data: existing } = await supabase
+    // Burst-protection: son 10 saniye içinde bugün için yazılmış kayıt varsa onu update et,
+    // yeni insert atma. Sayfa hızlı yenilenince 3 ardışık snapshot oluşmasın diye.
+    const tenSecAgo = new Date(Date.now() - 10000).toISOString();
+    const { data: recent } = await supabase
       .from('portfolio_snapshots')
       .select('id')
       .eq('snapshot_date', today)
+      .gte('created_at', tenSecAgo)
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (existing?.id) {
-      const { error: updateError } = await supabase
-        .from('portfolio_snapshots')
-        .update(snapshotData)
-        .eq('id', existing.id);
-      if (updateError) throw updateError;
+    if (recent?.id) {
+      await supabase.from('portfolio_snapshots').update(snapshotData).eq('id', recent.id);
     } else {
-      const { error: insertError } = await supabase
+      const { data: existing } = await supabase
         .from('portfolio_snapshots')
-        .insert([snapshotData]);
-      if (insertError) throw insertError;
-
-      const { data: allToday } = await supabase
-        .from('portfolio_snapshots')
-        .select('id,created_at')
+        .select('id')
         .eq('snapshot_date', today)
-        .order('created_at', { ascending: false });
-      if (allToday && allToday.length > 1) {
-        const idsToDelete = allToday.slice(1).map(r => r.id);
-        await supabase.from('portfolio_snapshots').delete().in('id', idsToDelete);
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { error: updateError } = await supabase
+          .from('portfolio_snapshots')
+          .update(snapshotData)
+          .eq('id', existing.id);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('portfolio_snapshots')
+          .insert([snapshotData]);
+        if (insertError) throw insertError;
+
+        // Race-safe cleanup: 500ms bekleyip duplicate'leri temizle.
+        await new Promise(r => setTimeout(r, 500));
+        const { data: allToday } = await supabase
+          .from('portfolio_snapshots')
+          .select('id,created_at')
+          .eq('snapshot_date', today)
+          .order('created_at', { ascending: false });
+        if (allToday && allToday.length > 1) {
+          const idsToDelete = allToday.slice(1).map(r => r.id);
+          await supabase.from('portfolio_snapshots').delete().in('id', idsToDelete);
+        }
       }
     }
   } catch (error) {
