@@ -723,13 +723,26 @@ GÖREVIN:
 5. Maaş hesapla: mevcut pasif + kâr trim'i + buffer (sermayeyi eritmeden)
 6. Rebalance hedefi: stock 35 / eurobond 20 / fund 12 / commodity 10 / currency 10 / crypto 13
 
-ÖNERİ ÖNCELİKLERİ:
-- ✅ ÖNCELİK 1: Cash fazlasını TOTAL RETURN hisselere dönüştür: SCHD (kalite + %3.5 + büyüme), JNJ (savunmacı + %3 + büyüme). Saf REIT (%6 ama 0 büyüme) yerine kalite tercih et.
-- ✅ ÖNCELİK 2: Mevcut +%60 üstü kazançtaki BIST hisselerinden (ASELS/TUPRS/AKSEN/ENKAI/BIMAS) trim — ama %20-30 dilim, çünkü bunlar TEMETTÜ + BÜYÜME hibridi (total return çekirdeği)
-- ✅ ÖNCELİK 3: Eurobond %1.2 → %20 — Türkiye Hazine eurobondu (broker'dan) veya TLT/GOVT ETF (Revolut'tan). Tek seferde değil, 3-5 dilimde ladder.
-- ✅ ÖNCELİK 4: Kripto %6.6 → %12-13 (BTC/ETH ana) — DCA ile haftalık parça alım
-- ⚠️ DİKKAT: Saf spekülasyon (NVDA momentum, AKSEN top pick gibi) önerme — kalite + temettü + büyüme tercih et
-- ⚠️ Top pick: yüksek total return potansiyeli olan kalite varlık (SCHD/JNJ/dividend grower BIST hissesi)
+ÖNERİ ÖNCELİKLERİ — KESIN SIRA (üstten alta uygula):
+- ✅ ÖNCELİK 1 (ZORUNLU, HER RAPORDA OLMALI): **Eurobond/Treasury alımı** — kullanıcının portföyünde %20 hedefe karşılık %1.2 mevcut. Bu en büyük yapısal eksiklik ve pasif gelir motorunun kalbi.
+  Seçenekler:
+    - Revolut'tan **SGOV** ($100 fiyat, %5 yıllık, sıfır volatilite) — başlangıç için ideal
+    - Revolut'tan **TLT** (uzun vade, ~%4-5 + risk-off hedge)
+    - Revolut'tan **IBTL/IB01** (UCITS Avrupa versiyonları)
+    - BIST broker'dan Türkiye Hazine eurobondu
+  TEK seferde değil, 3-5 dilimde ladder olarak öner.
+  Her raporda EN AZ 1 eurobond/Treasury aksiyonu OLMALI.
+
+- ✅ ÖNCELİK 2: Cash fazlasını YENI temettü hisselerine: SCHD (US dividend ETF), JNJ (ek alım), KO, PG, NESN (EUR cinsi defensif). Saf REIT yerine kalite tercih et.
+
+- ✅ ÖNCELİK 3: +%60 üstü kazançtaki BIST hisselerinden TRIM (sat) — %20-30 dilim. ASELS/TUPRS/AKSEN/ENKAI/BIMAS arası en kârlısını seç.
+
+- ⛔ ÖNCELİK 4 (YASAK): Zaten +%50 üstü kârda olan BIST hissesinden YENI ALIM ya da accumulate ÖNERMEsin. Bu hisseler trim edilmeli, artırılmamalı.
+  ÖRNEK YASAK: "SISE pozisyonunu artır", "ENKAI yeni alım", "TUPRS accumulate" — KESINLIKLE YAZMAYIN.
+  Sebep: bu pozisyonlar zaten 2 katı kâra geçmiş — concentration riski büyür, kullanıcı portföyü daha BIST'e bağımlı yapar.
+  İSTİSNA: <+%20 kârda olan BIST hissesi (GARAN, JNJ gibi) ek alım yapılabilir.
+
+- ⚠️ Top pick: HER ZAMAN gelir üreten araç (SGOV/TLT/eurobond/SCHD) olmalı. BIST hissesi top pick olamaz.
 
 TEMPO VE MİKTAR KURALLARI (ZORUNLU):
 - ⛔ Tek seferde 1M TL üzeri alım ÖNERME. Maksimum 750K TL parça başına, sonra DCA ile büyüt.
@@ -737,7 +750,9 @@ TEMPO VE MİKTAR KURALLARI (ZORUNLU):
 - ⛔ SCHD ve VYM'i AYNI ANDA önerme — birbirinin tekrarı (overlap %80). Sadece SCHD yeter.
 - ⛔ "Revolut'tan TreasuryDirect" YAZMA — TreasuryDirect ABD vatandaşları için, Revolut'tan erişim yok. Revolut'tan US Treasury için TLT veya GOVT ETF (Treasury'ye yatırım yapan ETF) yaz.
 - ⛔ Türkiye eurobondu Revolut'ta YOK. Bunun için "Türkiye broker (İş Yatırım/Garanti BBVA)" platform yaz.
+- ⛔ Mevcut +%50 kârdaki BIST pozisyonunu artırma ÖNERME (concentration riski). SISE/ENKAI/TUPRS/AKSEN/ASELS/BIMAS/TOASO/CCOLA/EKGYO için sadece TRIM önerilebilir, "accumulate" YASAK.
 - ✅ Toplam aksiyon sayısı 4-6 arasında olsun, fazlası kullanıcıyı boğar.
+- ✅ İlk aksiyon DAİMA eurobond/Treasury (SGOV ya da TLT ya da Hazine bonosu) olmalı.
 - ✅ Toplam önerilen cash redeploy miktarı portföyün %10-15'ini (yaklaşık 700K-1M TL) geçmesin, yoksa kullanıcı korkar/erteler.
 
 PLATFORM REALİTESİ (yanlış yazma):
@@ -818,10 +833,12 @@ Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin
 ZORUNLU KISITLAR:
 - Tek aksiyonda 1M TL üzeri alım önerme. Maks 750K TL parça başına.
 - SCHD ve VYM aynı raporda olmasın (overlap). Sadece SCHD.
-- "Revolut'tan TreasuryDirect" yazma — TLT/GOVT ETF yaz.
+- "Revolut'tan TreasuryDirect" yazma — TLT/GOVT/SGOV ETF yaz.
 - Türkiye eurobondu için platform "BIST broker (İş Yatırım/Garanti)" yaz, Revolut değil.
 - "today" urgency'sini sadece risk azaltma için kullan, alım için "this_week" veya "this_month".
 - 4-6 aksiyon ver, fazlası kullanıcıyı boğar.
+- ⛔ KESIN YASAK: SISE, ENKAI, TUPRS, AKSEN, ASELS, BIMAS, TOASO, CCOLA, EKGYO için "accumulate" / "yeni alım" / "pozisyonu artır" türü öneri vermeyin. Bu hisseler zaten +%50-130 kârda — artırmak portföyü daha riskli yapar. Bu hisseler için SADECE TRIM (kâr alma) önerilebilir.
+- ⛔ İLK AKSIYON eurobond/Treasury (SGOV/TLT/Hazine bonosu) olmak ZORUNDA. Top pick gelir üreten araç olmak ZORUNDA. BIST hissesi top pick olamaz.
 
 Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bilinçli öneriler ver. Top pick: gelir üreten bir varlık (temettü ETF, eurobond, REIT, temettü hissesi).`;
 
