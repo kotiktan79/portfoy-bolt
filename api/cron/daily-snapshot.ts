@@ -534,12 +534,68 @@ async function updateFundPrices(supabase: any, holdings: any[], result: PriceRes
   }
 }
 
+// Eurobond/Treasury ETF'leri için Yahoo ticker haritası (hepsi USD-quoted).
+// Holding'in currency'sine göre USD fiyatı çevrilir.
+const EUROBOND_ETF_YAHOO: Record<string, string> = {
+  IB01: 'IB01.L',   // iShares USD Treasury 0-1yr Acc
+  IBTA: 'IBTA.L',   // iShares USD Treasury 1-3yr
+  IBTL: 'IBTL.L',   // iShares USD Treasury 20+yr
+  CBU0: 'CBU0.L',   // iShares USD Treasury 1-3yr Dist
+  TLT: 'TLT',
+  GOVT: 'GOVT',
+  SGOV: 'SGOV',
+  IEF: 'IEF',
+  SHY: 'SHY',
+};
+
 async function updateEurobondPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
-  // Eurobondlar genellikle manuel fiyatlandırılır
+  let auto = 0;
   for (const h of holdings) {
-    result.details[h.symbol] = h.current_price;
+    // manual_price=true ise dokunma
+    if (h.manual_price) {
+      result.details[h.symbol] = h.current_price;
+      continue;
+    }
+    const sym = h.symbol.toUpperCase();
+    const yahooTicker = EUROBOND_ETF_YAHOO[sym];
+    if (!yahooTicker) {
+      // Haritada yoksa manuel kabul et, dokunma
+      result.details[h.symbol] = h.current_price;
+      continue;
+    }
+    try {
+      const prices = await fetchYahooPrices(yahooTicker);
+      const usdPrice = prices[yahooTicker];
+      if (!usdPrice) { result.failed++; continue; }
+      // Yahoo USD verir. Holding currency'sine çevir.
+      const holdingCurrency = (h.currency || 'USD').toUpperCase();
+      let priceToWrite = usdPrice;
+      if (holdingCurrency === 'EUR') {
+        const usdTry = await fetchUsdTry();
+        const eurTry = await fetchEurTry();
+        priceToWrite = usdPrice * (usdTry / eurTry); // USD → EUR
+      } else if (holdingCurrency === 'TRY') {
+        const usdTry = await fetchUsdTry();
+        priceToWrite = usdPrice * usdTry;
+      }
+      // Sanity guard
+      const oldPrice = Number(h.current_price) || 0;
+      const anomalous = oldPrice > 0 && (priceToWrite < oldPrice * 0.5 || priceToWrite > oldPrice * 2);
+      if (anomalous) {
+        log.push(`${h.symbol}: eurobond anomali reddedildi (${oldPrice} → ${priceToWrite.toFixed(2)})`);
+        result.failed++;
+        continue;
+      }
+      await supabase.from('holdings').update({ current_price: priceToWrite, updated_at: new Date().toISOString() }).eq('id', h.id);
+      result.updated++;
+      auto++;
+      result.details[h.symbol] = priceToWrite;
+    } catch (e: any) {
+      log.push(`${h.symbol}: eurobond fiyat hatası ${e.message}`);
+      result.failed++;
+    }
   }
-  log.push(`Eurobond: ${holdings.length} pozisyon (manuel fiyat)`);
+  log.push(`Eurobond: ${holdings.length} pozisyon (${auto} otomatik güncellendi)`);
 }
 
 // ================================================
