@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { Holding } from './supabase';
 import {
   computePortfolioMetrics,
-  computeHoldingMetrics,
   computeClassMetrics,
   computePeriodChange,
   computeIntradayChange,
+  computeDynamicWithdrawal,
   topWinners,
   topLosers,
 } from './portfolioMetrics';
@@ -51,7 +51,6 @@ describe('computePortfolioMetrics', () => {
 
   it('3. tek USD holding — TRY karşılığı doğru çevrilir', () => {
     const jnj = makeHolding({ symbol: 'JNJ', currency: 'USD', purchase_price: 200, current_price: 220, quantity: 5 });
-    const m = computePortfolioMetrics([usdHolding, jnj]);
     // jnj cost = 5×200 = $1000 = ₺45000
     // jnj value = 5×220 = $1100 = ₺49500
     // + usd cash (currency=TRY default, 100×45=4500 cost vs 100×45=4500 value), wait usd holding has TRY currency default
@@ -164,6 +163,56 @@ describe('computeIntradayChange', () => {
     const result = computeIntradayChange([h], { [h.id]: 100 });
     expect(result.changeTRY).toBe(100);
     expect(result.changePct).toBeCloseTo(10);
+  });
+});
+
+describe('computeDynamicWithdrawal', () => {
+  it('16. pozitif büyüme — %85 güvenli max', () => {
+    // 100 gün, $100K → $110K, yeni para yok → %10 büyüme, yıllık ~%36.5
+    const snaps = [
+      { snapshot_date: '2026-01-01', total_value: 4500000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
+      { snapshot_date: '2026-04-11', total_value: 4950000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
+    ];
+    const r = computeDynamicWithdrawal(snaps);
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe('positive');
+    expect(r!.realGrowthUSD).toBeCloseTo(10000, -2); // ~$10K büyüme
+    expect(r!.safeMonthlyUSD).toBeGreaterThan(0);
+  });
+
+  it('17. yeni para büyüme olarak sayılmaz', () => {
+    // $100K → $110K ama $10K yeni para → reel büyüme ~0
+    const snaps = [
+      { snapshot_date: '2026-01-01', total_value: 4500000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
+      { snapshot_date: '2026-04-11', total_value: 4950000, total_deposits: 450000, total_withdrawals: 0, usdRate: 45 },
+    ];
+    const r = computeDynamicWithdrawal(snaps);
+    expect(r!.realGrowthUSD).toBeCloseTo(0, -2);
+  });
+
+  it('18. negatif büyüme — güvenli max 0 (anaparaya dokunma)', () => {
+    const snaps = [
+      { snapshot_date: '2026-01-01', total_value: 5000000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
+      { snapshot_date: '2026-04-11', total_value: 4500000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
+    ];
+    const r = computeDynamicWithdrawal(snaps);
+    expect(r!.status).toBe('negative');
+    expect(r!.safeMonthlyUSD).toBe(0);
+  });
+
+  it('19. TL erir ama USD sabit kalırsa — reel büyüme ~0', () => {
+    // TL değeri %20 arttı ama kur da %20 arttı → USD sabit → reel büyüme yok
+    const snaps = [
+      { snapshot_date: '2026-01-01', total_value: 4500000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
+      { snapshot_date: '2026-04-11', total_value: 5400000, total_deposits: 0, total_withdrawals: 0, usdRate: 54 },
+    ];
+    const r = computeDynamicWithdrawal(snaps);
+    // $100K → $100K, reel büyüme ~0
+    expect(Math.abs(r!.realGrowthUSD)).toBeLessThan(100);
+  });
+
+  it('20. tek snapshot → null', () => {
+    expect(computeDynamicWithdrawal([{ snapshot_date: '2026-01-01', total_value: 100, usdRate: 45 }])).toBeNull();
   });
 });
 

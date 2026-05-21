@@ -188,6 +188,100 @@ export function computePeriodChange(
 }
 
 // ============================================================
+// DİNAMİK GÜVENLİ MAAŞ (USD bazlı reel büyümeye göre)
+// ============================================================
+
+export interface DynamicWithdrawal {
+  safeMonthlyUSD: number;     // güvenli aylık çekim (USD)
+  annualGrowthPct: number;    // yıllıklandırılmış reel büyüme %
+  realGrowthUSD: number;      // dönem reel büyümesi (USD, yeni para hariç)
+  periodDays: number;
+  startValueUSD: number;
+  endValueUSD: number;
+  newMoneyUSD: number;
+  status: 'positive' | 'low' | 'negative';  // pozitif / düşük / negatif büyüme
+}
+
+export interface SnapshotForGrowth {
+  snapshot_date: string;
+  total_value: number | string;
+  total_deposits?: number | string | null;
+  total_withdrawals?: number | string | null;
+  usdRate: number;  // o tarihteki USD/TRY kuru
+}
+
+/**
+ * Dinamik güvenli maaş hesabı.
+ *
+ * Mantık (eski MonthlyWithdrawalPlan'dan):
+ *  1. Son ≤365 günün USD bazlı reel büyümesini hesapla (yeni para çıkarılır).
+ *  2. Yıllıklandır.
+ *  3. Güvenli aylık max = yıllık büyümenin (safetyFactor=%85'i) / 12.
+ *
+ * USD bazlı çünkü TL enflasyonu otomatik düşülmeli — gerçek satın alma gücü.
+ *
+ * Negatif büyümede 0 döner (anaparaya dokunma).
+ */
+export function computeDynamicWithdrawal(
+  snapshots: SnapshotForGrowth[],
+  safetyFactor: number = 0.85,
+): DynamicWithdrawal | null {
+  if (!snapshots || snapshots.length < 2) return null;
+
+  // Tarihe göre sırala, son ≤365 gün penceresini al
+  const sorted = [...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+  const last = sorted[sorted.length - 1];
+  const lastDate = new Date(last.snapshot_date);
+  const windowStart = new Date(lastDate);
+  windowStart.setDate(lastDate.getDate() - 365);
+  const windowStartStr = windowStart.toISOString().split('T')[0];
+  const inWindow = sorted.filter(s => s.snapshot_date >= windowStartStr);
+  if (inWindow.length < 2) return null;
+
+  const first = inWindow[0];
+  const usdFirst = first.usdRate > 0 ? first.usdRate : 1;
+  const usdLast = last.usdRate > 0 ? last.usdRate : 1;
+
+  const startValueUSD = (Number(first.total_value) || 0) / usdFirst;
+  const endValueUSD = (Number(last.total_value) || 0) / usdLast;
+
+  // Yeni para (net deposit değişimi), ortalama kurla USD'ye çevir
+  const firstNet = (Number(first.total_deposits || 0)) - (Number(first.total_withdrawals || 0));
+  const lastNet = (Number(last.total_deposits || 0)) - (Number(last.total_withdrawals || 0));
+  const avgRate = (usdFirst + usdLast) / 2;
+  const newMoneyUSD = avgRate > 0 ? (lastNet - firstNet) / avgRate : 0;
+
+  const realGrowthUSD = (endValueUSD - startValueUSD) - newMoneyUSD;
+  const periodDays = Math.max(1, (lastDate.getTime() - new Date(first.snapshot_date).getTime()) / 86400000);
+  const growthPct = startValueUSD > 0 ? (realGrowthUSD / startValueUSD) * 100 : 0;
+  const annualGrowthPct = growthPct * (365 / periodDays);
+
+  let safeMonthlyUSD = 0;
+  let status: DynamicWithdrawal['status'] = 'negative';
+  if (annualGrowthPct > 5) {
+    status = 'positive';
+    safeMonthlyUSD = (endValueUSD * (annualGrowthPct / 100) * safetyFactor) / 12;
+  } else if (annualGrowthPct > 0) {
+    status = 'low';
+    safeMonthlyUSD = (endValueUSD * (annualGrowthPct / 100) * safetyFactor) / 12;
+  } else {
+    status = 'negative';
+    safeMonthlyUSD = 0;
+  }
+
+  return {
+    safeMonthlyUSD,
+    annualGrowthPct,
+    realGrowthUSD,
+    periodDays,
+    startValueUSD,
+    endValueUSD,
+    newMoneyUSD,
+    status,
+  };
+}
+
+// ============================================================
 // INTRADAY CHANGE (sessionStorage tabanlı "bugün açılışından beri")
 // ============================================================
 

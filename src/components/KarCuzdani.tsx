@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Wallet, TrendingUp, AlertCircle, Settings, Check, X } from 'lucide-react';
+import { Wallet, TrendingUp, AlertCircle, Settings, Check, X, Gauge } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { getDynamicWithdrawal } from '../services/analyticsService';
+import { DynamicWithdrawal } from '../lib/portfolioMetrics';
 
 interface SalarySettings {
   id: number;
@@ -33,9 +35,11 @@ export default function KarCuzdani({ holdings }: Props) {
   const [newTarget, setNewTarget] = useState('2000');
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
+  const [dynamic, setDynamic] = useState<DynamicWithdrawal | null>(null);
 
   useEffect(() => {
     loadAll();
+    getDynamicWithdrawal().then(setDynamic);
   }, []);
 
   async function loadAll() {
@@ -182,6 +186,42 @@ export default function KarCuzdani({ holdings }: Props) {
           <Settings size={12} /> Anapara: ${baseline.toLocaleString('en-US', { maximumFractionDigits: 0 })}
         </button>
       </div>
+
+      {/* Dinamik güvenli maaş — USD bazlı reel büyümeye göre */}
+      {dynamic && (
+        <div className={`mx-5 mt-4 rounded-xl p-4 border ${
+          dynamic.status === 'positive'
+            ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900'
+            : dynamic.status === 'low'
+            ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'
+            : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'
+        }`}>
+          <div className="flex items-center gap-2 mb-1">
+            <Gauge size={16} className={
+              dynamic.status === 'positive' ? 'text-blue-600 dark:text-blue-400'
+              : dynamic.status === 'low' ? 'text-amber-600 dark:text-amber-400'
+              : 'text-red-600 dark:text-red-400'
+            } />
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">
+              Bu Ay Güvenli Max (dinamik)
+            </p>
+          </div>
+          {dynamic.status === 'negative' ? (
+            <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+              Reel büyüme negatif (%{dynamic.annualGrowthPct.toFixed(1)}/yıl). Anaparaya dokunma — sadece pasif gelir + trim.
+            </p>
+          ) : (
+            <>
+              <p className={`text-3xl font-bold ${dynamic.status === 'positive' ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                ${dynamic.safeMonthlyUSD.toFixed(0)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+                Son {Math.round(dynamic.periodDays)} günde reel büyüme <strong>%{dynamic.annualGrowthPct.toFixed(1)}/yıl</strong> (USD bazlı, yeni para hariç). Büyümenin %85'i güvenli çekim.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Ana içerik */}
       <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">

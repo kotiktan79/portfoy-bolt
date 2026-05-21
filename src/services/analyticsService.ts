@@ -1,5 +1,52 @@
 import { supabase } from '../lib/supabase';
-import { computePeriodChange, computeClassMetrics } from '../lib/portfolioMetrics';
+import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
+
+/**
+ * Dinamik güvenli maaş: snapshot geçmişi + tarihsel USD/TRY kuru çekip
+ * USD bazlı reel büyümeden hesaplar. (eski MonthlyWithdrawalPlan mantığı)
+ */
+export async function getDynamicWithdrawal(): Promise<DynamicWithdrawal | null> {
+  try {
+    const { data: snaps } = await supabase
+      .from('portfolio_snapshots')
+      .select('snapshot_date,total_value,total_deposits,total_withdrawals')
+      .order('snapshot_date', { ascending: true });
+    if (!snaps || snaps.length < 2) return null;
+
+    // Tarihsel USD/TRY kuru (price_history'den USD sembolü)
+    const { data: usdHist } = await supabase
+      .from('price_history')
+      .select('price,recorded_at')
+      .eq('symbol', 'USD')
+      .order('recorded_at', { ascending: true });
+
+    const usdRateAt = (date: string): number => {
+      if (!usdHist || usdHist.length === 0) return 45;
+      let best = Number(usdHist[0].price);
+      for (const r of usdHist) {
+        if (r.recorded_at.slice(0, 10) <= date) best = Number(r.price);
+      }
+      return best > 1 ? best : 45;
+    };
+
+    // Aynı tarih için son snapshot'ı tut (dedup)
+    const byDate = new Map<string, typeof snaps[0]>();
+    for (const s of snaps) byDate.set(s.snapshot_date, s);
+
+    const forGrowth: SnapshotForGrowth[] = Array.from(byDate.values()).map(s => ({
+      snapshot_date: s.snapshot_date,
+      total_value: s.total_value,
+      total_deposits: s.total_deposits,
+      total_withdrawals: s.total_withdrawals,
+      usdRate: usdRateAt(s.snapshot_date),
+    }));
+
+    return computeDynamicWithdrawal(forGrowth);
+  } catch (error) {
+    console.error('getDynamicWithdrawal error:', error);
+    return null;
+  }
+}
 
 export interface PnLData {
   period: string;
