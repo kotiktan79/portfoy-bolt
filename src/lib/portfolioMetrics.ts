@@ -57,8 +57,16 @@ export interface PeriodChange {
 
 export interface SnapshotLite {
   total_value: number | string;
+  total_investment?: number | string | null;
+  total_pnl?: number | string | null;
   total_deposits?: number | string | null;
   total_withdrawals?: number | string | null;
+}
+
+/** Snapshot'tan unrealized kârı al (varsa total_pnl, yoksa value − investment). */
+function snapshotPnL(s: SnapshotLite): number {
+  if (s.total_pnl != null && s.total_pnl !== '') return Number(s.total_pnl);
+  return (Number(s.total_value) || 0) - (Number(s.total_investment) || 0);
 }
 
 // ============================================================
@@ -157,12 +165,17 @@ export function computeClassMetrics(holdings: Holding[]): ClassMetric[] {
 // ============================================================
 
 /**
- * İki snapshot arasındaki net portföy hareketi (nakit akışını düşer).
+ * İki snapshot arasındaki gerçek piyasa hareketi — KÂR (unrealized PnL) deltası.
  *
- * change = (current.value - prev.value) - (current_net_cash - prev_net_cash)
- * Bu kullanıcının net depozit/çekim hareketini PnL'den ayırır.
+ * change = current_pnl - previous_pnl   (pnl = değer - maliyet)
  *
- * Sanity check: |pct| > maxPct ise 0 döner (veri bozulması koruması).
+ * NEDEN deposit'e bakmıyoruz:
+ *   Yeni para eklenince değer +X, maliyet +X → kâr +0. Yani yeni para/çekim
+ *   kârı YAPISAL olarak etkilemez. Deposit takibine, cash flow çıkarmaya,
+ *   kur düzeltmesine GEREK YOK. Bu yüzden bozulması imkansız.
+ *   Sadece fiyat hareketi kârı değiştirir → günlük PnL = saf piyasa hareketi.
+ *
+ * Sanity check: |pct| > maxPct ise 0 döner (bozuk snapshot koruması).
  */
 export function computePeriodChange(
   current: SnapshotLite | null | undefined,
@@ -174,17 +187,12 @@ export function computePeriodChange(
   }
   const currentValueTRY = Number(current.total_value) || 0;
   const prevValueTRY = Number(previous.total_value) || 0;
-  const currentNet =
-    (Number(current.total_deposits || 0)) - (Number(current.total_withdrawals || 0));
-  const prevNet =
-    (Number(previous.total_deposits || 0)) - (Number(previous.total_withdrawals || 0));
-  const cashFlowTRY = currentNet - prevNet;
-  const changeTRY = currentValueTRY - prevValueTRY - cashFlowTRY;
+  const changeTRY = snapshotPnL(current) - snapshotPnL(previous);
   const changePct = prevValueTRY > 0 ? (changeTRY / prevValueTRY) * 100 : 0;
   if (Math.abs(changePct) > maxPct) {
-    return { changeTRY: 0, changePct: 0, prevValueTRY, currentValueTRY, cashFlowTRY };
+    return { changeTRY: 0, changePct: 0, prevValueTRY, currentValueTRY, cashFlowTRY: 0 };
   }
-  return { changeTRY, changePct, prevValueTRY, currentValueTRY, cashFlowTRY };
+  return { changeTRY, changePct, prevValueTRY, currentValueTRY, cashFlowTRY: 0 };
 }
 
 // ============================================================

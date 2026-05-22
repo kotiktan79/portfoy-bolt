@@ -124,26 +124,49 @@ describe('computeClassMetrics', () => {
   });
 });
 
-describe('computePeriodChange', () => {
-  it('10. snapshot fark — cash flow düşülür', () => {
-    const prev = { total_value: 100000, total_deposits: 1000, total_withdrawals: 0 };
-    const curr = { total_value: 105000, total_deposits: 2000, total_withdrawals: 0 };
-    // raw diff: +5000, cash flow: +1000 (deposit), real PnL: +4000
+describe('computePeriodChange (kâr-bazlı)', () => {
+  it('10. kâr deltası — fiyat hareketi', () => {
+    // dün: değer 100K maliyet 80K → kâr 20K | bugün: değer 105K maliyet 80K → kâr 25K
+    const prev = { total_value: 100000, total_investment: 80000 };
+    const curr = { total_value: 105000, total_investment: 80000 };
     const p = computePeriodChange(curr, prev);
-    expect(p.changeTRY).toBe(4000);
-    expect(p.changePct).toBeCloseTo(4);
+    expect(p.changeTRY).toBe(5000); // kâr 20K → 25K = +5K piyasa
+    expect(p.changePct).toBeCloseTo(5);
   });
 
-  it('11. büyük sapma sanity check — >%30 ise 0 döner', () => {
-    const prev = { total_value: 100000, total_deposits: 0, total_withdrawals: 0 };
-    const curr = { total_value: 200000, total_deposits: 0, total_withdrawals: 0 };
-    // +%100 = imkansız bir gün, sanity kicks in
-    const p = computePeriodChange(curr, prev, 30);
-    expect(p.changeTRY).toBe(0);
+  it('11. YENİ PARA kârı etkilemez (kritik)', () => {
+    // dün: değer 100K maliyet 80K → kâr 20K
+    // bugün: €1000 yeni holding aldı → değer 110K maliyet 90K → kâr 20K (DEĞİŞMEDİ)
+    const prev = { total_value: 100000, total_investment: 80000 };
+    const curr = { total_value: 110000, total_investment: 90000 };
+    const p = computePeriodChange(curr, prev);
+    expect(p.changeTRY).toBe(0); // değer +10K arttı ama hepsi yeni para → PnL 0
     expect(p.changePct).toBe(0);
   });
 
-  it('12. eksik snapshot — null güvenli', () => {
+  it('12. yeni para + piyasa hareketi birlikte', () => {
+    // dün: kâr 20K | bugün: €10K yeni para + piyasa +%2 (2K kâr)
+    const prev = { total_value: 100000, total_investment: 80000 };
+    const curr = { total_value: 112000, total_investment: 90000 };
+    // kâr: 20K → 22K = +2K (yeni para 10K dışlandı, sadece piyasa 2K)
+    const p = computePeriodChange(curr, prev);
+    expect(p.changeTRY).toBe(2000);
+  });
+
+  it('13. total_pnl alanı varsa onu kullanır', () => {
+    const prev = { total_value: 100000, total_pnl: 20000 };
+    const curr = { total_value: 105000, total_pnl: 24000 };
+    expect(computePeriodChange(curr, prev).changeTRY).toBe(4000);
+  });
+
+  it('14. büyük sapma sanity — >%30 ise 0', () => {
+    const prev = { total_value: 100000, total_investment: 80000 };
+    const curr = { total_value: 200000, total_investment: 80000 }; // kâr 20K→120K = +100K = %100
+    const p = computePeriodChange(curr, prev, 30);
+    expect(p.changeTRY).toBe(0);
+  });
+
+  it('15. eksik snapshot — null güvenli', () => {
     expect(computePeriodChange(null, null).changeTRY).toBe(0);
     expect(computePeriodChange({ total_value: 100 }, null).changeTRY).toBe(0);
   });

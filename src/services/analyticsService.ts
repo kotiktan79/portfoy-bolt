@@ -104,7 +104,7 @@ export async function getPnLData(): Promise<{
   try {
     const { data: snapshots, error } = await supabase
       .from('portfolio_snapshots')
-      .select('snapshot_date, total_value, total_investment, total_deposits, total_withdrawals, created_at')
+      .select('snapshot_date, total_value, total_investment, total_pnl, total_deposits, total_withdrawals, created_at')
       .order('snapshot_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(500);
