@@ -75,110 +75,19 @@ export interface AssetAllocation {
 }
 
 export async function savePortfolioSnapshot(
-  totalValue: number,
-  totalInvestment: number,
-  totalPnl: number,
-  pnlPercentage: number,
-  totalDeposits: number = 0,
-  totalWithdrawals: number = 0
+  _totalValue: number,
+  _totalInvestment: number,
+  _totalPnl: number,
+  _pnlPercentage: number,
+  _totalDeposits: number = 0,
+  _totalWithdrawals: number = 0
 ) {
-  try {
-    if (!isFinite(totalValue) || !isFinite(totalInvestment) || !isFinite(totalPnl) || !isFinite(pnlPercentage)) {
-      console.error('Invalid snapshot values:', { totalValue, totalInvestment, totalPnl, pnlPercentage });
-      return;
-    }
-
-    // Market kapanışına göre snapshot tarihi:
-    // - Eğer şu an UTC < 18:00 (daily-snapshot cron öncesi) → BIST'in BUGÜNKÜ kapanışı henüz yok,
-    //   snapshot DÜN tarihine yazılsın.
-    // - Eğer şu an UTC >= 18:00 → cron çalıştı, BUGÜNKÜ kapanış mevcut → bugün tarihine yaz.
-    const now = new Date();
-    const utcHour = now.getUTCHours();
-    let snapshotDateObj = new Date(now);
-    if (utcHour < 18) {
-      snapshotDateObj.setUTCDate(now.getUTCDate() - 1);
-    }
-    const today = snapshotDateObj.toISOString().split('T')[0];
-
-    // Deposits/withdrawals 0 ise (cash balance hesabı başarısız döndü) → en son bilinen değeri koru.
-    // Yoksa snapshot'a 0 yazılır, sonraki günün cash flow hesabı sahte zıplama yapar.
-    let safeDeposits = totalDeposits;
-    let safeWithdrawals = totalWithdrawals;
-    if (totalDeposits === 0 && totalWithdrawals === 0) {
-      const { data: lastNonZero } = await supabase
-        .from('portfolio_snapshots')
-        .select('total_deposits,total_withdrawals')
-        .or('total_deposits.gt.0,total_withdrawals.gt.0')
-        .order('snapshot_date', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (lastNonZero) {
-        safeDeposits = Number(lastNonZero.total_deposits) || 0;
-        safeWithdrawals = Number(lastNonZero.total_withdrawals) || 0;
-        console.warn('[snapshot] deposits/withdrawals=0 — son bilinen değer kullanıldı', { safeDeposits, safeWithdrawals });
-      }
-    }
-
-    const snapshotData = {
-      total_value: totalValue,
-      total_investment: totalInvestment,
-      total_pnl: totalPnl,
-      pnl_percentage: pnlPercentage,
-      total_deposits: safeDeposits,
-      total_withdrawals: safeWithdrawals,
-      snapshot_date: today,
-    };
-
-    // Burst-protection: son 10 saniye içinde bugün için yazılmış kayıt varsa onu update et,
-    // yeni insert atma. Sayfa hızlı yenilenince 3 ardışık snapshot oluşmasın diye.
-    const tenSecAgo = new Date(Date.now() - 10000).toISOString();
-    const { data: recent } = await supabase
-      .from('portfolio_snapshots')
-      .select('id')
-      .eq('snapshot_date', today)
-      .gte('created_at', tenSecAgo)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (recent?.id) {
-      await supabase.from('portfolio_snapshots').update(snapshotData).eq('id', recent.id);
-    } else {
-      const { data: existing } = await supabase
-        .from('portfolio_snapshots')
-        .select('id')
-        .eq('snapshot_date', today)
-        .limit(1)
-        .maybeSingle();
-
-      if (existing?.id) {
-        const { error: updateError } = await supabase
-          .from('portfolio_snapshots')
-          .update(snapshotData)
-          .eq('id', existing.id);
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('portfolio_snapshots')
-          .insert([snapshotData]);
-        if (insertError) throw insertError;
-
-        // Race-safe cleanup: 500ms bekleyip duplicate'leri temizle.
-        await new Promise(r => setTimeout(r, 500));
-        const { data: allToday } = await supabase
-          .from('portfolio_snapshots')
-          .select('id,created_at')
-          .eq('snapshot_date', today)
-          .order('created_at', { ascending: false });
-        if (allToday && allToday.length > 1) {
-          const idsToDelete = allToday.slice(1).map(r => r.id);
-          await supabase.from('portfolio_snapshots').delete().in('id', idsToDelete);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error saving portfolio snapshot:', error);
-  }
+  // ⛔ KALICI: Client artık snapshot YAZMIYOR.
+  // Snapshot'ı yalnızca günlük cron (api/cron/daily-snapshot.ts) yazar — günde 1 kez,
+  // 18:00 UTC (BIST kapanış sonrası), tutarlı deposit ile.
+  // Client'ın yazması duplicate + tarih kayması + deposit tutarsızlığı yaratıyordu.
+  // Canlı portföy değeri holdings'ten anlık hesaplanır, snapshot'a ihtiyaç yok.
+  return;
 }
 
 export async function getPnLData(): Promise<{
