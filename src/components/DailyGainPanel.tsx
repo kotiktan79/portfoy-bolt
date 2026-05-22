@@ -265,13 +265,11 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
 
   const maxAbsGain = Math.max(...allGains.map(a => Math.abs(a.totalDayGainTRY)), 1);
 
-  // Tutarlılık: gösterilen toplam = listedeki satırların TOPLAMI olsun
-  // (Prop'tan gelen totalDailyChange snapshot-tabanlı, satırlar intraday → uyuşmuyordu)
-  const totalDailyChangeInternal = rawGains.reduce((s, a) => s + a.totalDayGainTRY, 0);
-  const totalDailyPctInternal = totalCurrentValue > 0
-    ? (totalDailyChangeInternal / (totalCurrentValue - totalDailyChangeInternal)) * 100
-    : 0;
-  void totalDailyChange; void totalDailyPct;
+  // TEK RESMİ GÜNLÜK RAKAM: prop'tan gelen (PnL paneliyle aynı kaynak, kâr-bazlı).
+  // Böylece iki panel aynı "günlük" sayıyı gösterir, tutarsızlık olmaz.
+  // Aşağıdaki per-holding satırlar "bugünkü hareketler" (intraday) — ayrı/bilgi amaçlı.
+  const totalDailyChangeInternal = totalDailyChange;
+  const totalDailyPctInternal = totalDailyPct;
   const isPositiveTotal = totalDailyChangeInternal >= 0;
   const timeStr = currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
@@ -377,6 +375,10 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
           )}
 
           {(topGainers.length > 0 || topLosers.length > 0) && (
+            <>
+            <p className="px-4 pt-3 text-[10px] text-slate-400 dark:text-gray-500 italic">
+              ⓘ Aşağıdaki hareketler bugün açılıştan beri (anlık). Üstteki "Toplam Günlük" resmi 24 saatlik rakamdır.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 border-b border-slate-100 dark:border-gray-700">
               {topGainers.length > 0 && (
                 <div className="p-4 md:border-r border-slate-100 dark:border-gray-700">
@@ -441,6 +443,7 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
                 </div>
               )}
             </div>
+            </>
           )}
 
           {rawGains.length >= 2 && bestAsset && worstAsset && (
