@@ -384,6 +384,7 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
         LVMH: 'MC.PA', TTE: 'TTE.PA', OR: 'OR.PA', SAN: 'SAN.PA', AIR: 'AIR.PA', SU: 'SU.PA',
         SAP: 'SAP.DE', BMW: 'BMW.DE', SIE: 'SIE.DE',
         NOKIA: 'NOKIA.HE',
+        V3YL: 'V3YL.DE',  // Vanguard ESG North America All Cap (EUR-quoted, Xetra)
       };
       // Her hisse için doğru ticker'ı topla
       const tickerMap: Record<string, string> = {};
