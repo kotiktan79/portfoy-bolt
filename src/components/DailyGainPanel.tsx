@@ -265,11 +265,16 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
 
   const maxAbsGain = Math.max(...allGains.map(a => Math.abs(a.totalDayGainTRY)), 1);
 
-  // TEK RESMİ GÜNLÜK RAKAM: prop'tan gelen (PnL paneliyle aynı kaynak, kâr-bazlı).
-  // Böylece iki panel aynı "günlük" sayıyı gösterir, tutarsızlık olmaz.
-  // Aşağıdaki per-holding satırlar "bugünkü hareketler" (intraday) — ayrı/bilgi amaçlı.
-  const totalDailyChangeInternal = totalDailyChange;
-  const totalDailyPctInternal = totalDailyPct;
+  // ANLIK görünüm: bu panel "bugün açılıştan şimdiye" canlı hareketi gösterir.
+  // = per-holding satırların toplamı (fiyat hareketi bazlı, deposit-güvenli:
+  //   yeni alınan holding açılış=current olduğu için 0 katkı verir).
+  // Headline = satırların toplamı → panel kendi içinde tutarlı.
+  // (Resmi 24h günlük rakam ayrı panelde: "Kar/Zarar Geçmişi → Günlük")
+  const totalDailyChangeInternal = rawGains.reduce((s, a) => s + a.totalDayGainTRY, 0);
+  const totalDailyPctInternal = totalCurrentValue - totalDailyChangeInternal > 0
+    ? (totalDailyChangeInternal / (totalCurrentValue - totalDailyChangeInternal)) * 100
+    : 0;
+  void totalDailyChange; void totalDailyPct;
   const isPositiveTotal = totalDailyChangeInternal >= 0;
   const timeStr = currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
@@ -287,10 +292,10 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
             <Sun size={18} className={isPositiveTotal ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'} />
           </div>
           <div className="text-left">
-            <p className="text-sm font-bold text-slate-700 dark:text-gray-200 tracking-tight">Bugünkü Kazanç</p>
+            <p className="text-sm font-bold text-slate-700 dark:text-gray-200 tracking-tight">Anlık Kazanç (açılıştan beri)</p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <Clock size={11} className="text-slate-400" />
-              <span className="text-xs text-slate-400 dark:text-gray-500">{timeStr} itibarıyla</span>
+              <span className="text-xs text-slate-400 dark:text-gray-500">{timeStr} itibarıyla · canlı</span>
             </div>
           </div>
         </div>
@@ -375,10 +380,6 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
           )}
 
           {(topGainers.length > 0 || topLosers.length > 0) && (
-            <>
-            <p className="px-4 pt-3 text-[10px] text-slate-400 dark:text-gray-500 italic">
-              ⓘ Aşağıdaki hareketler bugün açılıştan beri (anlık). Üstteki "Toplam Günlük" resmi 24 saatlik rakamdır.
-            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 border-b border-slate-100 dark:border-gray-700">
               {topGainers.length > 0 && (
                 <div className="p-4 md:border-r border-slate-100 dark:border-gray-700">
@@ -443,7 +444,6 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
                 </div>
               )}
             </div>
-            </>
           )}
 
           {rawGains.length >= 2 && bestAsset && worstAsset && (
@@ -583,7 +583,7 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
 
               <div className="px-4 py-3 bg-slate-50 dark:bg-gray-900/30 border-t border-slate-100 dark:border-gray-700 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-slate-600 dark:text-gray-300">Toplam Günlük</span>
+                  <span className="text-sm font-bold text-slate-600 dark:text-gray-300">Anlık Toplam</span>
                   <span className="text-xs text-slate-400 dark:text-gray-500">${formatCurrencyUSD(Math.abs(totalDailyChangeInternal), usdRate)}</span>
                 </div>
                 <div className="flex items-center gap-2">
