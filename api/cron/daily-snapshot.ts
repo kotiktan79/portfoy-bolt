@@ -71,10 +71,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Portfolio snapshot hesapla ve kaydet — currency-aware
     // current_price holding'in currency field'ı cinsinden tutuluyor.
     // TRY toplamı için USD/EUR fiyatları FX ile çevriliyor.
+    // ÖNCELİK SIRASI: USD/EUR holding (kullanıcı tutuyorsa) > live API > son cache.
+    // Eskiden || 45 / || 51 hardcoded fallback vardı — USD holding silindiği gün
+    // snapshot'lar 45 ile yazılır, sonra 32 ile yazılır → sahte ₺13M sıçraması.
     const usdHolding = allHoldings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
     const eurHolding = allHoldings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
-    const usdRateForTotal = Number(usdHolding?.current_price) || 45;
-    const eurRateForTotal = Number(eurHolding?.current_price) || 51;
+    const usdFromHolding = Number(usdHolding?.current_price) || 0;
+    const eurFromHolding = Number(eurHolding?.current_price) || 0;
+    const usdRateForTotal = usdFromHolding > 1 ? usdFromHolding : await fetchUsdTry();
+    const eurRateForTotal = eurFromHolding > 1 ? eurFromHolding : await fetchEurTry();
+    log.push(`FX: USD=${usdRateForTotal.toFixed(4)} (${usdFromHolding > 1 ? 'holding' : 'live'}), EUR=${eurRateForTotal.toFixed(4)} (${eurFromHolding > 1 ? 'holding' : 'live'})`);
 
     const tryValueOf = (h: any, priceField: 'current_price' | 'purchase_price') => {
       const price = Number(h[priceField]) || (priceField === 'current_price' ? Number(h.purchase_price) : 0) || 0;

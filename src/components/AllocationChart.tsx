@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Holding } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 interface AllocationChartProps {
   holdings: Holding[];
@@ -24,10 +25,12 @@ const ASSET_LABELS: Record<string, string> = {
 };
 
 export function AllocationChart({ holdings }: AllocationChartProps) {
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const fxRates = getFxRatesFromHoldings(holdings);
+  const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
+  const totalValue = investmentHoldings.reduce((sum, h) => sum + holdingValueTRY(h, fxRates), 0);
 
-  const allocationData = holdings.reduce((acc, holding) => {
-    const value = holding.current_price * holding.quantity;
+  const allocationData = investmentHoldings.reduce((acc, holding) => {
+    const value = holdingValueTRY(holding, fxRates);
     const existing = acc.find((item) => item.type === holding.asset_type);
 
     if (existing) {

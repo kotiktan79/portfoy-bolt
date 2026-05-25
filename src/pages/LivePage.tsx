@@ -15,7 +15,7 @@ import { motion, useSpring, useTransform, AnimatePresence } from 'framer-motion'
 import { AreaChart } from '@tremor/react';
 import { TrendingUp, TrendingDown, RefreshCw, Wifi, Wallet, Gauge, ArrowUpRight, ArrowDownRight, DollarSign } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
-import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
+import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
 import { getDynamicWithdrawal } from '../services/analyticsService';
 import { DynamicWithdrawal } from '../lib/portfolioMetrics';
 
@@ -83,21 +83,7 @@ export default function LivePage() {
   const dailyPct = livePnlData?.daily?.percentage ?? 0;
   const isPos = dailyChange >= 0;
 
-  const passiveYearlyUSD = useMemo(() => {
-    const fx = m.fxRates;
-    let yearly = 0;
-    for (const h of holdings.filter(x => x.asset_type !== 'cash')) {
-      const v = (h.current_price || 0) * (h.quantity || 0);
-      const vTRY = (h.currency || 'TRY').toUpperCase() === 'USD' ? v * fx.usd
-        : (h.currency || 'TRY').toUpperCase() === 'EUR' ? v * fx.eur : v;
-      let y = 0;
-      if (h.asset_type === 'eurobond') y = 0.045;
-      else if (['JNJ', 'KO', 'PG', 'SCHD', 'NESN'].includes(h.symbol)) y = 0.03;
-      else if (h.asset_type === 'fund') y = 0.03;
-      yearly += vTRY * y;
-    }
-    return m.fxRates.usd > 0 ? yearly / m.fxRates.usd : 0;
-  }, [holdings, m.fxRates]);
+  const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
   const allMetrics = useMemo(() => computeHoldingMetrics(holdings), [holdings]);
   const topGainers = useMemo(() => [...allMetrics].filter(h => h.pnlPct > 0).sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5), [allMetrics]);

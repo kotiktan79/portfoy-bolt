@@ -3,7 +3,7 @@ import { motion, useSpring, useTransform } from 'framer-motion';
 import { AreaChart } from '@tremor/react';
 import { TrendingUp, TrendingDown, Wallet, Gauge, Coins, ArrowUpRight } from 'lucide-react';
 import { Holding } from '../lib/supabase';
-import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
+import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
 
 interface HeroDashboardProps {
   holdings: Holding[];
@@ -52,21 +52,7 @@ export default function HeroDashboard({
   const grandTotal = m.totalValueTRY + totalCashValue;
   const grandTotalUSD = usdRate > 0 ? grandTotal / usdRate : 0;
 
-  const passiveYearlyUSD = useMemo(() => {
-    const fx = m.fxRates;
-    let yearly = 0;
-    for (const h of holdings.filter(x => x.asset_type !== 'cash')) {
-      const v = (h.current_price || 0) * (h.quantity || 0);
-      const vTRY = (h.currency || 'TRY').toUpperCase() === 'USD' ? v * fx.usd
-        : (h.currency || 'TRY').toUpperCase() === 'EUR' ? v * fx.eur : v;
-      let y = 0;
-      if (h.asset_type === 'eurobond') y = 0.045;
-      else if (['JNJ', 'KO', 'PG', 'SCHD', 'NESN'].includes(h.symbol)) y = 0.03;
-      else if (h.asset_type === 'fund') y = 0.03;
-      yearly += vTRY * y;
-    }
-    return usdRate > 0 ? yearly / usdRate : 0;
-  }, [holdings, m.fxRates, usdRate]);
+  const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
   const isPos = (dailyChange ?? 0) >= 0;
 

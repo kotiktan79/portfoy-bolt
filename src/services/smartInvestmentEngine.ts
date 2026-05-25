@@ -7,6 +7,7 @@
 
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from './priceService';
+import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -160,29 +161,26 @@ export function analyzePortfolio(
   cashBalance: number = 0
 ): PortfolioReport {
   const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
+  const portfolio = computePortfolioMetrics(holdings);
+  const perHolding = computeHoldingMetrics(holdings);
 
-  const totalValue = investmentHoldings.reduce((s, h) => s + h.current_price * h.quantity, 0);
-  const totalInvested = investmentHoldings.reduce((s, h) => s + h.purchase_price * h.quantity, 0);
-  const totalPnl = totalValue - totalInvested;
-  const totalPnlPct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+  const totalValue = portfolio.totalValueTRY;
+  const totalInvested = portfolio.totalCostTRY;
+  const totalPnl = portfolio.totalPnLTRY;
+  const totalPnlPct = portfolio.totalPnLPct;
   const grandTotal = totalValue + cashBalance;
 
   // ── Per-holding analysis ──
   const ownedSymbols = new Set(investmentHoldings.map(h => h.symbol));
-  const holdingAnalysis: HoldingAnalysis[] = investmentHoldings.map(h => {
-    const value = h.current_price * h.quantity;
-    const invested = h.purchase_price * h.quantity;
-    const pnl = value - invested;
-    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
-    const weight = totalValue > 0 ? (value / totalValue) * 100 : 0;
-
-    // Determine action based on multiple factors
-    const { action, actionReason, riskLevel, targetPrice, stopLoss } = determineAction(h, pnlPct, weight);
+  const holdingAnalysis: HoldingAnalysis[] = perHolding.map(m => {
+    const h = m.holding;
+    const { action, actionReason, riskLevel, targetPrice, stopLoss } = determineAction(h, m.pnlPct, m.weight);
 
     return {
       symbol: h.symbol, assetType: h.asset_type,
       currentPrice: h.current_price, purchasePrice: h.purchase_price,
-      quantity: h.quantity, value, invested, pnl, pnlPct, weight,
+      quantity: h.quantity, value: m.valueTRY, invested: m.costTRY,
+      pnl: m.pnlTRY, pnlPct: m.pnlPct, weight: m.weight,
       action, actionReason, riskLevel, targetPrice, stopLoss,
     };
   }).sort((a, b) => b.value - a.value);

@@ -1,5 +1,6 @@
 import { supabase, Holding } from '../lib/supabase';
 import { getAllTransactions, Transaction } from './transactionService';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 interface PortfolioBackup {
   holdings: Holding[];
@@ -58,11 +59,12 @@ export async function exportHoldingsToCSV(): Promise<void> {
     'Created At',
   ];
 
+  const fxRates = getFxRatesFromHoldings(holdings);
   const rows = holdings.map((h) => {
-    const totalValue = h.current_price * h.quantity;
-    const totalCost = h.purchase_price * h.quantity;
+    const totalValue = holdingValueTRY(h, fxRates);
+    const totalCost = holdingCostTRY(h, fxRates);
     const pnl = totalValue - totalCost;
-    const pnlPercentage = ((pnl / totalCost) * 100).toFixed(2);
+    const pnlPercentage = totalCost > 0 ? ((pnl / totalCost) * 100).toFixed(2) : '0.00';
 
     return [
       h.symbol,

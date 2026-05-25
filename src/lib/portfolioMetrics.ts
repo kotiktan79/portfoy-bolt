@@ -336,6 +336,42 @@ export function computeIntradayChange(
 // UTILITY: top winners / losers
 // ============================================================
 
+// ============================================================
+// PASSIVE YEARLY INCOME (yıllık beklenen dividend/coupon, USD)
+// ============================================================
+
+// Holding bazlı yıllık getiri beklentisi (kuponlar/dividendler).
+// Kaynak: ETF prospectus'ları, son 4 çeyrek dividend ortalaması.
+// HARDCODE: dividend_yield kolonu DB'de yok; eklenince buraya geçilir.
+const YIELD_BY_SYMBOL: Record<string, number> = {
+  // Dividend stocks
+  JNJ: 0.03, KO: 0.03, PG: 0.025, SCHD: 0.035, NESN: 0.03,
+  // Eurobond ETF'leri
+  IB01: 0.045, IBTL: 0.045, V3YL: 0.045, JNK: 0.07, HYG: 0.07,
+  TLT: 0.04, SGOV: 0.052, IUSB: 0.04, BND: 0.04,
+};
+function symbolYield(h: Holding): number {
+  if (YIELD_BY_SYMBOL[h.symbol]) return YIELD_BY_SYMBOL[h.symbol];
+  if (h.asset_type === 'eurobond') return 0.045;
+  if (h.asset_type === 'fund') return 0.03;
+  return 0;
+}
+
+/**
+ * Yıllık beklenen pasif gelir (kupon + dividend), USD bazında.
+ * Tek kaynak — HeroDashboard, LivePage hep buradan çağırsın.
+ */
+export function computePassiveYearlyUSD(holdings: Holding[]): number {
+  const m = computePortfolioMetrics(holdings);
+  const fx = m.fxRates;
+  let yearlyTRY = 0;
+  for (const h of holdings.filter(x => x.asset_type !== 'cash')) {
+    const vTRY = holdingValueTRY(h, fx);
+    yearlyTRY += vTRY * symbolYield(h);
+  }
+  return fx.usd > 0 ? yearlyTRY / fx.usd : 0;
+}
+
 export function topWinners(holdings: Holding[], limit: number = 5): HoldingMetric[] {
   return computeHoldingMetrics(holdings)
     .filter(m => m.pnlTRY > 0)

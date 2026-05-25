@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 export interface Holding {
   id: string;
@@ -7,6 +8,7 @@ export interface Holding {
   quantity: number;
   current_price: number;
   purchase_price: number;
+  currency?: string | null;
 }
 
 export interface Allocation {
@@ -154,7 +156,8 @@ export const PRESET_STRATEGIES: Record<string, RebalancingStrategy> = {
 };
 
 export async function calculateCurrentAllocations(holdings: Holding[]): Promise<Allocation[]> {
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const fxRates = getFxRatesFromHoldings(holdings as never);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h as never, fxRates), 0);
 
   if (totalValue === 0) {
     return [];
@@ -163,7 +166,7 @@ export async function calculateCurrentAllocations(holdings: Holding[]): Promise<
   const allocationMap = new Map<string, Allocation>();
 
   holdings.forEach((holding) => {
-    const value = holding.current_price * holding.quantity;
+    const value = holdingValueTRY(holding as never, fxRates);
     const percent = (value / totalValue) * 100;
 
     if (allocationMap.has(holding.asset_type)) {
@@ -204,7 +207,8 @@ export function generateRebalancingTrades(
   targetAllocations: Record<string, number>,
   feePercent: number = 0.1
 ): Trade[] {
-  const totalValue = holdings.reduce((sum, h) => sum + h.current_price * h.quantity, 0);
+  const fxRates = getFxRatesFromHoldings(holdings as never);
+  const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h as never, fxRates), 0);
 
   if (totalValue === 0) {
     return [];
@@ -213,7 +217,7 @@ export function generateRebalancingTrades(
   const currentByType = new Map<string, { value: number; holdings: Holding[] }>();
 
   holdings.forEach((holding) => {
-    const value = holding.current_price * holding.quantity;
+    const value = holdingValueTRY(holding as never, fxRates);
     if (!currentByType.has(holding.asset_type)) {
       currentByType.set(holding.asset_type, { value: 0, holdings: [] });
     }
@@ -318,7 +322,7 @@ export function generateRebalancingTrades(
       sortedHoldings.forEach((holding) => {
         if (remainingToSell <= 0) return;
 
-        const holdingValue = holding.current_price * holding.quantity;
+        const holdingValue = holdingValueTRY(holding as never, fxRates);
         const sellValue = Math.min(holdingValue, remainingToSell);
         const sellShares = holding.current_price > 0 ? sellValue / holding.current_price : 0;
 

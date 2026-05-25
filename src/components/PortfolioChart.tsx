@@ -38,6 +38,11 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
 
       if (!valueData || !investmentData) return null;
 
+      // Snapshot'ın total_pnl'ini DOĞRUDAN kullan (kâr-bazlı tek kaynak).
+      // value − investment ile recompute snapshot'taki resmi total_pnl ile uyuşmayabilir
+      // (örn. total_investment NULL veya geçici 0 ise tüm değer fake kâr gibi görünür).
+      const pnl = Number(payload[0].payload.pnl) || 0;
+
       return (
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg border border-slate-200 dark:border-gray-700">
           <p className="text-sm font-semibold text-slate-700 dark:text-gray-200 mb-2">{payload[0].payload.date}</p>
@@ -49,8 +54,8 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
               Yatırım: <span className="font-bold text-slate-900 dark:text-gray-100">{investmentData.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
             </p>
             <p className="text-sm text-slate-600 dark:text-gray-400">
-              PnL: <span className={`font-bold ${(valueData.value - investmentData.value) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                {(valueData.value - investmentData.value).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+              PnL: <span className={`font-bold ${pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {pnl.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
               </span>
             </p>
           </div>

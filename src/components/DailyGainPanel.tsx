@@ -8,6 +8,7 @@ import { Holding } from '../lib/supabase';
 import { formatCurrency, formatCurrencyUSD, formatPercentage, getCachedUSDRate } from '../services/priceService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
 import { DEFAULT_USD_TRY_RATE } from '../config';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 interface AssetDailyGain {
   id: string;
@@ -198,13 +199,26 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
     });
   }, []);
 
+  const fxRates = getFxRatesFromHoldings(holdings);
+  const fxFor = (cur: string | undefined) => {
+    const c = (cur || 'TRY').toUpperCase();
+    if (c === 'USD') return fxRates.usd;
+    if (c === 'EUR') return fxRates.eur;
+    if (c === 'GBP') return fxRates.gbp ?? fxRates.usd * 1.27;
+    return 1;
+  };
+
   useEffect(() => {
     if (holdings.length === 0) return;
-    const totalVal = holdings.reduce((s, h) => s + h.current_price * h.quantity, 0);
+    const totalVal = holdings
+      .filter(h => h.asset_type !== 'cash')
+      .reduce((s, h) => s + holdingValueTRY(h, fxRates), 0);
     recordHourlyPoint(totalVal, totalDailyChange);
   }, [totalDailyChange, holdings.length]);
 
-  const totalCurrentValue = holdings.reduce((s, h) => s + h.current_price * h.quantity, 0);
+  const totalCurrentValue = holdings
+    .filter(h => h.asset_type !== 'cash')
+    .reduce((s, h) => s + holdingValueTRY(h, fxRates), 0);
 
   const rawGains: AssetDailyGain[] = holdings
     .filter(h => h.asset_type !== 'cash')
@@ -215,10 +229,14 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
       // Single-day move >25% is implausible — treat as stale and use current.
       // (Crypto can move 15-20%, but 25%+ in one day means cache corruption.)
       const openPrice = ratio < 0.75 || ratio > 1.25 ? currentPrice : rawOpenPrice;
+      // priceChangeTRY ismi legacy: aslında holding currency'sinde delta.
+      // Total/value alanları FX ile TRY'ye çevriliyor (toplama tutarlı olsun diye).
       const priceChangeTRY = currentPrice - openPrice;
       const priceChangePct = openPrice > 0 ? (priceChangeTRY / openPrice) * 100 : 0;
-      const totalDayGainTRY = priceChangeTRY * h.quantity;
-      const currentValueTRY = currentPrice * h.quantity;
+      const fx = fxFor(h.currency);
+      // fx-ok: priceChangeTRY (intraday delta, holding currency) × qty × fx → TRY gain
+      const totalDayGainTRY = priceChangeTRY * h.quantity * fx;
+      const currentValueTRY = holdingValueTRY(h, fxRates);
       const portfolioWeight = totalCurrentValue > 0 ? (currentValueTRY / totalCurrentValue) * 100 : 0;
 
       const rawHourly = sessionStorage.getItem(`ph_${h.id}`);

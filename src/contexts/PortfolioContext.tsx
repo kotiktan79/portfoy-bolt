@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback, ReactNode } from 'react';
 import { supabase, Holding, AssetType } from '../lib/supabase';
+import { holdingValueTRY, holdingCostTRY, FxRates } from '../lib/fx';
 import {
   fetchMultiplePrices,
   formatCurrency,
@@ -634,13 +635,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }, [holdings, totalCashValue, liveUsdRate, liveEurRate]);
 
   const filteredAndSortedHoldings = useMemo(() => {
-    const fxToTRY = (amount: number, ccy?: string | null) => {
-      const c = (ccy || 'TRY').toUpperCase();
-      if (c === 'TRY') return amount;
-      if (c === 'USD') return amount * (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE);
-      if (c === 'EUR') return amount * (liveEurRate > 1 ? liveEurRate : (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.08);
-      if (c === 'GBP') return amount * (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.27;
-      return amount;
+    const fxRates: FxRates = {
+      usd: liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE,
+      eur: liveEurRate > 1 ? liveEurRate : (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.08,
+      gbp: (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.27,
     };
     return holdings
       .filter((holding) => {
@@ -649,10 +647,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         return matchesSearch && matchesType;
       })
       .sort((a, b) => {
-        const aValue = fxToTRY(a.current_price * a.quantity, a.currency);
-        const bValue = fxToTRY(b.current_price * b.quantity, b.currency);
-        const aInvestment = fxToTRY(a.purchase_price * a.quantity, a.currency);
-        const bInvestment = fxToTRY(b.purchase_price * b.quantity, b.currency);
+        const aValue = holdingValueTRY(a, fxRates);
+        const bValue = holdingValueTRY(b, fxRates);
+        const aInvestment = holdingCostTRY(a, fxRates);
+        const bInvestment = holdingCostTRY(b, fxRates);
         const aPnl = aValue - aInvestment;
         const bPnl = bValue - bInvestment;
         const aPnlPercent = aInvestment > 0 ? (aPnl / aInvestment) * 100 : 0;

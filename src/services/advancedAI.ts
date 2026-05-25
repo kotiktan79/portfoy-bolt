@@ -277,9 +277,10 @@ function determineSignal(holding: Holding, indicators: TechnicalIndicators, pric
     signalStrength -= 15;
   }
 
-  const currentValue = holdingValueTRY(holding, getFxRatesFromHoldings(holdings));
-  const invested = holdingCostTRY(holding, getFxRatesFromHoldings(holdings));
-  const pnl = ((currentValue - invested) / invested) * 100;
+  const fxRates = getFxRatesFromHoldings([holding]);
+  const currentValue = holdingValueTRY(holding, fxRates);
+  const invested = holdingCostTRY(holding, fxRates);
+  const pnl = invested > 0 ? ((currentValue - invested) / invested) * 100 : 0;
 
   if (pnl < -15) {
     reasons.push(`Kayıp pozisyonu (${pnl.toFixed(1)}%)`);
@@ -391,7 +392,7 @@ export async function calculatePortfolioScore(holdings: Holding[]): Promise<Port
 }
 
 export async function generateSmartSuggestions(
-  holdings: Array<{ symbol: string; asset_type: string; current_price: number; quantity: number; purchase_price: number }>
+  holdings: Holding[]
 ): Promise<SmartSuggestion[]> {
   const suggestions: SmartSuggestion[] = [];
   const totalValue = holdings.reduce((sum, h) => sum + holdingValueTRY(h, getFxRatesFromHoldings(holdings)), 0);

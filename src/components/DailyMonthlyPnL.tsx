@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Calendar, BarChart2, ArrowUp, ArrowDown, CalendarDays } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { computePeriodChange } from '../lib/portfolioMetrics';
+import { computePeriodChange, SnapshotLite } from '../lib/portfolioMetrics';
 import { formatCurrency, formatCurrencyUSD, getCachedUSDRate } from '../services/priceService';
 import { DEFAULT_USD_TRY_RATE } from '../config';
 
@@ -86,7 +86,7 @@ export function DailyMonthlyPnL() {
     setLoading(true);
     const { data: rawData, error } = await supabase
       .from('portfolio_snapshots')
-      .select('snapshot_date, total_value, total_pnl, pnl_percentage, total_deposits, total_withdrawals, created_at')
+      .select('snapshot_date, total_value, total_investment, total_pnl, pnl_percentage, total_deposits, total_withdrawals, created_at')
       .order('snapshot_date', { ascending: true })
       .order('created_at', { ascending: false });
 
@@ -119,34 +119,44 @@ export function DailyMonthlyPnL() {
       };
     });
 
-    // Generic gruplayıcı: snapshot satırlarını verilen key/label fonksiyonuna göre periyoda topla
-    type Bucket = { label: string; values: { date: string; value: number; deposits: number; withdrawals: number }[] };
+    // Generic gruplayıcı: snapshot satırlarını verilen key/label fonksiyonuna göre periyoda topla.
+    // KÂR-BAZLI: her periyodun değişimi = lastSnapshotInPeriod.pnl − lastSnapshotInPreviousPeriod.pnl.
+    // Deposit/withdraw'a HİÇ bakmıyoruz — yeni para hem değeri hem maliyeti eşit artırır,
+    // dolayısıyla kâr deltası yapısal olarak temizdir (computePeriodChange ile aynı mantık).
+    type SnapRow = SnapshotLite & { date: string };
+    type Bucket = { label: string; rows: SnapRow[] };
     const groupBy = (keyFn: (date: string) => { key: string; label: string }): PeriodRecord[] => {
       const map = new Map<string, Bucket>();
       for (const row of data) {
         const { key, label } = keyFn(row.snapshot_date);
-        if (!map.has(key)) map.set(key, { label, values: [] });
-        map.get(key)!.values.push({
+        if (!map.has(key)) map.set(key, { label, rows: [] });
+        map.get(key)!.rows.push({
           date: row.snapshot_date,
-          value: Number(row.total_value),
-          deposits: Number(row.total_deposits) || 0,
-          withdrawals: Number(row.total_withdrawals) || 0,
+          total_value: row.total_value,
+          total_investment: row.total_investment,
+          total_pnl: row.total_pnl,
         });
       }
       const out: PeriodRecord[] = [];
       const keys = Array.from(map.keys()).sort();
-      let prevEnd: number | null = null;
+      let prevLastRow: SnapRow | null = null;
       for (const k of keys) {
-        const { label, values } = map.get(k)!;
-        const endValue = values[values.length - 1].value;
-        const endNetCash = (values[values.length - 1].deposits || 0) - (values[values.length - 1].withdrawals || 0);
-        const startNetCash = (values[0].deposits || 0) - (values[0].withdrawals || 0);
-        const netCashFlow = endNetCash - startNetCash;
-        const startValue = prevEnd !== null ? prevEnd : values[0].value;
-        const change = prevEnd !== null ? (endValue - startValue) - netCashFlow : 0;
-        const changePct = startValue > 0 && prevEnd !== null ? (change / startValue) * 100 : 0;
-        out.push({ key: k, label, start_value: startValue, end_value: endValue, change, change_pct: changePct });
-        prevEnd = endValue;
+        const { label, rows } = map.get(k)!;
+        const lastRow = rows[rows.length - 1];
+        const endValue = Number(lastRow.total_value) || 0;
+        const startValue = prevLastRow ? Number(prevLastRow.total_value) || 0 : Number(rows[0].total_value) || 0;
+        const period = prevLastRow
+          ? computePeriodChange(lastRow, prevLastRow, 100)
+          : { changeTRY: 0, changePct: 0 };
+        out.push({
+          key: k,
+          label,
+          start_value: startValue,
+          end_value: endValue,
+          change: period.changeTRY,
+          change_pct: period.changePct,
+        });
+        prevLastRow = lastRow;
       }
       return out;
     };

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 /**
  * Dinamik güvenli maaş: snapshot geçmişi + tarihsel USD/TRY kuru çekip
@@ -243,25 +244,30 @@ export function calculateRebalance(
     symbol: string;
     asset_type: string;
     current_price: number;
+    purchase_price?: number;
     quantity: number;
+    currency?: string;
   }>,
   targetAllocations: Record<string, number>
 ): AssetAllocation[] {
-  const totalValue = holdings.reduce(
-    (sum, h) => sum + h.current_price * h.quantity,
-    0
-  );
+  // FX-aware: USD/EUR pozisyonları TRY'ye çevirip topluyoruz.
+  // Eski sürüm raw price×qty topluyordu → multicurrency portföyde yanlış yüzdeler.
+  const fxRates = getFxRatesFromHoldings(holdings as never);
+  const valued = holdings.map((h) => ({
+    h,
+    value: holdingValueTRY(h as never, fxRates),
+  }));
+  const totalValue = valued.reduce((sum, v) => sum + v.value, 0);
 
-  const allocations: AssetAllocation[] = holdings.map((holding) => {
-    const value = holding.current_price * holding.quantity;
+  const allocations: AssetAllocation[] = valued.map(({ h, value }) => {
     const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
-    const targetPercentage = targetAllocations[holding.asset_type] || 0;
+    const targetPercentage = targetAllocations[h.asset_type] || 0;
     const targetValue = (totalValue * targetPercentage) / 100;
     const rebalanceAmount = targetValue - value;
 
     return {
-      symbol: holding.symbol,
-      asset_type: holding.asset_type,
+      symbol: h.symbol,
+      asset_type: h.asset_type,
       value,
       percentage,
       target_percentage: targetPercentage,

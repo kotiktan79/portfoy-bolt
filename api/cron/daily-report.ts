@@ -63,11 +63,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     log.push(`Veri: ${holdings.length} holding, ${snapshots.length} snapshot, ${cashBalances.length} cüzdan`);
 
-    // FX kurları — holdings'teki USD/EUR pozisyonlarından
+    // FX kurları — holdings'teki USD/EUR pozisyonlarından; yoksa live API.
+    // Eski hardcode || 45 / || 51, USD holding silindiğinde snapshot poisoning'e yol açıyordu.
     const usdHolding = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
     const eurHolding = holdings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
-    const usdRate = Number(usdHolding?.current_price) > 1 ? Number(usdHolding.current_price) : 45;
-    const eurRate = Number(eurHolding?.current_price) > 1 ? Number(eurHolding.current_price) : 51;
+    const usdFromHolding = Number(usdHolding?.current_price) || 0;
+    const eurFromHolding = Number(eurHolding?.current_price) || 0;
+    const usdRate = usdFromHolding > 1 ? usdFromHolding : await fetchLiveRate('USD');
+    const eurRate = eurFromHolding > 1 ? eurFromHolding : await fetchLiveRate('EUR');
     // Yardımcı kurlar (RUB/RON/GBP/CHF için yaklaşık)
     const fxRate = (ccy: string): number => {
       const c = (ccy || 'TRY').toUpperCase();
@@ -127,7 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========================================
     log.push('AI analizi başlatılıyor...');
 
-    const portfolioContext = buildPortfolioContext(holdings, totalValue, totalInvestment, totalPnlPct, totalCash, snapshots, dividends, incomeRecords, dailyChange, dailyChangePct);
+    const portfolioContext = buildPortfolioContext(holdings, totalValue, totalInvestment, totalPnlPct, totalCash, snapshots, dividends, incomeRecords, dailyChange, dailyChangePct, fxRate);
     const marketContext = buildMarketContext(marketData, newsData);
 
     const aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
@@ -571,10 +574,17 @@ function buildPortfolioContext(
   totalPnlPct: number, totalCash: number, snapshots: any[],
   dividends: any[], incomeRecords: any[],
   dailyChange: number, dailyChangePct: number,
+  fxRate: (ccy: string) => number,
 ): string {
   const typeNames: Record<string, string> = {
     stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
     fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia',
+  };
+  // FX-aware TRY value (holdings can be USD/EUR/GBP/RON/RUB)
+  const tryV = (h: any, field: 'current_price' | 'purchase_price' = 'current_price') => {
+    const p = Number(h[field]) || (field === 'current_price' ? Number(h.purchase_price) : 0) || 0;
+    const q = Number(h.quantity) || 0;
+    return p * q * fxRate(h.currency || 'TRY'); // fx-ok: tryV helper kapsüllüyor
   };
 
   // Tip dağılımı
@@ -582,8 +592,8 @@ function buildPortfolioContext(
   for (const h of holdings) {
     const type = h.asset_type || 'other';
     if (!byType[type]) byType[type] = { value: 0, count: 0, pnl: 0 };
-    const value = (h.current_price || 0) * (h.quantity || 0);
-    const cost = (h.purchase_price || 0) * (h.quantity || 0);
+    const value = tryV(h, 'current_price');
+    const cost = tryV(h, 'purchase_price');
     byType[type].value += value;
     byType[type].count++;
     byType[type].pnl += value - cost;
@@ -594,13 +604,13 @@ function buildPortfolioContext(
     .map(([type, d]) => `${typeNames[type] || type}: %${(d.value / totalValue * 100).toFixed(1)} (${d.count} adet, KZ: ${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(0)} TL)`)
     .join('\n');
 
-  // Top 20 pozisyon
+  // Top 20 pozisyon (TRY karşılığıyla sıralı)
   const topHoldings = [...holdings]
-    .sort((a, b) => (b.current_price * b.quantity) - (a.current_price * a.quantity))
+    .sort((a, b) => tryV(b) - tryV(a))
     .slice(0, 20)
     .map(h => {
-      const value = (h.current_price || 0) * (h.quantity || 0);
-      const cost = (h.purchase_price || 0) * (h.quantity || 0);
+      const value = tryV(h, 'current_price');
+      const cost = tryV(h, 'purchase_price');
       const pnlPct = cost > 0 ? ((value - cost) / cost * 100) : 0;
       const weight = totalValue > 0 ? (value / totalValue * 100) : 0;
       return `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}): ${value.toFixed(0)} TL, KZ: %${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}, ağırlık: %${weight.toFixed(1)}`;
@@ -871,4 +881,21 @@ Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bili
   } catch { /* fallback */ }
 
   return { raw: text, actions: [], monthly_income: {}, market_outlook: text };
+}
+
+// Live FX fallback — USD/EUR holding yoksa kullanılır. 60s cache.
+const _fxCache: Record<string, { value: number; ts: number }> = {};
+async function fetchLiveRate(base: 'USD' | 'EUR'): Promise<number> {
+  const cached = _fxCache[base];
+  if (cached && Date.now() - cached.ts < 60000) return cached.value;
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
+    if (res.ok) {
+      const data = await res.json();
+      const rate = data.rates?.TRY || (base === 'USD' ? 38 : 41);
+      _fxCache[base] = { value: rate, ts: Date.now() };
+      return rate;
+    }
+  } catch { /* fallback */ }
+  return cached?.value || (base === 'USD' ? 38 : 41);
 }

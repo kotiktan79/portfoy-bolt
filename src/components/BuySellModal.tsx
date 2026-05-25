@@ -78,7 +78,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
         : holding.quantity - qty;
 
       if (type === 'buy') {
-        const totalCost = (holding.purchase_price * holding.quantity) + (prc * qty);
+        const totalCost = (holding.purchase_price * holding.quantity) + (prc * qty); // fx-ok: ağırlıklı ortalama aynı currency içinde
         const newAvgPrice = totalCost / newQuantity;
 
         await updateCashBalance('TRY', totalWithFee, 'buy',

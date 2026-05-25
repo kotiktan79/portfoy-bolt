@@ -1,6 +1,7 @@
 import { Holding } from '../lib/supabase';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, TrendingDown, PieChart as PieIcon } from 'lucide-react';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -29,10 +30,13 @@ const ASSET_TYPE_INFO: { [key: string]: { name: string; color: string } } = {
 
 export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPageProps) {
   const assetTypeMap = new Map<string, AssetTypeData>();
+  const fxRates = getFxRatesFromHoldings(holdings);
 
-  holdings.forEach((holding) => {
-    const currentValue = holding.current_price * holding.quantity;
-    const investmentValue = holding.purchase_price * holding.quantity;
+  holdings
+    .filter(h => h.asset_type !== 'cash')
+    .forEach((holding) => {
+    const currentValue = holdingValueTRY(holding, fxRates);
+    const investmentValue = holdingCostTRY(holding, fxRates);
     const profit = currentValue - investmentValue;
 
     if (!assetTypeMap.has(holding.asset_type)) {

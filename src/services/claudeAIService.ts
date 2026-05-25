@@ -1,6 +1,6 @@
 import { Holding } from '../lib/supabase';
 import { getTotalCashValue } from './cashService';
-import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
+import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -8,33 +8,26 @@ interface ConversationMessage {
 }
 
 function buildPortfolioData(holdings: Holding[], cashBalance: number, riskScore: number) {
-  const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
-  const rates = getFxRatesFromHoldings(holdings);
-  const totalValue = investmentHoldings.reduce((s, h) => s + holdingValueTRY(h, rates), 0);
-  const totalInvested = investmentHoldings.reduce((s, h) => s + holdingCostTRY(h, rates), 0);
+  const portfolio = computePortfolioMetrics(holdings);
+  const perHolding = computeHoldingMetrics(holdings);
 
   return {
-    holdings: investmentHoldings.map(h => {
-      const value = holdingValueTRY(h, rates);
-      const invested = holdingCostTRY(h, rates);
-      const pnl = value - invested;
-      return {
-        symbol: h.symbol,
-        asset_type: h.asset_type,
-        currency: h.currency || 'TRY',
-        quantity: h.quantity,
-        purchase_price: h.purchase_price,
-        current_price: h.current_price,
-        total_value: value,
-        pnl,
-        pnl_percent: invested > 0 ? (pnl / invested) * 100 : 0,
-        weight: totalValue > 0 ? (value / totalValue) * 100 : 0,
-      };
-    }),
-    total_value: totalValue,
-    total_invested: totalInvested,
-    total_pnl: totalValue - totalInvested,
-    total_pnl_percent: totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0,
+    holdings: perHolding.map(m => ({
+      symbol: m.holding.symbol,
+      asset_type: m.holding.asset_type,
+      currency: m.holding.currency || 'TRY',
+      quantity: m.holding.quantity,
+      purchase_price: m.holding.purchase_price,
+      current_price: m.holding.current_price,
+      total_value: m.valueTRY,
+      pnl: m.pnlTRY,
+      pnl_percent: m.pnlPct,
+      weight: m.weight,
+    })),
+    total_value: portfolio.totalValueTRY,
+    total_invested: portfolio.totalCostTRY,
+    total_pnl: portfolio.totalPnLTRY,
+    total_pnl_percent: portfolio.totalPnLPct,
     cash_balance: cashBalance,
     risk_score: riskScore,
   };

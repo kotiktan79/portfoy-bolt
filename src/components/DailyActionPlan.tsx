@@ -8,6 +8,7 @@ import {
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
 import { analyzePortfolio } from '../services/smartInvestmentEngine';
+import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
 import { buildMemoryContext, saveRecommendations, recordPortfolioValue } from '../services/aiMemoryService';
 
 interface DailyActionPlanProps {
@@ -123,25 +124,21 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
   async function fetchAIPlan() {
     setAiLoading(true);
     try {
-      const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
-      const tv = investmentHoldings.reduce((s, h) => s + h.current_price * h.quantity, 0);
-      const ti = investmentHoldings.reduce((s, h) => s + h.purchase_price * h.quantity, 0);
+      const portfolio = computePortfolioMetrics(holdings);
+      const perHolding = computeHoldingMetrics(holdings);
+      const tv = portfolio.totalValueTRY;
+      const ti = portfolio.totalCostTRY;
 
       const portfolioData = {
-        holdings: investmentHoldings.map(h => {
-          const value = h.current_price * h.quantity;
-          const invested = h.purchase_price * h.quantity;
-          const pnl = value - invested;
-          return {
-            symbol: h.symbol, asset_type: h.asset_type,
-            quantity: h.quantity, purchase_price: h.purchase_price,
-            current_price: h.current_price, total_value: value, pnl,
-            pnl_percent: invested > 0 ? (pnl / invested) * 100 : 0,
-            weight: tv > 0 ? (value / tv) * 100 : 0,
-          };
-        }),
+        holdings: perHolding.map(m => ({
+          symbol: m.holding.symbol, asset_type: m.holding.asset_type,
+          quantity: m.holding.quantity, purchase_price: m.holding.purchase_price,
+          current_price: m.holding.current_price, total_value: m.valueTRY, pnl: m.pnlTRY,
+          pnl_percent: m.pnlPct,
+          weight: m.weight,
+        })),
         totalValue: tv, totalInvested: ti,
-        totalPnlPct: ti > 0 ? ((tv - ti) / ti) * 100 : 0,
+        totalPnlPct: portfolio.totalPnLPct,
         cashBalance: totalCashValue,
       };
 
@@ -177,7 +174,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
         // Save recommendations to memory for future tracking
         if (data.plan.actions) {
           const priceMap: Record<string, number> = {};
-          investmentHoldings.forEach(h => { priceMap[h.symbol] = h.current_price; });
+          holdings.filter(h => h.asset_type !== 'cash').forEach(h => { priceMap[h.symbol] = h.current_price; });
           saveRecommendations(data.plan.actions, priceMap);
         }
       }

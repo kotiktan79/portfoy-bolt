@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "check:formulas": "node scripts/check-formulas.mjs",
+    "prebuild": "node scripts/check-formulas.mjs",
+    "pretest": "node scripts/check-formulas.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

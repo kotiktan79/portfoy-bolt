@@ -13,6 +13,7 @@ import {
   ComposedChart,
 } from 'recharts';
 import { getHistoricalSnapshots, PortfolioSnapshot } from '../services/analyticsService';
+import { computePeriodChange } from '../lib/portfolioMetrics';
 import { formatCurrency } from '../services/priceService';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { DailyGainPanel } from '../components/DailyGainPanel';
@@ -127,8 +128,15 @@ export default function PerformancePage() {
 
     const startValue = snapshots[0].total_value;
     const endValue = snapshots[snapshots.length - 1].total_value;
-    const changeTL = endValue - startValue;
-    const changePct = startValue > 0 ? (changeTL / startValue) * 100 : 0;
+    // KÂR-BAZLI: değişim = current_pnl − previous_pnl (deposit etkisinden bağımsız).
+    // Eski formül (endValue − startValue) haftalık €1000 alımları kâr sayıyordu.
+    const period = computePeriodChange(
+      snapshots[snapshots.length - 1],
+      snapshots[0],
+      100,
+    );
+    const changeTL = period.changeTRY;
+    const changePct = period.changePct;
     const values = snapshots.map((s) => s.total_value);
     const highest = Math.max(...values);
     const lowest = Math.min(...values);

@@ -1,5 +1,6 @@
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from './priceService';
+import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
 import { RiskProfile } from './aiAdvisorService';
 import { BuySellSignal, PortfolioScore, SmartSuggestion } from './advancedAI';
 
@@ -25,25 +26,22 @@ interface PortfolioData {
 }
 
 function getHoldingStats(holdings: Holding[]) {
-  const totalValue = holdings.reduce((s, h) => s + h.current_price * h.quantity, 0);
-  const totalInvestment = holdings.reduce((s, h) => s + h.purchase_price * h.quantity, 0);
-  const totalPnl = totalValue - totalInvestment;
-  const totalPnlPct = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
+  const portfolio = computePortfolioMetrics(holdings);
+  const perHolding = computeHoldingMetrics(holdings);
+  const totalValue = portfolio.totalValueTRY;
+  const totalInvestment = portfolio.totalCostTRY;
+  const totalPnl = portfolio.totalPnLTRY;
+  const totalPnlPct = portfolio.totalPnLPct;
 
   const byType: Record<string, { count: number; value: number; pnl: number }> = {};
-  const detailed = holdings.map(h => {
-    const value = h.current_price * h.quantity;
-    const invested = h.purchase_price * h.quantity;
-    const pnl = value - invested;
-    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
-    const weight = totalValue > 0 ? (value / totalValue) * 100 : 0;
-
+  const detailed = perHolding.map(m => {
+    const h = m.holding;
     if (!byType[h.asset_type]) byType[h.asset_type] = { count: 0, value: 0, pnl: 0 };
     byType[h.asset_type].count++;
-    byType[h.asset_type].value += value;
-    byType[h.asset_type].pnl += pnl;
+    byType[h.asset_type].value += m.valueTRY;
+    byType[h.asset_type].pnl += m.pnlTRY;
 
-    return { ...h, value, invested, pnl, pnlPct, weight };
+    return { ...h, value: m.valueTRY, invested: m.costTRY, pnl: m.pnlTRY, pnlPct: m.pnlPct, weight: m.weight };
   });
 
   const sorted = [...detailed].sort((a, b) => b.value - a.value);
