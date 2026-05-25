@@ -3,15 +3,9 @@ import MobileBottomNav from './MobileBottomNav';
 
 const pageMap: Record<string, string> = {
   home: '/',
-  market: '/market',
-  analytics: '/analytics',
   ai: '/ai-advisor',
   allocation: '/allocation',
-  watchlist: '/watchlist',
-  rebalance: '/rebalancing',
-  scenario: '/scenario',
   performance: '/performance',
-  binance: '/binance',
   report: '/daily-report',
 };
 
