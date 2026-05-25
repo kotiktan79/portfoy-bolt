@@ -8,8 +8,54 @@ export default {
   ],
   theme: {
     extend: {
-      /* ── Colours ─────────────────────────────── */
+      fontFamily: {
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+        serif: ['Fraunces', 'Georgia', 'serif'],
+      },
+
       colors: {
+        gold: {
+          50:  '#fbf8f1',
+          100: '#f3ead0',
+          200: '#e8d6a3',
+          300: '#dbbb70',
+          400: '#cda04d',
+          500: '#c9a961',
+          600: '#a98744',
+          700: '#866937',
+          800: '#695234',
+          900: '#574431',
+          950: '#332617',
+        },
+        ink: {
+          50:  '#f6f5f0',
+          100: '#e7e5da',
+          200: '#cfcab6',
+          300: '#aba38a',
+          400: '#857d63',
+          500: '#6a634d',
+          600: '#544f3e',
+          700: '#454132',
+          800: '#3a362b',
+          900: '#1a1814',
+          950: '#0e0d0a',
+        },
+        terra: {
+          400: '#d97757',
+          500: '#c45d3f',
+          600: '#a64a31',
+        },
         accent: {
           50:  '#ecfdf5',
           100: '#d1fae5',
@@ -44,23 +90,6 @@ export default {
         },
       },
 
-      /* ── Typography ──────────────────────────── */
-      fontFamily: {
-        sans: [
-          'Inter',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'sans-serif',
-        ],
-      },
-
-      /* ── Animations ──────────────────────────── */
       keyframes: {
         'fade-in': {
           from: { opacity: '0' },
@@ -86,14 +115,12 @@ export default {
         'page-enter': 'page-enter 0.35s cubic-bezier(0.16,1,0.3,1)',
       },
 
-      /* ── Backdrop blur ───────────────────────── */
       backdropBlur: {
         xs:   '2px',
         '2xl': '40px',
         '3xl': '64px',
       },
 
-      /* ── Box shadow ──────────────────────────── */
       boxShadow: {
         glow:      '0 0 20px -4px rgba(99,102,241,0.35)',
         'glow-lg': '0 0 32px -4px rgba(99,102,241,0.45)',

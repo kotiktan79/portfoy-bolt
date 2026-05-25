@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { AreaChart } from '@tremor/react';
-import { TrendingUp, TrendingDown, Wallet, Gauge, DollarSign, Sparkles } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Gauge, Coins, ArrowUpRight } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
 
@@ -21,24 +21,22 @@ function fmtUSD(n: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
 }
 
-/** Sayı sayım animasyonu: 0'dan target'a doğru yumuşak geçiş. */
 function AnimatedNumber({ value, format }: { value: number; format: (n: number) => string }) {
-  const spring = useSpring(0, { stiffness: 50, damping: 20, mass: 1 });
-  const display = useTransform(spring, (current) => format(current));
+  const spring = useSpring(0, { stiffness: 45, damping: 22, mass: 1 });
+  const display = useTransform(spring, (c) => format(c));
   const [text, setText] = useState(format(0));
   useEffect(() => { spring.set(value); }, [spring, value]);
   useEffect(() => display.on('change', setText), [display]);
   return <>{text}</>;
 }
 
-// Stagger container — alt elemanlar sırayla görünür
 const container = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
 };
 const item = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 90, damping: 18 } },
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 75, damping: 18 } },
 };
 
 export default function HeroDashboard({
@@ -81,91 +79,102 @@ export default function HeroDashboard({
     'Portföy (₺)': d.value,
   }));
 
+  const today = new Date().toLocaleDateString('tr-TR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+
   return (
     <motion.div
-      className="space-y-4"
+      className="space-y-5"
       variants={container}
       initial="hidden"
       animate="show"
     >
-      {/* HERO — Glass effect + animasyonlu sayı */}
+      {/* HERO — Editorial gazete tarzı */}
       <motion.div
         variants={item}
-        className="relative overflow-hidden rounded-3xl border border-slate-200/60 dark:border-gray-800 bg-gradient-to-br from-indigo-50 via-white to-emerald-50 dark:from-indigo-950/40 dark:via-gray-900 dark:to-emerald-950/40 shadow-xl"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-ink-50 to-amber-50/40 dark:from-ink-900 dark:to-ink-950 border border-gold-200/60 dark:border-gold-900/40 shadow-[0_8px_30px_-12px_rgba(201,169,97,0.25)]"
       >
-        {/* Hareketli blob'lar */}
+        {/* Sıcak ışık halkaları */}
         <motion.div
-          className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-indigo-300/20 dark:bg-indigo-500/10 blur-3xl pointer-events-none"
-          animate={{ x: [0, 30, 0], y: [0, -20, 0], scale: [1, 1.1, 1] }}
-          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -top-32 -right-20 w-96 h-96 rounded-full bg-gold-300/20 dark:bg-gold-500/8 blur-3xl pointer-events-none"
+          animate={{ x: [0, 20, 0], y: [0, -15, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
-          className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-emerald-300/20 dark:bg-emerald-500/10 blur-3xl pointer-events-none"
-          animate={{ x: [0, -30, 0], y: [0, 20, 0], scale: [1.1, 1, 1.1] }}
-          transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -bottom-32 -left-20 w-96 h-96 rounded-full bg-terra-400/15 dark:bg-terra-500/5 blur-3xl pointer-events-none"
+          animate={{ x: [0, -20, 0], y: [0, 15, 0] }}
+          transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
         />
-        <div className="relative p-6 md:p-8">
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <motion.div
-                animate={{ rotate: [0, 15, -15, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <Sparkles className="text-indigo-500 dark:text-indigo-400" size={16} />
-              </motion.div>
-              <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-gray-400">
-                Toplam Varlık
+
+        {/* Üst şerit: tarih + canlı rozet */}
+        <div className="relative flex items-center justify-between px-6 md:px-8 pt-5 border-b border-gold-200/40 dark:border-gold-900/30 pb-3">
+          <p className="font-serif text-[11px] md:text-xs uppercase tracking-[0.3em] text-gold-700 dark:text-gold-400">
+            ⊹ TANDOR FİNANS ⊹ {today}
+          </p>
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+            <motion.span
+              className="w-1.5 h-1.5 rounded-full bg-emerald-500"
+              animate={{ scale: [1, 1.6, 1], opacity: [1, 0.4, 1] }}
+              transition={{ duration: 1.8, repeat: Infinity }}
+            />
+            CANLI
+          </div>
+        </div>
+
+        <div className="relative px-6 md:px-8 py-6 md:py-8">
+          {/* Eyebrow */}
+          <p className="font-serif italic text-sm md:text-base text-ink-500 dark:text-gold-200/60 mb-2">
+            — Toplam Varlığınız —
+          </p>
+
+          {/* DEV TUTAR — serif tipografi */}
+          <p className="font-serif font-black tracking-tight text-ink-900 dark:text-white tabular-nums leading-[0.95]
+                       text-[3.5rem] md:text-[5.5rem] lg:text-[6.5rem]">
+            <span className="text-gold-600 dark:text-gold-400 mr-2">₺</span>
+            <AnimatedNumber value={grandTotal} format={fmtTRY} />
+          </p>
+
+          {/* Alt satır: USD + günlük */}
+          <div className="mt-3 md:mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-2">
+            <p className="font-serif text-lg md:text-xl text-ink-600 dark:text-gold-100/70 italic">
+              ≈ <span className="not-italic font-semibold text-ink-800 dark:text-gold-50">
+                $<AnimatedNumber value={grandTotalUSD} format={fmtUSD} />
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                <motion.span
-                  className="w-1.5 h-1.5 rounded-full bg-emerald-500"
-                  animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                />
-                Canlı
-              </span>
-            </div>
+            </p>
             {dailyChange !== undefined && dailyChangePct !== undefined && (
               <motion.div
-                initial={{ scale: 0, rotate: -15 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.4 }}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold shadow-md ${
-                  isPos ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+                initial={{ scale: 0.7, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.4, type: 'spring', stiffness: 200 }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border-2 ${
+                  isPos
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                 }`}
               >
-                {isPos ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                {isPos ? '+' : ''}{dailyChangePct.toFixed(2)}%
+                {isPos ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
+                {isPos ? '+' : ''}₺{fmtTRY(dailyChange)}
+                <span className="opacity-70">·</span>
+                <span>{isPos ? '+' : ''}{dailyChangePct.toFixed(2)}%</span>
               </motion.div>
             )}
           </div>
-          <p className="text-5xl md:text-7xl font-black tracking-tight text-slate-900 dark:text-white tabular-nums leading-none">
-            ₺<AnimatedNumber value={grandTotal} format={(n) => fmtTRY(n)} />
-          </p>
-          <p className="mt-3 text-base md:text-lg text-slate-600 dark:text-gray-400">
-            ≈ <span className="font-bold text-slate-800 dark:text-gray-200">
-              $<AnimatedNumber value={grandTotalUSD} format={(n) => fmtUSD(n)} />
-            </span> USD
-            {dailyChange !== undefined && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className={`ml-3 font-semibold ${isPos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}
-              >
-                {isPos ? '+' : ''}₺{fmtTRY(dailyChange)} bugün
-              </motion.span>
-            )}
-          </p>
 
+          {/* Altın çizgi separator + chart */}
           {chartData.length > 1 && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, duration: 0.6 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="mt-5"
             >
+              <div className="flex items-center gap-3 mb-1">
+                <span className="font-serif italic text-xs text-ink-500 dark:text-gold-200/50">Son 30 gün</span>
+                <div className="flex-1 h-px bg-gradient-to-r from-gold-400/40 via-gold-400/20 to-transparent" />
+              </div>
               <AreaChart
-                className="!h-36 !mt-4"
+                className="!h-28"
                 data={chartData}
                 index="date"
                 categories={['Portföy (₺)']}
@@ -182,101 +191,98 @@ export default function HeroDashboard({
         </div>
       </motion.div>
 
-      {/* KPI Grid — stagger animasyon */}
+      {/* KPI Kartları — Tarot kart hissi */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
-            label: 'Toplam K/Z', color: 'emerald',
-            gradient: 'from-emerald-400 to-emerald-600',
-            iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
-            iconColor: 'text-emerald-600 dark:text-emerald-400',
-            valueColor: 'text-emerald-600 dark:text-emerald-400',
-            icon: DollarSign,
+            label: 'Toplam Kâr', icon: Coins, accent: 'emerald',
             valueRaw: m.totalPnLPct,
             valueFmt: (n: number) => `+${n.toFixed(1)}%`,
-            subtitle: `+₺${fmtTRY(m.totalPnLTRY)} · $${fmtUSD(m.totalPnLUSD)}`,
+            subtitle: `+₺${fmtTRY(m.totalPnLTRY)}`,
+            symbol: '✦',
           },
           {
-            label: 'Bugün',
-            color: isPos ? 'emerald' : 'rose',
-            gradient: isPos ? 'from-emerald-400 to-emerald-600' : 'from-rose-400 to-rose-600',
-            iconBg: isPos ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-rose-100 dark:bg-rose-900/30',
-            iconColor: isPos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-            valueColor: isPos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-            icon: isPos ? TrendingUp : TrendingDown,
+            label: 'Bugün', icon: isPos ? TrendingUp : TrendingDown,
+            accent: isPos ? 'emerald' : 'rose',
             valueRaw: dailyChange ?? 0,
             valueFmt: (n: number) => `${n >= 0 ? '+' : ''}₺${fmtTRY(n)}`,
             subtitle: `${isPos ? '+' : ''}${(dailyChangePct ?? 0).toFixed(2)}% piyasa`,
+            symbol: isPos ? '↗' : '↘',
           },
           {
-            label: 'Pasif Gelir', color: 'blue',
-            gradient: 'from-blue-400 to-blue-600',
-            iconBg: 'bg-blue-100 dark:bg-blue-900/30',
-            iconColor: 'text-blue-600 dark:text-blue-400',
-            valueColor: 'text-blue-600 dark:text-blue-400',
-            icon: Wallet,
+            label: 'Pasif Gelir', icon: Wallet, accent: 'gold',
             valueRaw: passiveYearlyUSD / 12,
             valueFmt: (n: number) => `$${fmtUSD(n)}`,
             valueSuffix: '/ay',
             subtitle: `$${fmtUSD(passiveYearlyUSD)}/yıl tahmini`,
+            symbol: '◈',
           },
           {
-            label: 'Güvenli Max', color: 'indigo',
-            gradient: 'from-indigo-400 to-purple-600',
-            iconBg: 'bg-indigo-100 dark:bg-indigo-900/30',
-            iconColor: 'text-indigo-600 dark:text-indigo-400',
-            valueColor: 'bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent',
-            icon: Gauge,
+            label: 'Güvenli Max', icon: Gauge, accent: 'terra',
             valueRaw: dynamicSafeMaxUSD ?? 0,
             valueFmt: (n: number) => `$${fmtUSD(n)}`,
             valueSuffix: '/ay',
-            subtitle: 'Dinamik çekim limiti',
+            subtitle: 'Dinamik çekim',
+            symbol: '✧',
           },
         ].map((card) => {
           const Icon = card.icon;
+          const accentClasses: Record<string, { border: string; text: string; iconBg: string; iconText: string; symbol: string }> = {
+            emerald: { border: 'border-emerald-300/40 dark:border-emerald-700/40', text: 'text-emerald-700 dark:text-emerald-300', iconBg: 'bg-emerald-50 dark:bg-emerald-950/30', iconText: 'text-emerald-600 dark:text-emerald-400', symbol: 'text-emerald-500/40' },
+            rose: { border: 'border-rose-300/40 dark:border-rose-700/40', text: 'text-rose-700 dark:text-rose-300', iconBg: 'bg-rose-50 dark:bg-rose-950/30', iconText: 'text-rose-600 dark:text-rose-400', symbol: 'text-rose-500/40' },
+            gold: { border: 'border-gold-300/50 dark:border-gold-700/40', text: 'text-gold-700 dark:text-gold-300', iconBg: 'bg-gold-50 dark:bg-gold-950/30', iconText: 'text-gold-600 dark:text-gold-400', symbol: 'text-gold-500/40' },
+            terra: { border: 'border-terra-400/40 dark:border-terra-500/30', text: 'text-terra-600 dark:text-terra-400', iconBg: 'bg-terra-400/10 dark:bg-terra-500/10', iconText: 'text-terra-600 dark:text-terra-400', symbol: 'text-terra-500/40' },
+          };
+          const a = accentClasses[card.accent];
           return (
             <motion.div
               key={card.label}
               variants={item}
-              whileHover={{ y: -4, transition: { duration: 0.2 } }}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm hover:shadow-xl transition-shadow"
+              whileHover={{ y: -3, transition: { duration: 0.2 } }}
+              className={`group relative overflow-hidden rounded-xl border ${a.border} bg-white dark:bg-ink-900/80 p-4 shadow-sm hover:shadow-lg transition-shadow`}
             >
-              <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${card.gradient}`} />
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
+              {/* Dekoratif sembol köşede */}
+              <span className={`absolute top-1 right-2 font-serif text-3xl ${a.symbol}`}>
+                {card.symbol}
+              </span>
+              <div className="flex items-center gap-2 mb-3">
+                <motion.div
+                  whileHover={{ rotate: 12, scale: 1.08 }}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${a.iconBg}`}
+                >
+                  <Icon className={a.iconText} size={16} />
+                </motion.div>
+                <span className="font-serif italic text-xs text-ink-500 dark:text-gold-200/50">
                   {card.label}
                 </span>
-                <motion.div
-                  whileHover={{ rotate: 15, scale: 1.1 }}
-                  transition={{ type: 'spring', stiffness: 300 }}
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${card.iconBg}`}
-                >
-                  <Icon className={card.iconColor} size={18} />
-                </motion.div>
               </div>
-              <p className={`text-3xl font-black tabular-nums ${card.valueColor}`}>
+              <p className={`font-serif font-black tabular-nums tracking-tight text-2xl md:text-3xl ${a.text}`}>
                 <AnimatedNumber value={card.valueRaw} format={card.valueFmt} />
-                {card.valueSuffix && <span className="text-base font-normal text-slate-400">{card.valueSuffix}</span>}
+                {card.valueSuffix && (
+                  <span className="text-base font-normal text-ink-400 dark:text-gold-200/40 ml-0.5">{card.valueSuffix}</span>
+                )}
               </p>
-              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1 tabular-nums">{card.subtitle}</p>
+              <p className="text-[11px] text-ink-500 dark:text-gold-200/40 mt-1 tabular-nums">{card.subtitle}</p>
             </motion.div>
           );
         })}
       </div>
 
-      {/* Top 3 Holdings — stagger ile sırayla görünür */}
+      {/* Top 3 — şarap kütüğü stili liste */}
       {topHoldings.length > 0 && (
         <motion.div
           variants={item}
-          className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm"
+          className="rounded-xl border border-gold-200/60 dark:border-gold-900/30 bg-white dark:bg-ink-900/80 p-5"
         >
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold text-slate-700 dark:text-gray-200">En Büyük 3 Pozisyon</p>
-            <p className="text-xs text-slate-500 dark:text-gray-400">
-              Portföyün %{topHoldings.reduce((s, h) => s + h.weight, 0).toFixed(0)}'i
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gold-200/40 dark:border-gold-900/30">
+            <p className="font-serif italic text-base text-ink-700 dark:text-gold-100/80">
+              En Büyük 3 Pozisyon
             </p>
+            <span className="font-serif text-xs italic text-gold-700 dark:text-gold-400">
+              ~{topHoldings.reduce((s, h) => s + h.weight, 0).toFixed(0)}% portföyün
+            </span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {topHoldings.map((h, i) => (
               <motion.div
                 key={h.holding.id}
@@ -284,26 +290,29 @@ export default function HeroDashboard({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.5 + i * 0.1 }}
                 whileHover={{ x: 4 }}
-                className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors px-2"
+                className="flex items-center gap-3 py-1.5 rounded-lg hover:bg-gold-50/50 dark:hover:bg-gold-950/20 transition-colors px-2 -mx-2"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-400 to-blue-500 flex items-center justify-center text-white text-xs font-black flex-shrink-0 shadow-sm">
-                  {h.holding.symbol.slice(0, 3)}
+                <span className="font-serif text-xl italic text-gold-600/60 dark:text-gold-400/40 w-6">
+                  {i + 1}.
+                </span>
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 shadow-sm">
+                  {h.holding.symbol.slice(0, 4)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-900 dark:text-white">{h.holding.symbol}</span>
-                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300 tabular-nums">
+                    <span className="font-serif font-semibold text-ink-900 dark:text-white">{h.holding.symbol}</span>
+                    <span className="font-serif font-bold text-ink-800 dark:text-gold-50 tabular-nums">
                       ₺{fmtTRY(h.valueTRY)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-0.5">
-                    <span className="text-xs text-slate-500 dark:text-gray-400">
+                    <span className="text-xs text-ink-500 dark:text-gold-200/40 italic">
                       {h.weight.toFixed(1)}% · {h.holding.asset_type}
                     </span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+                    <span className={`text-xs font-bold tabular-nums ${
                       h.pnlTRY >= 0
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-rose-600 dark:text-rose-300'
                     }`}>
                       {h.pnlTRY >= 0 ? '+' : ''}{h.pnlPct.toFixed(1)}%
                     </span>
