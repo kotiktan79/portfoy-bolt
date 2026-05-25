@@ -11,6 +11,7 @@ const AIAdvisorPage = lazy(() => import('./pages/AIAdvisorPage'));
 const AllocationPage = lazy(() => import('./pages/AllocationPage'));
 const PerformancePage = lazy(() => import('./pages/PerformancePage'));
 const DailyReportPage = lazy(() => import('./pages/DailyReportPage'));
+const LivePage = lazy(() => import('./pages/LivePage'));
 
 function PageLoader() {
   return (
@@ -46,6 +47,8 @@ function App() {
       <LanguageProvider>
       <PortfolioProvider>
         <Routes>
+          {/* Layout-free route: tam ekran kiosk için */}
+          <Route path="/live" element={<SafePage><LivePage /></SafePage>} />
           <Route element={<Layout />}>
             <Route path="/" element={<SafePage><HomePage /></SafePage>} />
             <Route path="/ai-advisor" element={<SafePage><AIAdvisorPage /></SafePage>} />
