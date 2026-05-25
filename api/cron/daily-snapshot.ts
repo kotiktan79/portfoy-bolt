@@ -1,5 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { sendTelegram } from '../lib/telegram.js';
+
+// Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
+// faktör kadar düştüyse split olarak şüphelen.
+const SPLIT_RATIOS = [2, 3, 4, 5, 10];
+function detectSplit(oldPrice: number, newPrice: number): number | null {
+  if (!oldPrice || !newPrice || newPrice >= oldPrice * 0.99) return null;
+  const ratio = oldPrice / newPrice;
+  for (const r of SPLIT_RATIOS) {
+    if (Math.abs(ratio - r) / r < 0.05) return r; // ±5% tolerans
+  }
+  return null;
+}
+
+interface SplitDetection {
+  symbol: string;
+  ratio: number;
+  oldPrice: number;
+  newPrice: number;
+  quantity: number;
+}
 
 // Server-side Supabase client
 function getSupabase() {
@@ -348,6 +369,7 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
     // BIST ve uluslararası hisseleri ayır
     const bistHoldings = holdings.filter(h => isBistStock(h.symbol));
     const intlHoldings = holdings.filter(h => !isBistStock(h.symbol));
+    const splits: SplitDetection[] = [];
 
     // BIST hisseleri
     if (bistHoldings.length > 0) {
@@ -361,6 +383,16 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
         }
         const price = prices[`${h.symbol}.IS`];
         const oldPrice = Number(h.current_price) || 0;
+        // Önce split tespiti — eğer split ise anomali sayma, fiyatı yaz ve uyar
+        const splitRatio = price ? detectSplit(oldPrice, price) : null;
+        if (splitRatio) {
+          splits.push({ symbol: h.symbol, ratio: splitRatio, oldPrice, newPrice: price, quantity: Number(h.quantity) || 0 });
+          await supabase.from('holdings').update({ current_price: price, updated_at: new Date().toISOString() }).eq('id', h.id);
+          result.updated++;
+          result.details[h.symbol] = price;
+          log.push(`${h.symbol}: olası ${splitRatio}:1 split — Telegram'a alert gönderildi`);
+          continue;
+        }
         const isAnomalous = oldPrice > 0 && price && (price < oldPrice * 0.2 || price > oldPrice * 5);
         if (price && !isAnomalous) {
           await supabase.from('holdings').update({ current_price: price, updated_at: new Date().toISOString() }).eq('id', h.id);
@@ -374,6 +406,18 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
         }
       }
       log.push(`BIST: ${bistHoldings.length} hisse sorgulandı`);
+    }
+
+    // Split'leri Telegram'a bildir
+    if (splits.length > 0) {
+      const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://portfoy-bolt.vercel.app';
+      const secret = process.env.CRON_SECRET || '';
+      const lines = splits.map(s => {
+        const newQty = (s.quantity * s.ratio).toFixed(4);
+        const url = `${baseUrl}/api/confirm-split?symbol=${s.symbol}&ratio=${s.ratio}&key=${secret}`;
+        return `🔔 <b>${s.symbol}</b> olası ${s.ratio}:1 split\n  Fiyat: ${s.oldPrice.toFixed(2)} → ${s.newPrice.toFixed(2)}\n  Adet ${s.quantity} → ${newQty}\n  <a href="${url}">Onayla</a>`;
+      }).join('\n\n');
+      await sendTelegram(`📢 <b>Stock Split Tespiti</b>\n\n${lines}\n\nLink ile onaylayınca adet/alış fiyatı otomatik düzelir.`);
     }
 
     // Uluslararası hisseler (USD/EUR cinsinden → TRY'ye çevir)
