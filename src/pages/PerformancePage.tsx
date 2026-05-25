@@ -18,6 +18,7 @@ import { formatCurrency } from '../services/priceService';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { DailyGainPanel } from '../components/DailyGainPanel';
 import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
+import { MonthlyAttribution } from '../components/MonthlyAttribution';
 import {
   getBenchmarkHistory,
   BENCHMARK_OPTIONS,
@@ -343,6 +344,13 @@ export default function PerformancePage() {
               label="Veri noktası"
               value={`${snapshots.length} gün`}
             />
+          </div>
+        )}
+
+        {/* Bu ay — kâr nereden, para nereden? */}
+        {holdings.length > 0 && (
+          <div className="mt-6">
+            <MonthlyAttribution holdings={holdings} />
           </div>
         )}
 
