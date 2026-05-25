@@ -127,81 +127,93 @@ export default function LivePage() {
         transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
       />
 
-      <div className="relative max-w-[1600px] mx-auto px-6 md:px-10 py-6 md:py-8">
-        {/* Üst şerit: tarih · saat · refresh */}
-        <div className="flex items-center justify-between mb-6">
-          <p className="font-serif text-sm uppercase tracking-[0.3em] text-gold-400/80">
-            ⊹ TANDOR FİNANS ⊹ <span className="text-gold-200/60">{fmtDate(now)}</span>
+      <div className="relative w-full max-w-[1900px] mx-auto px-3 sm:px-5 md:px-8 lg:px-10 xl:px-14 py-3 sm:py-5 md:py-7 lg:py-8">
+        {/* Üst şerit: tarih · saat · refresh (mobilde sıkıştırılır) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 md:mb-6">
+          <p className="font-serif text-[10px] sm:text-xs md:text-sm uppercase tracking-[0.25em] md:tracking-[0.3em] text-gold-400/80">
+            ⊹ TANDOR FİNANS ⊹ <span className="text-gold-200/60 hidden sm:inline">{fmtDate(now)}</span>
           </p>
-          <div className="flex items-center gap-5">
-            <div className="flex items-center gap-2 text-emerald-400">
+          <div className="flex items-center gap-3 sm:gap-4 md:gap-5">
+            <div className="flex items-center gap-1.5 text-emerald-400">
               <motion.span
-                className="w-2 h-2 rounded-full bg-emerald-500"
+                className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500"
                 animate={{ scale: [1, 1.5, 1], opacity: [1, 0.4, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               />
-              <span className="text-xs font-bold uppercase tracking-wider">CANLI</span>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">CANLI</span>
             </div>
-            <div className="text-3xl font-black tabular-nums tracking-tight text-gold-300">
+            <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black tabular-nums tracking-tight text-gold-300">
               {fmtTime(now)}
             </div>
-            <div className="flex items-center gap-2 text-xs text-gold-200/40">
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-gold-200/40">
               <motion.div animate={refreshing ? { rotate: 360 } : {}} transition={refreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}>
-                <RefreshCw size={12} />
+                <RefreshCw size={11} />
               </motion.div>
               <span>{countdown}s</span>
             </div>
           </div>
         </div>
 
-        {/* HERO */}
+        {/* HERO — fluid scaling */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="relative overflow-hidden rounded-3xl border border-gold-900/40 bg-gradient-to-br from-ink-950 to-ink-900 p-8 md:p-12 mb-5 shadow-2xl"
+          className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-gold-900/40 bg-gradient-to-br from-ink-950 to-ink-900 p-4 sm:p-6 md:p-8 lg:p-10 xl:p-12 mb-3 sm:mb-4 md:mb-5 shadow-2xl"
         >
-          <p className="font-serif italic text-base text-gold-300/60 mb-2">— Toplam Varlık —</p>
-          <div className="flex items-end justify-between flex-wrap gap-4">
-            <div>
-              <p className="font-sans font-black tabular-nums leading-none tracking-[-0.04em] text-white
-                           text-[5rem] md:text-[8rem] lg:text-[10rem]">
-                <span className="text-gold-400 mr-2 font-bold">₺</span>
+          <p className="font-serif italic text-xs sm:text-sm md:text-base text-gold-300/60 mb-1 sm:mb-2">— Toplam Varlık —</p>
+          <div className="flex items-end justify-between flex-wrap gap-3 md:gap-4">
+            <div className="min-w-0 flex-1">
+              {/* Akıcı font ölçeği: telefon → TV */}
+              <p
+                className="font-sans font-black tabular-nums leading-[0.9] tracking-[-0.04em] text-white whitespace-nowrap"
+                style={{ fontSize: 'clamp(2.5rem, 11vw, 11rem)' }}
+              >
+                <span className="text-gold-400 mr-1 sm:mr-2 font-bold">₺</span>
                 <AnimatedNumber value={grandTotal} format={fmtTRY} />
               </p>
-              <p className="mt-3 text-2xl md:text-3xl text-gold-100/60">
+              <p
+                className="mt-1.5 sm:mt-2 md:mt-3 text-gold-100/60"
+                style={{ fontSize: 'clamp(1rem, 2.2vw, 1.875rem)' }}
+              >
                 <span className="font-serif italic">≈</span>{' '}
                 <span className="font-bold text-gold-50 tabular-nums">
                   $<AnimatedNumber value={grandTotalUSD} format={fmtUSD} />
                 </span>{' '}
-                <span className="font-serif italic text-base opacity-50">USD</span>
+                <span className="font-serif italic opacity-50 text-[0.7em]">USD</span>
               </p>
             </div>
 
-            {/* Daily change devasa badge */}
+            {/* Daily badge — fluid */}
             <motion.div
               key={isPos ? 'pos' : 'neg'}
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className={`inline-flex flex-col items-end gap-1 px-6 py-4 rounded-2xl border-2 ${
+              className={`inline-flex flex-col items-end gap-0.5 sm:gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-xl md:rounded-2xl border-2 flex-shrink-0 ${
                 isPos ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-rose-500/50 bg-rose-500/10'
               }`}
             >
-              <div className={`flex items-center gap-2 text-3xl md:text-4xl font-black ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {isPos ? <ArrowUpRight size={28} /> : <ArrowDownRight size={28} />}
+              <div
+                className={`flex items-center gap-1 sm:gap-2 font-black ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}
+                style={{ fontSize: 'clamp(1.25rem, 3vw, 2.5rem)' }}
+              >
+                {isPos ? <ArrowUpRight className="w-[1em] h-[1em]" /> : <ArrowDownRight className="w-[1em] h-[1em]" />}
                 <span className="tabular-nums tracking-[-0.02em]">{isPos ? '+' : ''}{dailyPct.toFixed(2)}%</span>
               </div>
-              <span className={`text-base tabular-nums ${isPos ? 'text-emerald-300' : 'text-rose-300'}`}>
+              <span
+                className={`tabular-nums ${isPos ? 'text-emerald-300' : 'text-rose-300'}`}
+                style={{ fontSize: 'clamp(0.7rem, 1vw, 1rem)' }}
+              >
                 {isPos ? '+' : ''}₺{fmtTRY(dailyChange)} bugün
               </span>
             </motion.div>
           </div>
 
-          {/* Mini chart */}
+          {/* Mini chart — boyut akıcı */}
           {chartData.length > 1 && (
-            <div className="mt-6">
+            <div className="mt-3 sm:mt-4 md:mt-6" style={{ height: 'clamp(80px, 12vh, 180px)' }}>
               <AreaChart
-                className="!h-32"
+                className="!h-full"
                 data={chartData}
                 index="date"
                 categories={['Portföy (₺)']}
@@ -217,8 +229,8 @@ export default function LivePage() {
           )}
         </motion.div>
 
-        {/* KPI bandı 4'lü */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {/* KPI bandı 4'lü — mobilde 2x2, tablet+ 4'lü */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-5">
           {[
             { label: 'Toplam Kâr', icon: DollarSign, color: 'emerald',
               value: m.totalPnLPct, fmt: (n: number) => `+${n.toFixed(1)}%`, sub: `+₺${fmtTRY(m.totalPnLTRY)}` },
@@ -238,24 +250,27 @@ export default function LivePage() {
             };
             const c = colors[card.color];
             return (
-              <div key={card.label} className={`rounded-2xl border ${c.border} bg-ink-950/60 p-5`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${c.bg}`}>
-                    <Icon className={c.ic} size={18} />
+              <div key={card.label} className={`rounded-xl md:rounded-2xl border ${c.border} bg-ink-950/60 p-3 sm:p-4 md:p-5`}>
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-3">
+                  <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 rounded-lg md:rounded-xl flex items-center justify-center ${c.bg}`}>
+                    <Icon className={c.ic} size={15} />
                   </div>
-                  <span className="font-serif italic text-sm text-gold-200/60">{card.label}</span>
+                  <span className="font-serif italic text-[11px] sm:text-xs md:text-sm text-gold-200/60 truncate">{card.label}</span>
                 </div>
-                <p className={`font-sans font-black tabular-nums tracking-[-0.02em] text-3xl md:text-4xl ${c.text}`}>
+                <p
+                  className={`font-sans font-black tabular-nums tracking-[-0.02em] ${c.text}`}
+                  style={{ fontSize: 'clamp(1.25rem, 3.5vw, 2.5rem)' }}
+                >
                   <AnimatedNumber value={card.value} format={card.fmt} />
                 </p>
-                <p className="text-xs text-gold-200/40 mt-1 tabular-nums">{card.sub}</p>
+                <p className="text-[10px] sm:text-xs text-gold-200/40 mt-0.5 sm:mt-1 tabular-nums truncate">{card.sub}</p>
               </div>
             );
           })}
         </div>
 
         {/* Top movers — kazananlar / kaybedenler */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {/* Kazananlar */}
           <div className="rounded-2xl border border-emerald-900/40 bg-ink-950/60 p-5">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-emerald-900/30">
