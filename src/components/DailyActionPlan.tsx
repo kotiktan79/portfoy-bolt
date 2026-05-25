@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2, Brain, ChevronDown, ChevronUp,
   AlertTriangle, TrendingUp, TrendingDown, Shield,
-  Clock, Zap, Target, Wallet, Globe, Sparkles
+  Clock, Zap, Target, Sparkles
 } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
@@ -581,12 +581,6 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
             </button>
             <button onClick={() => navigate('/performance')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
               <TrendingUp size={11} /> Performans
-            </button>
-            <button onClick={() => navigate('/market')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
-              <Globe size={11} /> Piyasa
-            </button>
-            <button onClick={() => navigate('/binance')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
-              <Wallet size={11} /> Binance
             </button>
           </div>
         </div>

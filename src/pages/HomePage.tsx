@@ -116,10 +116,7 @@ export default function HomePage() {
             onShowBackup={() => setShowBackupModal(true)}
             onShow2FA={() => setShow2FAModal(true)}
             onShowPerformance={() => navigate('/performance')}
-            onShowAnalytics={() => navigate('/analytics')}
             onShowAllocation={() => navigate('/allocation')}
-            onShowRebalancing={() => navigate('/rebalancing')}
-            onShowScenario={() => navigate('/scenario')}
             onShowAIAdvisor={() => navigate('/ai-advisor')}
             onShowRebalanceModal={() => setShowRebalanceModal(true)}
             onEnableNotifications={enableNotifications}

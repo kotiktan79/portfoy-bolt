@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp, Plus, RefreshCw, Moon, Sun, Bell, BarChart3,
+  TrendingUp, Plus, RefreshCw, Moon, Sun, Bell,
   Activity, Download, Shield, Palette,
   PieChart, Database,
-  Target, Menu, X, Trash2, MoreHorizontal, Globe
+  Target, Menu, X, Trash2, MoreHorizontal
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -21,10 +20,7 @@ interface DashboardHeaderProps {
   onShowExport: () => void;
   onShowBackup: () => void;
   onShow2FA: () => void;
-  onShowAnalytics: () => void;
   onShowAllocation: () => void;
-  onShowRebalancing?: () => void;
-  onShowScenario?: () => void;
   onShowAIAdvisor: () => void;
   onShowPerformance: () => void;
   onShowRebalanceModal: () => void;
@@ -44,7 +40,6 @@ export function DashboardHeader({
   onShowExport,
   onShowBackup,
   onShow2FA,
-  onShowAnalytics,
   onShowAllocation,
   onShowAIAdvisor,
   onShowPerformance,
@@ -52,7 +47,6 @@ export function DashboardHeader({
   onEnableNotifications,
   onThemeCycle,
 }: DashboardHeaderProps) {
-  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const { language, setLanguage } = useLanguage();
@@ -111,8 +105,6 @@ export function DashboardHeader({
 
   const navItems = [
     { label: 'AI Danışman', onClick: onShowAIAdvisor, icon: Activity },
-    { label: 'Piyasa', onClick: () => navigate('/market'), icon: Globe },
-    { label: 'Analitik', onClick: onShowAnalytics, icon: BarChart3 },
     { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
   ];
