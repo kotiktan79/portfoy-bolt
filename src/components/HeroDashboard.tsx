@@ -128,19 +128,21 @@ export default function HeroDashboard({
             — Toplam Varlığınız —
           </p>
 
-          {/* DEV TUTAR — serif tipografi */}
-          <p className="font-serif font-black tracking-tight text-ink-900 dark:text-white tabular-nums leading-[0.95]
+          {/* DEV TUTAR — modern sans, tight tracking */}
+          <p className="font-sans font-black tracking-[-0.04em] text-ink-900 dark:text-white tabular-nums leading-[0.9]
                        text-[3.5rem] md:text-[5.5rem] lg:text-[6.5rem]">
-            <span className="text-gold-600 dark:text-gold-400 mr-2">₺</span>
+            <span className="text-gold-600 dark:text-gold-400 mr-1 font-bold">₺</span>
             <AnimatedNumber value={grandTotal} format={fmtTRY} />
           </p>
 
           {/* Alt satır: USD + günlük */}
           <div className="mt-3 md:mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-2">
-            <p className="font-serif text-lg md:text-xl text-ink-600 dark:text-gold-100/70 italic">
-              ≈ <span className="not-italic font-semibold text-ink-800 dark:text-gold-50">
+            <p className="font-sans text-base md:text-lg text-ink-600 dark:text-gold-100/70">
+              <span className="font-serif italic mr-1">≈</span>
+              <span className="font-bold text-ink-800 dark:text-gold-50 tabular-nums">
                 $<AnimatedNumber value={grandTotalUSD} format={fmtUSD} />
               </span>
+              <span className="font-serif italic text-sm ml-1 opacity-60">USD</span>
             </p>
             {dailyChange !== undefined && dailyChangePct !== undefined && (
               <motion.div
@@ -256,7 +258,7 @@ export default function HeroDashboard({
                   {card.label}
                 </span>
               </div>
-              <p className={`font-serif font-black tabular-nums tracking-tight text-2xl md:text-3xl ${a.text}`}>
+              <p className={`font-sans font-black tabular-nums tracking-[-0.02em] text-2xl md:text-3xl ${a.text}`}>
                 <AnimatedNumber value={card.valueRaw} format={card.valueFmt} />
                 {card.valueSuffix && (
                   <span className="text-base font-normal text-ink-400 dark:text-gold-200/40 ml-0.5">{card.valueSuffix}</span>
@@ -300,8 +302,8 @@ export default function HeroDashboard({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="font-serif font-semibold text-ink-900 dark:text-white">{h.holding.symbol}</span>
-                    <span className="font-serif font-bold text-ink-800 dark:text-gold-50 tabular-nums">
+                    <span className="font-sans font-bold text-ink-900 dark:text-white">{h.holding.symbol}</span>
+                    <span className="font-sans font-bold text-ink-800 dark:text-gold-50 tabular-nums">
                       ₺{fmtTRY(h.valueTRY)}
                     </span>
                   </div>
