@@ -18,7 +18,6 @@ import { HoldingsFilter } from '../components/HoldingsFilter';
 import { ToastContainer } from '../components/Toast';
 import { DailyActionPlan } from '../components/DailyActionPlan';
 import { SmartAlerts } from '../components/SmartAlerts';
-import { PortfolioSummaryCard } from '../components/PortfolioSummaryCard';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import InstallPWA from '../components/InstallPWA';
@@ -27,6 +26,9 @@ import IncomeWidget from '../components/IncomeWidget';
 import PortfolioXRay from '../components/PortfolioXRay';
 import KarCuzdani from '../components/KarCuzdani';
 import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
+import HeroDashboard from '../components/HeroDashboard';
+import { getDynamicWithdrawal } from '../services/analyticsService';
+import { DynamicWithdrawal } from '../lib/portfolioMetrics';
 
 // Lazy loaded components (charts, modals - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
@@ -80,6 +82,11 @@ export default function HomePage() {
     return (localStorage.getItem('tandor_holdings_view') as 'table' | 'grid') || 'table';
   });
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
+  const [dynamic, setDynamic] = useState<DynamicWithdrawal | null>(null);
+
+  useEffect(() => {
+    getDynamicWithdrawal().then(setDynamic).catch(() => {});
+  }, []);
 
   const {
     totalInvestment, totalCurrentValue,
@@ -130,21 +137,15 @@ export default function HomePage() {
           {/* Dashboard Content - Kiranism grid layout */}
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-4">
 
-            {/* Hero balance (full width) */}
+            {/* Hero — Tremor modern dashboard */}
             {holdings.length > 0 && (
-              <PortfolioSummaryCard
+              <HeroDashboard
                 holdings={holdings}
-                totalValue={totalCurrentValue}
-                totalInvestment={totalInvestment}
-                totalProfitLoss={totalProfitLoss}
-                totalProfitLossPercent={totalProfitLossPercent}
                 totalCashValue={totalCashValue}
                 dailyChange={livePnlData?.daily.change}
                 dailyChangePct={livePnlData?.daily.percentage}
-                weeklyChange={livePnlData?.weekly.change}
-                weeklyChangePct={livePnlData?.weekly.percentage}
-                monthlyChange={livePnlData?.monthly.change}
-                monthlyChangePct={livePnlData?.monthly.percentage}
+                historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
+                dynamicSafeMaxUSD={dynamic?.safeMonthlyUSD}
               />
             )}
 
