@@ -107,22 +107,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Cron deposits/withdrawals hesaplamıyor — önceki snapshot'tan kopyala.
-    // Aksi halde 0 yazılır, sonraki günün cash flow hesabı sahte ₺379K zıplama yapar.
-    let prevDeposits = 0;
-    let prevWithdrawals = 0;
-    const { data: prevSnap } = await supabase
-      .from('portfolio_snapshots')
-      .select('total_deposits,total_withdrawals')
-      .lt('snapshot_date', today)
-      .or('total_deposits.gt.0,total_withdrawals.gt.0')
-      .order('snapshot_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (prevSnap) {
-      prevDeposits = Number(prevSnap.total_deposits) || 0;
-      prevWithdrawals = Number(prevSnap.total_withdrawals) || 0;
+    // Deposit/withdraw kümülatif toplamını cash_balances'tan canlı hesapla.
+    // Eski mantık önceki snapshot'tan kopyalıyordu → 25 Mayıs'ta €1000 ek alım
+    // cash_balances'a yazıldı ama snapshot'a yansımadı; ayrıca eski FX kuruyla
+    // donmuş kalıyordu (€2787 = ₺95K eski, oysa ₺132K güncel).
+    let totalDepositsTRY = 0;
+    let totalWithdrawalsTRY = 0;
+    const { data: cashBalances } = await supabase
+      .from('cash_balances')
+      .select('currency, total_deposits, total_withdrawals');
+    const ccyRate = (c: string): number => {
+      const cur = (c || 'TRY').toUpperCase();
+      if (cur === 'USD') return usdRateForTotal;
+      if (cur === 'EUR') return eurRateForTotal;
+      if (cur === 'GBP') return usdRateForTotal * 1.27;
+      if (cur === 'CHF') return usdRateForTotal * 1.13;
+      if (cur === 'RON') return eurRateForTotal / 4.95;
+      if (cur === 'RUB') return usdRateForTotal / 100;
+      return 1;
+    };
+    for (const cb of cashBalances || []) {
+      const rate = ccyRate(cb.currency);
+      totalDepositsTRY += (Number(cb.total_deposits) || 0) * rate;
+      totalWithdrawalsTRY += (Number(cb.total_withdrawals) || 0) * rate;
     }
+    log.push(`Deposits: ₺${totalDepositsTRY.toFixed(0)} (canlı FX), Withdrawals: ₺${totalWithdrawalsTRY.toFixed(0)}`);
 
     const snapshotData = {
       snapshot_date: today,
@@ -130,8 +139,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       total_investment: totalInvestment,
       total_pnl: totalPnl,
       pnl_percentage: pnlPercentage,
-      total_deposits: prevDeposits,
-      total_withdrawals: prevWithdrawals,
+      total_deposits: totalDepositsTRY,
+      total_withdrawals: totalWithdrawalsTRY,
     };
 
     // 1) Burst-protection: bugün için 10 saniye içinde yazılmış snapshot varsa SKIP.
