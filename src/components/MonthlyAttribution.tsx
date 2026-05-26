@@ -30,6 +30,19 @@ interface AttribRow {
   endPrice: number;
   pricePct: number;
   gainTRY: number;
+  splitAdjusted?: number; // tespit edilen split oranı (varsa)
+}
+
+// Stock split tespiti: startPrice / endPrice oranı [2,3,4,5,10]'a ±5% yakınsa
+// split varsayıp startPrice'ı /ratio'la düzeltir.
+const SPLIT_RATIOS = [2, 3, 4, 5, 10];
+function detectSplitRatio(start: number, end: number): number | null {
+  if (!start || !end || end >= start * 0.95) return null;
+  const ratio = start / end;
+  for (const r of SPLIT_RATIOS) {
+    if (Math.abs(ratio - r) / r < 0.05) return r;
+  }
+  return null;
 }
 
 const MONTH_NAMES = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
@@ -152,15 +165,20 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
     const rows: AttribRow[] = [];
     for (const h of holdings) {
       if (h.asset_type === 'cash') continue;
-      const s = startPrice[h.id];
+      const rawStart = startPrice[h.id];
       const e = endPrice[h.id];
-      if (!s || !e || s <= 0 || e <= 0) continue;
+      if (!rawStart || !e || rawStart <= 0 || e <= 0) continue;
+      // Split tespiti: start çok yüksek + end ona göre 2x/3x/5x/10x küçükse
+      // start'ı split sonrası eşdeğerine indir, böylece sahte −%50 görünmesin.
+      const splitRatio = detectSplitRatio(rawStart, e);
+      const s = splitRatio ? rawStart / splitRatio : rawStart;
       const fx = fxFor(h.currency);
       const pricePct = ((e - s) / s) * 100;
       const gainTRY = (e - s) * h.quantity * fx;
       rows.push({
         symbol: h.symbol, type: h.asset_type, currency: h.currency || 'TRY',
         qty: h.quantity, startPrice: s, endPrice: e, pricePct, gainTRY,
+        splitAdjusted: splitRatio || undefined,
       });
     }
     return rows.sort((a, b) => b.gainTRY - a.gainTRY);
@@ -265,7 +283,10 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                 <div className="space-y-1">
                   {winners.slice(0, 5).map(r => (
                     <div key={r.symbol + r.type} className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-slate-700 dark:text-gray-200">{r.symbol}</span>
+                      <span className="font-semibold text-slate-700 dark:text-gray-200 flex items-center gap-1">
+                        {r.symbol}
+                        {r.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">1:{r.splitAdjusted} split</span>}
+                      </span>
                       <div className="text-right">
                         <span className="font-bold text-green-600">+{formatCurrency(r.gainTRY)} ₺</span>
                         <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({r.pricePct >= 0 ? '+' : ''}{r.pricePct.toFixed(1)}%)</span>
@@ -285,7 +306,10 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                 <div className="space-y-1">
                   {[...losers].reverse().slice(0, 5).map(r => (
                     <div key={r.symbol + r.type} className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-slate-700 dark:text-gray-200">{r.symbol}</span>
+                      <span className="font-semibold text-slate-700 dark:text-gray-200 flex items-center gap-1">
+                        {r.symbol}
+                        {r.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">1:{r.splitAdjusted} split</span>}
+                      </span>
                       <div className="text-right">
                         <span className="font-bold text-red-600">{formatCurrency(r.gainTRY)} ₺</span>
                         <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({r.pricePct.toFixed(1)}%)</span>
