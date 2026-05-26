@@ -107,11 +107,14 @@ export function checkAlerts(
       });
     }
 
-    // Big daily move >3%
+    // Big daily move >3% (ama %50'den fazla sapma = currency/birim/manual edit
+    // de\u011Fi\u015Fikli\u011Fi, ger\u00E7ek piyasa hareketi de\u011Fil; alarm verme)
     const prevPrice = previousPrices[symbol];
     if (prevPrice && prevPrice > 0) {
       const dailyChange = ((current_price - prevPrice) / prevPrice) * 100;
-      if (Math.abs(dailyChange) > 3 && canAlert(symbol, 'big_daily_move')) {
+      const ratio = current_price / prevPrice;
+      const isLikelyUnitChange = ratio < 0.3 || ratio > 3.0; // %70'ten fazla sapma
+      if (!isLikelyUnitChange && Math.abs(dailyChange) > 3 && canAlert(symbol, 'big_daily_move')) {
         const direction = dailyChange > 0 ? 'y\u00FCkseldi' : 'd\u00FC\u015Ft\u00FC';
         const icon = dailyChange > 0 ? '\u{1F4C8}' : '\u{1F4C9}';
         alerts.push({
