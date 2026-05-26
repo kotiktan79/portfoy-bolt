@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers, Sparkles } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers, Sparkles, Globe2, Target, TrendingDown as LossIcon, Award } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { analyzeXRay, XRayFinding } from '../services/xrayService';
 import { formatCurrency } from '../services/priceService';
@@ -184,15 +184,129 @@ export default function PortfolioXRay() {
 
           {expanded && (
             <>
-              <div className="grid grid-cols-3 gap-2">
-                <Stat label="Döviz Maruziyet" value={`%${xray.effectiveCurrencyPct.toFixed(0)}`} sub={formatCurrency(xray.effectiveCurrencyExposure, 0) + ' ₺'} />
-                <Stat label="Ölü Sermaye" value={`${xray.deadMoneyCount}`} sub={formatCurrency(xray.deadMoneyTotal, 0) + ' ₺'} />
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <Stat label="Çeşitlendirme" value={`${xray.diversificationScore}/100`} sub={`HHI ${xray.hhi}`} />
+                <Stat label="Varlık Sınıfı" value={`${xray.assetClassCount}`} sub="kategori" />
                 <Stat
                   label="En Büyük"
                   value={xray.topConcentration ? `%${xray.topConcentration.weight.toFixed(0)}` : '–'}
                   sub={xray.topConcentration?.symbol || '–'}
                 />
+                <Stat label="Döviz" value={`%${xray.effectiveCurrencyPct.toFixed(0)}`} sub={formatCurrency(xray.effectiveCurrencyExposure, 0) + ' ₺'} />
+                <Stat label="Ölü Sermaye" value={`${xray.deadMoneyCount}`} sub={formatCurrency(xray.deadMoneyTotal, 0) + ' ₺'} />
+                <Stat label="Türkiye" value={`%${xray.geographicExposure.filter(r => r.region.startsWith('Türkiye')).reduce((s, r) => s + r.pct, 0).toFixed(0)}`} sub="yerel maruziyet" />
               </div>
+
+              {/* Coğrafi Dağılım */}
+              {xray.geographicExposure.length > 0 && (
+                <div className="rounded-xl border border-slate-200 dark:border-gray-800 p-3 bg-slate-50/50 dark:bg-gray-800/30">
+                  <div className="flex items-center gap-1.5 t-eyebrow mb-3">
+                    <Globe2 size={11} /> COĞRAFİ DAĞILIM
+                  </div>
+                  <div className="space-y-1.5">
+                    {xray.geographicExposure.map(r => (
+                      <div key={r.region} className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-gray-700 dark:text-gray-300 w-32 truncate">{r.region}</span>
+                        <div className="flex-1 h-2 rounded-full bg-white dark:bg-gray-900 overflow-hidden ring-1 ring-slate-200 dark:ring-gray-800">
+                          <div className={`h-full rounded-full ${r.region.startsWith('Türkiye') ? 'bg-gradient-to-r from-red-400 to-red-600' : 'bg-gradient-to-r from-emerald-400 to-emerald-600'}`} style={{ width: `${Math.min(100, r.pct)}%` }} />
+                        </div>
+                        <span className="text-[10px] text-gray-500 tabular-nums w-10 text-right">%{r.pct.toFixed(0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Allocation Drift — Hedef vs Gerçek */}
+              {xray.allocationDrift.length > 0 && (
+                <div className="rounded-xl border border-slate-200 dark:border-gray-800 p-3 bg-slate-50/50 dark:bg-gray-800/30">
+                  <div className="flex items-center gap-1.5 t-eyebrow mb-3">
+                    <Target size={11} /> HEDEF vs GERÇEK ALLOKASYON
+                  </div>
+                  <div className="space-y-1.5">
+                    {xray.allocationDrift.map(d => {
+                      const driftColor = Math.abs(d.drift) > 10 ? 'text-amber-600 dark:text-amber-400' : Math.abs(d.drift) > 5 ? 'text-gray-600 dark:text-gray-400' : 'text-emerald-600 dark:text-emerald-400';
+                      return (
+                        <div key={d.asset_type} className="flex items-center gap-2 text-xs">
+                          <span className="font-semibold text-gray-700 dark:text-gray-300 w-20 truncate capitalize">{d.asset_type}</span>
+                          <div className="flex-1 relative h-2.5 rounded-full bg-white dark:bg-gray-900 ring-1 ring-slate-200 dark:ring-gray-800 overflow-hidden">
+                            <div className="absolute left-0 top-0 h-full bg-gradient-to-r from-brand-400 to-brand-600" style={{ width: `${Math.min(100, d.currentPct)}%` }} />
+                            <div className="absolute top-0 h-full w-0.5 bg-gray-900 dark:bg-white" style={{ left: `${Math.min(100, d.targetPct)}%` }} title={`Hedef %${d.targetPct}`} />
+                          </div>
+                          <span className="text-[10px] tabular-nums w-12 text-right text-gray-700 dark:text-gray-300">%{d.currentPct.toFixed(0)}</span>
+                          <span className={`text-[10px] tabular-nums w-10 text-right font-bold ${driftColor}`}>
+                            {d.drift > 0 ? '+' : ''}{d.drift.toFixed(0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-2">Siyah çizgi = hedef · Mavi bar = gerçek · Sağdaki sayı = sapma</p>
+                </div>
+              )}
+
+              {/* Currency Mix */}
+              {xray.currencyMix.length > 1 && (
+                <div className="rounded-xl border border-slate-200 dark:border-gray-800 p-3 bg-slate-50/50 dark:bg-gray-800/30">
+                  <div className="flex items-center gap-1.5 t-eyebrow mb-3">
+                    💱 DÖVİZ KOMPOZİSYONU
+                  </div>
+                  <div className="space-y-1.5">
+                    {xray.currencyMix.map(c => (
+                      <div key={c.currency} className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-gray-700 dark:text-gray-300 w-16">{c.currency}</span>
+                        <div className="flex-1 h-2 rounded-full bg-white dark:bg-gray-900 overflow-hidden ring-1 ring-slate-200 dark:ring-gray-800">
+                          <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full" style={{ width: `${Math.min(100, c.pct)}%` }} />
+                        </div>
+                        <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{formatCurrency(c.value, 0)}₺</span>
+                        <span className="text-[10px] text-gray-500 tabular-nums w-10 text-right">%{c.pct.toFixed(0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tax Loss Harvest Fırsatları */}
+              {xray.taxLossOpportunities.length > 0 && (
+                <div className="rounded-xl border border-rose-200 dark:border-rose-900 p-3 bg-rose-50/50 dark:bg-rose-950/20">
+                  <div className="flex items-center gap-1.5 t-eyebrow text-rose-700 dark:text-rose-400 mb-2">
+                    <LossIcon size={11} /> ZARAR REALİZASYON FIRSATI
+                  </div>
+                  <div className="space-y-1">
+                    {xray.taxLossOpportunities.slice(0, 5).map(t => (
+                      <div key={t.symbol} className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{t.symbol}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-500 tabular-nums">{formatCurrency(t.value, 0)} ₺</span>
+                          <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">{t.pnl.toFixed(0)} ₺ ({t.pnlPct.toFixed(0)}%)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-rose-700/70 dark:text-rose-400/70 mt-2">Kâr realizasyonu yapacaksan, bunlarla netleştir → vergi avantajı.</p>
+                </div>
+              )}
+
+              {/* Big Winners */}
+              {xray.bigWinners.length > 0 && (
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 p-3 bg-emerald-50/50 dark:bg-emerald-950/20">
+                  <div className="flex items-center gap-1.5 t-eyebrow text-emerald-700 dark:text-emerald-400 mb-2">
+                    <Award size={11} /> KÂR REALİZE EDİLMEYEN BÜYÜK KAZANANLAR
+                  </div>
+                  <div className="space-y-1">
+                    {xray.bigWinners.slice(0, 5).map(w => (
+                      <div key={w.symbol} className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{w.symbol}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-500 tabular-nums">ağırlık %{w.weight.toFixed(0)}</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">+%{w.pnlPct.toFixed(0)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-emerald-700/70 dark:text-emerald-400/70 mt-2">%50+ kârda — kısmi satış (trim) ile kâr kilitle.</p>
+                </div>
+              )}
 
               {xray.sectorBreakdown.length > 0 && (
                 <div className="rounded-xl border border-slate-200 dark:border-gray-800 p-3 bg-slate-50/50 dark:bg-gray-800/30">
