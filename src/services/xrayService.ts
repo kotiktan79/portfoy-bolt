@@ -82,16 +82,17 @@ const FUND_CURRENCY_PROXY: Record<string, string> = {
   EUROFON: 'EUR',
 };
 
-// Hedef allokasyon — Bogleheads/dengeli portföy mantığı.
-// Bu rakamlar kullanıcı profiline göre değişebilir; default "dengeli büyüme".
+// PROFİL: Romanya/EUR-bazlı yatırımcı.
+// Kullanıcı Romanya'da yaşıyor → EUR ev parası. EUR maruziyeti "risk" değil "ev",
+// TL maruziyeti gerçek foreign-currency risk. Türkiye %20-30 sağlıklı EM exposure.
+// HOME_CURRENCY = 'EUR' (kullanıcı Romanya'da yaşıyor — yorumlama için)
 const DEFAULT_TARGETS: Record<string, number> = {
-  stock: 25,
-  fund: 15,
-  crypto: 10,
-  currency: 20,
+  stock: 25,        // EM (BIST) + Global beraber
+  fund: 12,
+  crypto: 8,
+  currency: 25,     // EUR/USD nakit pozisyon — ev parası dahil
   commodity: 10,
-  eurobond: 15,
-  cash: 5,
+  eurobond: 20,     // EUR-bazlı sabit getiri (sigorta + faiz)
 };
 
 // Sembol → coğrafi bölge (Global = ABD/Avrupa yabancı hisseler, TR = BIST/TL)
@@ -159,15 +160,22 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     .sort((a, b) => b.weight - a.weight);
   const topConcentration = concentrations[0] || null;
 
-  if (topConcentration && topConcentration.weight > 25) {
+  // Konsantrasyon uyarısı — currency tipi pozisyonlar nakit-eşdeğeri kabul edilir
+  // (ev parası EUR/USD birikim risk değil), bu yüzden hariç tut.
+  const topRisk = positions
+    .filter(p => p.asset_type !== 'currency')
+    .map(p => ({ symbol: p.symbol, weight: (p.value / totalValue) * 100, value: p.value }))
+    .sort((a, b) => b.weight - a.weight)[0];
+
+  if (topRisk && topRisk.weight > 25) {
     findings.push({
       id: 'concentration-top',
-      severity: topConcentration.weight > 35 ? 'high' : 'medium',
+      severity: topRisk.weight > 35 ? 'high' : 'medium',
       category: 'concentration',
-      title: `${topConcentration.symbol} portföyün %${topConcentration.weight.toFixed(1)}'i`,
-      detail: `Tek varlıkta yoğunlaşma riski. Önerilen üst sınır %25.`,
-      amount: topConcentration.value,
-      symbols: [topConcentration.symbol],
+      title: `${topRisk.symbol} portföyün %${topRisk.weight.toFixed(1)}'i`,
+      detail: `Tek varlıkta yoğunlaşma riski. Önerilen üst sınır %25 (nakit hariç).`,
+      amount: topRisk.value,
+      symbols: [topRisk.symbol],
     });
   }
 
@@ -200,12 +208,15 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     });
   }
 
-  // ── 4. Ölü Sermaye (mevcut) ──────────────────────────────────
+  // ── 4. Ölü Sermaye — 90+ gündür ±%2 içinde sıkışmış pozisyonlar ──
+  // Yeni alımlar (örn. son 2 hafta) "henüz hareket etmedi", "ölü" değil.
   const deadMoney = positions
     .filter(p => {
       if (p.cost === 0) return false;
       const pnlPct = ((p.value - p.cost) / p.cost) * 100;
-      return pnlPct < 2 && pnlPct > -2 && p.value > 5000;
+      const createdAt = p.created_at ? new Date(p.created_at).getTime() : Date.now();
+      const ageDays = (Date.now() - createdAt) / 86400000;
+      return pnlPct < 2 && pnlPct > -2 && p.value > 5000 && ageDays > 90;
     })
     .sort((a, b) => b.value - a.value);
   const deadMoneyTotal = deadMoney.reduce((s, p) => s + p.value, 0);
@@ -222,22 +233,53 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     });
   }
 
-  // ── 5. Döviz Maruziyeti (mevcut) ─────────────────────────────
+  // ── 5. Döviz Maruziyeti — Romanya/EUR profil ─────────────────
+  // Ev parası EUR. EUR pozisyonları "risk" değil "anavatan". Asıl FX riski:
+  // TL ve yabancı paralar. TL exposure >%35 ise alarm (BIST hisseleri + TL nakit).
   const currencyHoldings = positions.filter(isCurrencyHolding);
   const effectiveCurrencyExposure = currencyHoldings.reduce((s, p) => s + p.value, 0);
   const effectiveCurrencyPct = (effectiveCurrencyExposure / totalValue) * 100;
 
-  if (effectiveCurrencyPct > 35) {
-    const components = currencyHoldings
-      .sort((a, b) => b.value - a.value).slice(0, 4).map(p => p.symbol).join(', ');
+  // Ev parası (EUR) ve EUR endeksli pozisyonlar
+  const eurExposure = positions.filter(p => {
+    const cur = (p.currency || '').toUpperCase();
+    const sym = p.symbol.toUpperCase();
+    if (p.asset_type === 'currency') return sym === 'EURO' || sym === 'EUR';
+    if (p.asset_type === 'fund' && sym === 'EUROFON') return true;
+    return cur === 'EUR';
+  }).reduce((s, p) => s + p.value, 0);
+  const eurPct = (eurExposure / totalValue) * 100;
+
+  // TL maruziyeti (BIST + TL nakit + TL fonlar)
+  const tlExposure = positions.filter(p => {
+    const cur = (p.currency || '').toUpperCase();
+    const sym = p.symbol.toUpperCase();
+    if (cur !== 'TRY') return false;
+    // currency tipi USD/EURO TL fiyatlı saklanıyor ama gerçekte yabancı para
+    if (p.asset_type === 'currency' && (sym === 'USD' || sym === 'USDC' || sym === 'EURO' || sym === 'EUR')) return false;
+    return true;
+  }).reduce((s, p) => s + p.value, 0);
+  const tlPct = (tlExposure / totalValue) * 100;
+
+  if (tlPct > 35) {
     findings.push({
-      id: 'currency-exposure',
-      severity: effectiveCurrencyPct > 50 ? 'high' : 'medium',
+      id: 'tl-exposure',
+      severity: tlPct > 55 ? 'high' : 'medium',
       category: 'currency',
-      title: `Döviz maruziyeti %${effectiveCurrencyPct.toFixed(1)}`,
-      detail: `${components} dahil — tipik hedef %15-25. Eurobond ve EUR endeksli fonlar dahil.`,
-      amount: effectiveCurrencyExposure,
-      symbols: currencyHoldings.map(p => p.symbol),
+      title: `TL maruziyeti %${tlPct.toFixed(1)}`,
+      detail: `Romanya/EUR-bazlı yatırımcı için TL yabancı para riskidir. BIST hisseleri + TL fonlar dahil. Önerilen üst sınır %40.`,
+      amount: tlExposure,
+    });
+  }
+
+  // EUR çok düşükse uyar (ev parası yetersiz)
+  if (eurPct < 20 && totalValue > 100000) {
+    findings.push({
+      id: 'low-home-currency',
+      severity: 'low',
+      category: 'currency',
+      title: `EUR maruziyeti sadece %${eurPct.toFixed(1)}`,
+      detail: `Ev paranı düşük tutuyorsun. Romanya'da yaşıyorsan EUR pozisyon %25-40 sağlıklı denge.`,
     });
   }
 
@@ -293,13 +335,23 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     .sort((a, b) => b.value - a.value);
 
   const trPct = geographicExposure.filter(r => r.region.startsWith('Türkiye')).reduce((s, r) => s + r.pct, 0);
-  if (trPct > 70) {
+  // Romanya'da yaşayan biri için TR exposure = emerging market.
+  // %10-30 sağlıklı, >%40 fazla EM yoğunluğu.
+  if (trPct > 40) {
     findings.push({
       id: 'tr-concentration',
-      severity: trPct > 85 ? 'medium' : 'low',
+      severity: trPct > 60 ? 'high' : 'medium',
       category: 'geographic',
       title: `Türkiye maruziyeti %${trPct.toFixed(0)}`,
-      detail: `Tek ülke riski. Global ETF/fon ile dengele (örn. V3YL, VWCE).`,
+      detail: `EM (emerging market) ağırlığın yüksek. EUR/Global ETF (V3YL, VWCE) ile dengele.`,
+    });
+  } else if (trPct < 5 && totalValue > 100000) {
+    findings.push({
+      id: 'no-em-exposure',
+      severity: 'info',
+      category: 'geographic',
+      title: `EM (Türkiye) maruziyeti %${trPct.toFixed(0)}`,
+      detail: `EM allokasyonun çok düşük. %10-25 sağlıklı çeşitlendirme.`,
     });
   }
 
@@ -418,19 +470,28 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     });
   }
 
-  // ── Health Score ─────────────────────────────────────────────
+  // ── Health Score — Romanya/EUR profili ──────────────────────
   let healthScore = 100;
-  if (topConcentration && topConcentration.weight > 35) healthScore -= 25;
-  else if (topConcentration && topConcentration.weight > 25) healthScore -= 10;
+  // Konsantrasyon (currency hariç)
+  if (topRisk && topRisk.weight > 35) healthScore -= 25;
+  else if (topRisk && topRisk.weight > 25) healthScore -= 10;
+  // Ölü sermaye (90+ gün eski)
   healthScore -= Math.min(20, (deadMoneyTotal / totalValue) * 200);
-  if (effectiveCurrencyPct > 50) healthScore -= 15;
-  else if (effectiveCurrencyPct > 35) healthScore -= 8;
+  // TL maruziyeti = foreign currency risk
+  if (tlPct > 55) healthScore -= 15;
+  else if (tlPct > 35) healthScore -= 8;
+  // EUR (ev parası) yetersiz
+  if (eurPct < 15 && totalValue > 100000) healthScore -= 5;
+  // Sektör eksikliği
   healthScore -= Math.min(15, missingSectors.length * 3);
+  // HHI konsantrasyon
   if (hhi > 3500) healthScore -= 15;
   else if (hhi > 2500) healthScore -= 8;
+  // Asset class variety
   if (assetClassCount < 3) healthScore -= 8;
-  if (trPct > 85) healthScore -= 8;
-  else if (trPct > 70) healthScore -= 4;
+  // TR EM exposure aşırı
+  if (trPct > 60) healthScore -= 10;
+  else if (trPct > 40) healthScore -= 5;
   healthScore = Math.max(0, Math.round(healthScore));
 
   return {
