@@ -1,4 +1,5 @@
 import { Holding } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 export interface DividendProfile {
   yieldPct: number;
@@ -92,6 +93,7 @@ const EUROBOND_PROFILE: DividendProfile = {
 export function forecastDividends(holdings: Holding[]): DividendForecast {
   const startDate = new Date();
   const monthsArr: MonthlyDividend[] = [];
+  const fxRates = getFxRatesFromHoldings(holdings);
 
   for (let i = 0; i < 12; i++) {
     const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
@@ -109,7 +111,7 @@ export function forecastDividends(holdings: Holding[]): DividendForecast {
 
   for (const h of holdings) {
     const sym = h.symbol.toUpperCase();
-    const value = (h.current_price || 0) * (h.quantity || 0);
+    const value = holdingValueTRY(h, fxRates);
     if (value <= 0) continue;
     totalAnnualValue += value;
 

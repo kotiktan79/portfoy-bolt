@@ -133,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const [sym, rate] of Object.entries(stakingRates)) {
       const holding = holdingMap.get(sym);
       if (holding) {
-        const annualIncome = (holding.current_price || 0) * (holding.quantity || 0) * (rate / 100);
+        const annualIncome = (holding.current_price || 0) * (holding.quantity || 0) * (rate / 100); // fx-ok: kripto TRY'de saklı (current_price=TL fiyat)
         dividends.push({
           symbol: sym,
           market: 'CRYPTO',

@@ -34,6 +34,15 @@ const PATTERNS = [
     re: /\.purchase_price\s*\*\s*\w+\.?(quantity|qty)/,
     msg: 'FX-blind: purchase_price * quantity → holdingCostTRY(h, fxRates) kullan',
   },
+  // Parantezli varyant: (h.current_price || 0) * (h.quantity || 0)
+  {
+    re: /\.current_price\s*\|\|[^)]*\)\s*\*\s*\(/,
+    msg: 'FX-blind: (current_price || 0) * (quantity) → holdingValueTRY(h, fxRates) kullan',
+  },
+  {
+    re: /\.purchase_price\s*\|\|[^)]*\)\s*\*\s*\(/,
+    msg: 'FX-blind: (purchase_price || 0) * (quantity) → holdingCostTRY(h, fxRates) kullan',
+  },
   {
     re: /\(\s*\w+\.total_value\s*-\s*\w+\.total_investment\s*\)/,
     msg: 'PnL recompute: snapshot.total_pnl varken value − investment recompute etme',

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Wallet, TrendingUp, Calendar } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
+import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 interface Props {
   holdings: Holding[];
@@ -42,17 +43,14 @@ export default function DividendInvestmentPlanner({ holdings, totalCashValue }: 
   const [amount, setAmount] = useState<number>(30000);
 
   const usdRate = holdings.find(h => h.symbol === 'USD' && h.asset_type === 'currency')?.current_price ?? 45;
-  const eurRate = holdings.find(h => h.symbol === 'EURO' && h.asset_type === 'currency')?.current_price ?? 51;
 
   const liquidUsd = useMemo(() => {
-    const cashUsd = holdings
+    const fxRates = getFxRatesFromHoldings(holdings);
+    const cashTRY = holdings
       .filter(h => h.asset_type === 'currency')
-      .reduce((s, h) => {
-        const v = (h.current_price || 0) * (h.quantity || 0);
-        return s + (h.currency === 'EUR' ? v * eurRate : v);
-      }, 0);
-    return (cashUsd + totalCashValue) / usdRate;
-  }, [holdings, totalCashValue, usdRate, eurRate]);
+      .reduce((s, h) => s + holdingValueTRY(h, fxRates), 0);
+    return (cashTRY + totalCashValue) / usdRate;
+  }, [holdings, totalCashValue, usdRate]);
 
   const plan = useMemo(() => {
     const rows = BASKET.map(b => {

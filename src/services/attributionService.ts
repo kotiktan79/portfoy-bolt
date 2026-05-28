@@ -1,4 +1,5 @@
 import { Holding } from '../lib/supabase';
+import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 export interface AttributionItem {
   symbol: string;
@@ -32,9 +33,10 @@ export function computeAttribution(holdings: Holding[]): AttributionReport {
   let totalCost = 0;
   let totalValue = 0;
 
+  const fxRates = getFxRatesFromHoldings(holdings);
   for (const h of holdings) {
-    const cost = (h.purchase_price || 0) * (h.quantity || 0);
-    const value = (h.current_price || 0) * (h.quantity || 0);
+    const cost = holdingCostTRY(h, fxRates);
+    const value = holdingValueTRY(h, fxRates);
     if (cost === 0 && value === 0) continue;
     totalCost += cost;
     totalValue += value;

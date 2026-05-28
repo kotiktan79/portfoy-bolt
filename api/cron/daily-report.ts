@@ -227,7 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         stock: 0.03, fund: 0.02, eurobond: 0.05, crypto: 0.02, commodity: 0, currency: 0.01,
       };
       const passiveYearly = holdings.reduce((s: number, h: any) => {
-        const v = (h.current_price || 0) * (h.quantity || 0);
+        const v = tryValue(h, 'current_price'); // FX-aware (USD/EUR pozisyonlar TRY'ye)
         return s + v * (yieldByType[h.asset_type] || 0);
       }, 0);
       const passiveMonthlyUsd = (passiveYearly / 12) / usdRateForEmail;

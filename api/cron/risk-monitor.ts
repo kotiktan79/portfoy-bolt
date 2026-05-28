@@ -33,8 +33,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, alerts: [], message: 'No holdings' });
     }
 
-    const totalValue = holdings.reduce((s, h) => s + (h.current_price || 0) * (h.quantity || 0), 0);
-    const totalInvestment = holdings.reduce((s, h) => s + (h.purchase_price || 0) * (h.quantity || 0), 0);
+    // FX-aware: USD/EUR pozisyonları TRY'ye çevir (EURO ₺2M, USD ₺1.5M, ASML/JNJ vb.)
+    const usdH = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
+    const eurH = holdings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const usdRate = Number(usdH?.current_price) > 1 ? Number(usdH.current_price) : 45;
+    const eurRate = Number(eurH?.current_price) > 1 ? Number(eurH.current_price) : 51;
+    const fxOf = (c: string) => {
+      const cur = (c || 'TRY').toUpperCase();
+      if (cur === 'USD') return usdRate;
+      if (cur === 'EUR') return eurRate;
+      if (cur === 'GBP') return usdRate * 1.27;
+      return 1;
+    };
+    const valTRY = (h: any, field: 'current_price' | 'purchase_price' = 'current_price') =>
+      (Number(h[field]) || 0) * (Number(h.quantity) || 0) * fxOf(h.currency); // fx-ok: valTRY helper
+
+    const totalValue = holdings.reduce((s, h) => s + valTRY(h), 0);
+    const totalInvestment = holdings.reduce((s, h) => s + valTRY(h, 'purchase_price'), 0);
 
     // 2. Dünkü snapshot ile karşılaştır → portföy düşüşü
     const today = new Date().toISOString().split('T')[0];
@@ -87,8 +102,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 3. Tek pozisyon %20+ kayıp
     for (const h of holdings) {
-      const value = (h.current_price || 0) * (h.quantity || 0);
-      const cost = (h.purchase_price || 0) * (h.quantity || 0);
+      const value = valTRY(h);
+      const cost = valTRY(h, 'purchase_price');
       const pnlPct = cost > 0 ? ((value - cost) / cost) * 100 : 0;
 
       if (pnlPct <= -20 && value > 10000) {
@@ -103,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Konsantrasyon riski — tek varlık %25+
     for (const h of holdings) {
-      const value = (h.current_price || 0) * (h.quantity || 0);
+      const value = valTRY(h);
       const weight = totalValue > 0 ? (value / totalValue) * 100 : 0;
 
       if (weight >= 25) {
@@ -120,7 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const byType: Record<string, number> = {};
     for (const h of holdings) {
       const type = h.asset_type || 'other';
-      byType[type] = (byType[type] || 0) + (h.current_price || 0) * (h.quantity || 0);
+      byType[type] = (byType[type] || 0) + valTRY(h);
     }
 
     for (const [type, value] of Object.entries(byType)) {
