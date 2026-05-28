@@ -242,10 +242,30 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
   }
 
   // ── 6. Currency Mix — döviz içinde tek currency dominantsa ────
+  // Kullanıcı 'currency' tipi holding'leri (USD/EURO) TRY currency-field ile saklıyor
+  // (TL fiyat olarak). Bu yüzden symbol'a bakmak gerek, currency field'a değil.
+  const detectCcy = (p: typeof positions[number]): string => {
+    const sym = (p.symbol || '').toUpperCase();
+    if (p.asset_type === 'currency') {
+      // currency tipi: symbol = currency kodu
+      if (sym === 'USD' || sym === 'USDC') return 'USD';
+      if (sym === 'EURO' || sym === 'EUR') return 'EUR';
+      if (sym === 'GBP') return 'GBP';
+      if (sym === 'CHF') return 'CHF';
+      if (sym === 'RON') return 'RON';
+      if (sym === 'RUB') return 'RUB';
+      return sym;
+    }
+    // eurobond/fund/stock için holding.currency field'ı doğru kaynak
+    const cur = (p.currency || '').toUpperCase();
+    if (cur === 'USD' || cur === 'EUR' || cur === 'GBP') return cur;
+    // EUROFON gibi proxy
+    if (p.asset_type === 'fund' && FUND_CURRENCY_PROXY[sym]) return FUND_CURRENCY_PROXY[sym];
+    return 'EUR'; // default eurobond/intl
+  };
   const currencyByCcy: Record<string, number> = {};
   for (const p of currencyHoldings) {
-    const c = (p.symbol === 'EURO' ? 'EUR' : p.symbol === 'USDC' ? 'USD' : p.currency || 'EUR').toUpperCase();
-    const key = c === 'TRY' ? 'EUR' : c;
+    const key = detectCcy(p);
     currencyByCcy[key] = (currencyByCcy[key] || 0) + p.value;
   }
   const currencyMix = Object.entries(currencyByCcy)
