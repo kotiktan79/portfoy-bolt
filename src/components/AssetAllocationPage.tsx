@@ -86,19 +86,19 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
     .sort((a, b) => b.profit - a.profit);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 text-gray-900 dark:text-white">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur-sm border-b border-gray-800 px-4 py-4">
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-gray-800 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-slate-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
             <span>←</span>
             <span className="hidden sm:inline">Geri</span>
           </button>
-          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-            <PieIcon className="w-6 h-6" />
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+            <PieIcon className="w-6 h-6 text-brand-600 dark:text-brand-400" />
             Varlık Dağılımı
           </h1>
           <div className="w-16"></div>
@@ -137,8 +137,8 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Pie Chart */}
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-gray-700">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Varlık Dağılımı</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-slate-200 dark:border-gray-700 shadow-sm">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-gray-900 dark:text-white">Varlık Dağılımı</h2>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -166,8 +166,8 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
           </div>
 
           {/* Profit Bar Chart */}
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-gray-700">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Getiri Karşılaştırması</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-slate-200 dark:border-gray-700 shadow-sm">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-gray-900 dark:text-white">Getiri Karşılaştırması</h2>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={profitData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -188,12 +188,12 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
         </div>
 
         {/* Detailed Table */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden">
-          <h2 className="text-lg sm:text-xl font-bold p-4 sm:p-6 border-b border-gray-700">Detaylı Analiz</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 overflow-hidden shadow-sm">
+          <h2 className="text-lg sm:text-xl font-bold p-4 sm:p-6 border-b border-slate-200 dark:border-gray-700 text-gray-900 dark:text-white">Detaylı Analiz</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-700/50">
-                <tr>
+              <thead className="bg-slate-100 dark:bg-gray-700/50">
+                <tr className="text-slate-600 dark:text-gray-300">
                   <th className="px-4 py-3 text-left text-xs sm:text-sm font-semibold">Varlık Tipi</th>
                   <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Adet</th>
                   <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Yatırım</th>
@@ -203,43 +203,43 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                   <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Getiri %</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
+              <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
                 {assetData
                   .sort((a, b) => b.value - a.value)
                   .map((asset) => (
-                    <tr key={asset.type} className="hover:bg-gray-700/30 transition-colors">
+                    <tr key={asset.type} className="hover:bg-slate-50 dark:hover:bg-gray-700/30 transition-colors">
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2 sm:gap-3">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: asset.color }}></div>
-                          <span className="font-medium text-sm sm:text-base">{asset.typeName}</span>
+                          <span className="font-medium text-sm sm:text-base text-gray-900 dark:text-gray-100">{asset.typeName}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-right text-sm sm:text-base">{asset.count}</td>
-                      <td className="px-4 py-4 text-right text-sm sm:text-base">{asset.investment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
-                      <td className="px-4 py-4 text-right font-semibold text-sm sm:text-base">{asset.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
-                      <td className={`px-4 py-4 text-right font-semibold text-sm sm:text-base ${asset.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">{asset.count}</td>
+                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">{asset.investment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
+                      <td className="px-4 py-4 text-right font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100">{asset.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
+                      <td className={`px-4 py-4 text-right font-semibold text-sm sm:text-base ${asset.profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {asset.profit >= 0 ? '+' : ''}{asset.profit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
                       </td>
-                      <td className="px-4 py-4 text-right text-sm sm:text-base">
+                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">
                         {totalValue > 0 ? ((asset.value / totalValue) * 100).toFixed(1) : 0}%
                       </td>
-                      <td className={`px-4 py-4 text-right font-semibold text-sm sm:text-base ${asset.profitPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <td className={`px-4 py-4 text-right font-semibold text-sm sm:text-base ${asset.profitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {asset.profitPercent >= 0 ? '+' : ''}{asset.profitPercent.toFixed(2)}%
                       </td>
                     </tr>
                   ))}
               </tbody>
-              <tfoot className="bg-gray-700/50 font-bold">
+              <tfoot className="bg-slate-100 dark:bg-gray-700/50 font-bold text-gray-900 dark:text-white">
                 <tr>
                   <td className="px-4 py-4 text-sm sm:text-base">TOPLAM</td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">{holdings.length}</td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">{totalInvestment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">{totalValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
-                  <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
                   </td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">100%</td>
-                  <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfitPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {totalProfitPercent >= 0 ? '+' : ''}{totalProfitPercent.toFixed(2)}%
                   </td>
                 </tr>

@@ -13,8 +13,10 @@ export default function AllocationPage() {
         holdings={holdings}
         onBack={() => navigate(-1)}
       />
-      <div className="px-4 pb-6 -mt-6 max-w-7xl mx-auto">
-        <CurrencyExposureCard />
+      <div className="bg-slate-50 dark:bg-gray-950">
+        <div className="px-4 pb-6 max-w-7xl mx-auto">
+          <CurrencyExposureCard />
+        </div>
       </div>
     </>
   );
