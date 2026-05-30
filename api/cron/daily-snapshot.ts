@@ -478,10 +478,19 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
           // Sanity guard — aynı currency içinde karşılaştır (eski/yeni aynı birimde)
           const oldPrice = Number(h.current_price) || 0;
           const isAnomalous = oldPrice > 0 && (priceToWrite < oldPrice * 0.2 || priceToWrite > oldPrice * 5);
-          if (!isAnomalous) {
+          // KORUMA: USD/EUR holding'in DB değeri muhtemelen TL-converted yanlış kayıt
+          // (örn. JNJ 225 USD ama DB'de 10343 yazıyor = 225 × 45.9). Anomali yerine düzelt.
+          const isFxCorruptionFix = isAnomalous
+            && (holdingCurrency === 'USD' || holdingCurrency === 'EUR')
+            && oldPrice > priceToWrite * 20
+            && priceToWrite > 1 && priceToWrite < 5000;
+          if (!isAnomalous || isFxCorruptionFix) {
             await supabase.from('holdings').update({ current_price: priceToWrite, updated_at: new Date().toISOString() }).eq('id', h.id);
             result.updated++;
             result.details[h.symbol] = priceToWrite;
+            if (isFxCorruptionFix) {
+              log.push(`${h.symbol}: TL-corrupted değer düzeltildi (${oldPrice} → ${priceToWrite} ${holdingCurrency})`);
+            }
           } else {
             log.push(`${h.symbol}: anomali reddedildi (${oldPrice} → ${priceToWrite})`);
             result.failed++;
