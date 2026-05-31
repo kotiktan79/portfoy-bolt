@@ -332,16 +332,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         if (holding.manual_price || holding.asset_type === 'fund' || holding.asset_type === 'eurobond') {
           return holding;
         }
-        // KORUMA: priceService.fetchUSStockPrice / fetchEuropeanStockPrice ham USD/EUR
-        // fiyatı × FX ile TL'ye çeviriyor. Ama USD/EUR currency holding (JNJ, ASML, V3YL)
-        // için DB sözleşmesi current_price=holding.currency cinsinden yaz. TL yazarsak
-        // contract violation → "10339 USD" gibi sahte değer. Bu holding'leri client'tan
-        // güncelleme; cron zaten doğru currency ile saatlik yazıyor.
-        const cur = (holding.currency || 'TRY').toUpperCase();
-        if (cur !== 'TRY' && holding.asset_type === 'stock') {
-          return holding;
-        }
-
+        // KONTRAT: priceService artık holding.currency cinsinden ham fiyat döndürür
+        // (US stock → USD, EU stock → EUR, BIST → TRY, crypto → TRY). Doğrudan yazılır.
         const newPrice = prices[holding.symbol];
         if (newPrice && Math.abs(newPrice - holding.current_price) > 0.01) {
           const { error } = await supabase

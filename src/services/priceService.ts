@@ -404,24 +404,24 @@ async function fetchSilverFromAlternative(usdTryRate: number): Promise<number> {
   }
 }
 
+// Avrupa hissesinin ham EUR fiyatı (TL'ye çevirmez).
+// Kontrat: holding.current_price = holding.currency cinsinden. Çağıran taraf
+// TL'ye çevirmek isterse holdingValueTRY/holdingCostTRY kullanır.
 export async function fetchEuropeanStockPrice(symbol: string): Promise<number | null> {
   if (!EURONEXT_STOCKS[symbol]) return null;
-
-  // Vercel proxy üzerinden (CORS bypass)
   try {
     const r = await fetchWithTimeout(`/api/price-proxy?type=european&symbols=${symbol}`, {}, 8000);
     if (r.ok) {
       const d = await r.json();
       if (d.success && d.data?.[symbol]?.price) {
-        const eurTryRate = await fetchEURTRYRate();
-        return d.data[symbol].price * eurTryRate;
+        return d.data[symbol].price; // EUR ham
       }
     }
   } catch { /* fall through */ }
-
   return null;
 }
 
+// ABD hissesinin ham USD fiyatı (TL'ye çevirmez). Çağıran taraf gerekiyorsa çevirir.
 async function fetchUSStockPrice(symbol: string): Promise<number | null> {
   const ticker = US_STOCKS[symbol] || symbol;
   try {
@@ -434,8 +434,7 @@ async function fetchUSStockPrice(symbol: string): Promise<number | null> {
     const data = await response.json();
     const usdPrice = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
     if (!usdPrice) return null;
-    const usdRate = await fetchUSDTRYRate();
-    return usdPrice * usdRate;
+    return usdPrice; // USD ham
   } catch {
     return null;
   }
