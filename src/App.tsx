@@ -12,6 +12,7 @@ const AllocationPage = lazy(() => import('./pages/AllocationPage'));
 const PerformancePage = lazy(() => import('./pages/PerformancePage'));
 const DailyReportPage = lazy(() => import('./pages/DailyReportPage'));
 const LivePage = lazy(() => import('./pages/LivePage'));
+const ResearchPage = lazy(() => import('./pages/ResearchPage'));
 
 function PageLoader() {
   return (
@@ -55,6 +56,7 @@ function App() {
             <Route path="/allocation" element={<SafePage><AllocationPage /></SafePage>} />
             <Route path="/performance" element={<SafePage><PerformancePage /></SafePage>} />
             <Route path="/daily-report" element={<SafePage><DailyReportPage /></SafePage>} />
+            <Route path="/research" element={<SafePage><ResearchPage /></SafePage>} />
           </Route>
         </Routes>
       </PortfolioProvider>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp, Plus, RefreshCw, Moon, Sun, Bell,
   Activity, Download, Shield, Palette,
-  PieChart, Database,
+  PieChart, Database, Brain,
   Target, Menu, X, Trash2, MoreHorizontal
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
@@ -23,6 +23,7 @@ interface DashboardHeaderProps {
   onShowAllocation: () => void;
   onShowAIAdvisor: () => void;
   onShowPerformance: () => void;
+  onShowResearch?: () => void;
   onShowRebalanceModal: () => void;
   onEnableNotifications: () => void;
   onThemeCycle: () => void;
@@ -43,6 +44,7 @@ export function DashboardHeader({
   onShowAllocation,
   onShowAIAdvisor,
   onShowPerformance,
+  onShowResearch,
   onShowRebalanceModal,
   onEnableNotifications,
   onThemeCycle,
@@ -105,6 +107,7 @@ export function DashboardHeader({
 
   const navItems = [
     { label: 'AI Danışman', onClick: onShowAIAdvisor, icon: Activity },
+    { label: 'Araştırma', onClick: onShowResearch || (() => {}), icon: Brain },
     { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
   ];

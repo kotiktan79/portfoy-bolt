@@ -23,6 +23,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/ai-research",
+      "schedule": "30 5 * * *"
+    },
+    {
       "path": "/api/cron/opportunity-scanner",
       "schedule": "0 9 * * *"
     },

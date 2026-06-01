@@ -8,10 +8,10 @@ interface MobileBottomNavProps {
 }
 
 const PRIMARY_TABS = [
-  { id: 'home', icon: Home, label: 'Ana Sayfa' },
-  { id: 'performance', icon: TrendingUp, label: 'Performans' },
+  { id: 'home', icon: Home, label: 'Ana' },
+  { id: 'performance', icon: TrendingUp, label: 'Perf.' },
   { id: 'allocation', icon: PieChart, label: 'Dağılım' },
-  { id: 'ai', icon: Brain, label: 'AI Danışman' },
+  { id: 'research', icon: Brain, label: 'Araştır' },
   { id: 'report', icon: FileText, label: 'Rapor' },
 ];
 

@@ -7,6 +7,7 @@ const pageMap: Record<string, string> = {
   allocation: '/allocation',
   performance: '/performance',
   report: '/daily-report',
+  research: '/research',
 };
 
 const reverseMap: Record<string, string> = Object.fromEntries(
