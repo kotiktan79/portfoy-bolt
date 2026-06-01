@@ -19,7 +19,9 @@ import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD
 import { getDynamicWithdrawal } from '../services/analyticsService';
 import { DynamicWithdrawal } from '../lib/portfolioMetrics';
 
-const REFRESH_SEC = 30;
+// Egress quota: 30s → 60s. Kiosk modda 24 saat açık kalırsa 30s'lik çevrim
+// price_history tablosunu sürekli çekip 5+ GB/ay egress yapıyor.
+const REFRESH_SEC = 60;
 
 function fmtTRY(n: number): string {
   return new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 }).format(n);

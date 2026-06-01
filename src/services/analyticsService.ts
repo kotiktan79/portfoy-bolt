@@ -2,24 +2,40 @@ import { supabase } from '../lib/supabase';
 import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
+// Egress quota koruması: getDynamicWithdrawal price_history + portfolio_snapshots
+// çekiyor (~100KB her çağrı). LivePage 30s'de bir çağırınca quotayı patlatır.
+// In-memory cache 10 dakika.
+let _dwCache: { value: DynamicWithdrawal | null; ts: number } | null = null;
+const DW_CACHE_TTL_MS = 10 * 60 * 1000;
+
 /**
  * Dinamik güvenli maaş: snapshot geçmişi + tarihsel USD/TRY kuru çekip
  * USD bazlı reel büyümeden hesaplar. (eski MonthlyWithdrawalPlan mantığı)
  */
 export async function getDynamicWithdrawal(): Promise<DynamicWithdrawal | null> {
+  if (_dwCache && Date.now() - _dwCache.ts < DW_CACHE_TTL_MS) {
+    return _dwCache.value;
+  }
   try {
+    // Sadece son 365 gün snapshot — computeDynamicWithdrawal zaten 365 gün penceresi kullanıyor
+    const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
     const { data: snaps } = await supabase
       .from('portfolio_snapshots')
       .select('snapshot_date,total_value,total_deposits,total_withdrawals')
-      .order('snapshot_date', { ascending: true });
+      .gte('snapshot_date', oneYearAgo)
+      .order('snapshot_date', { ascending: true })
+      .limit(400);
     if (!snaps || snaps.length < 2) return null;
 
-    // Tarihsel USD/TRY kuru (price_history'den USD sembolü)
+    // Tarihsel USD/TRY kuru (price_history'den USD sembolü) — son 365 gün, en eskiden yeniye
+    const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
     const { data: usdHist } = await supabase
       .from('price_history')
       .select('price,recorded_at')
       .eq('symbol', 'USD')
-      .order('recorded_at', { ascending: true });
+      .gte('recorded_at', oneYearAgo)
+      .order('recorded_at', { ascending: true })
+      .limit(500);
 
     const usdRateAt = (date: string): number => {
       if (!usdHist || usdHist.length === 0) return 45;
@@ -42,7 +58,9 @@ export async function getDynamicWithdrawal(): Promise<DynamicWithdrawal | null> 
       usdRate: usdRateAt(s.snapshot_date),
     }));
 
-    return computeDynamicWithdrawal(forGrowth);
+    const result = computeDynamicWithdrawal(forGrowth);
+    _dwCache = { value: result, ts: Date.now() };
+    return result;
   } catch (error) {
     console.error('getDynamicWithdrawal error:', error);
     return null;

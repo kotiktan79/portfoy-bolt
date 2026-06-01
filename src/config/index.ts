@@ -12,7 +12,9 @@ export const API_URLS = {
 // ── Timing (milliseconds) ────────────────────────────────────────────────
 export const TIMING = {
   WS_THROTTLE_MS: 3000,
-  PRICE_REFRESH_INTERVAL: 30000,
+  // Egress quota koruması: 30s → 5dk. Yahoo/Binance fiyat sürekli akar, ama
+  // Supabase'e write+read cycle 30s'de çok pahalı (5,556 GB/ay egress yaptık).
+  PRICE_REFRESH_INTERVAL: 300000,
   EXCHANGE_RATE_REFRESH_INTERVAL: 3600000,
   CACHE_CLEANUP_INTERVAL: 60000,
   HEALTH_CHECK_INTERVAL: 60000,
