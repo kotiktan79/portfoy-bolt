@@ -3,6 +3,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
+// Vercel function timeout — Claude + web search 30-60s sürebilir
+export const config = {
+  maxDuration: 60,
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -70,7 +75,7 @@ async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
         {
           type: 'web_search_20250305',
           name: 'web_search',
-          max_uses: 8,
+          max_uses: 4,
         },
       ],
       messages: [{ role: 'user', content: userPrompt }],
