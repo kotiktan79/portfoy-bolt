@@ -28,12 +28,12 @@ export async function getDynamicWithdrawal(): Promise<DynamicWithdrawal | null> 
     if (!snaps || snaps.length < 2) return null;
 
     // Tarihsel USD/TRY kuru (price_history'den USD sembolü) — son 365 gün, en eskiden yeniye
-    const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
+    const oneYearAgoIso = new Date(Date.now() - 365 * 86400000).toISOString();
     const { data: usdHist } = await supabase
       .from('price_history')
       .select('price,recorded_at')
       .eq('symbol', 'USD')
-      .gte('recorded_at', oneYearAgo)
+      .gte('recorded_at', oneYearAgoIso)
       .order('recorded_at', { ascending: true })
       .limit(500);
 
