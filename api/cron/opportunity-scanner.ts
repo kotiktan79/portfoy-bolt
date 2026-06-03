@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { requireCronAuth } from '../lib/auth.js';
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -21,10 +22,7 @@ interface Opportunity {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (requireCronAuth(req, res)) return;
 
   try {
     const opportunities: Opportunity[] = [];
@@ -152,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ============================================
     try {
       const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'LINKUSDT', 'ADAUSDT', 'AVAXUSDT', 'DOTUSDT', 'SUIUSDT'];
-      let cryptoEntries: Array<{ sym: string; price: number; changePct: number; lowPrice: number; highPrice: number }> = [];
+      const cryptoEntries: Array<{ sym: string; price: number; changePct: number; lowPrice: number; highPrice: number }> = [];
 
       // Binance dene
       const cryptoRes = await fetch(

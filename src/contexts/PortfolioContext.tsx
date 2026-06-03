@@ -16,7 +16,6 @@ import {
 } from '../services/priceService';
 import {
   getPnLData,
-  savePortfolioSnapshot,
   getDefaultTargetAllocations,
   getHistoricalSnapshots,
   PnLData,
@@ -24,10 +23,10 @@ import {
 } from '../services/analyticsService';
 import { checkAndUnlockAchievements } from '../services/achievementService';
 import { getAllTransactions, getTotalDividends } from '../services/transactionService';
-import { getAllCashBalanceTotals, getTotalCashValue } from '../services/cashService';
+import { getTotalCashValue } from '../services/cashService';
 import { requestNotificationPermission, notifyAchievementUnlocked, getNotificationPermissionStatus } from '../services/notificationService';
 import { registerServiceWorker, setupInstallPrompt, setupConnectionListener } from '../services/pwaService';
-import { startExchangeRateUpdates, stopExchangeRateUpdates, normalizeToBaseCurrency } from '../services/currencyService';
+import { startExchangeRateUpdates, stopExchangeRateUpdates } from '../services/currencyService';
 import { startHealthMonitoring, stopHealthMonitoring } from '../services/priceMonitor';
 import { startPriceAlertMonitor, stopPriceAlertMonitor } from '../services/priceAlertMonitor';
 import { stopCacheCleanup } from '../services/cacheService';
@@ -379,18 +378,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   async function calculateAndUpdatePnL(currentHoldings = holdings) {
     try {
       if (currentHoldings.length === 0) return;
-
-      const investmentHoldings = currentHoldings.filter(h => h.asset_type !== 'cash');
-      const normalized = await normalizeToBaseCurrency(investmentHoldings, 'TRY');
-      const totalValue = normalized.reduce((sum, h) => sum + h.normalized_current, 0);
-      const totalInv = normalized.reduce((sum, h) => sum + h.normalized_invested, 0);
-      const totalRealized = currentHoldings.reduce((sum, h) => sum + (h.total_realized_pnl || 0), 0);
-      const { totalDeposits, totalWithdrawals } = await getAllCashBalanceTotals();
-      const unrealizedPnl = totalValue - totalInv;
-      const totalPnl = unrealizedPnl + totalRealized;
-      const pnlPercent = totalInv > 0 ? (totalPnl / totalInv) * 100 : 0;
-
-      await savePortfolioSnapshot(totalValue, totalInv, totalPnl, pnlPercent, totalDeposits, totalWithdrawals);
+      // Snapshots are written only by the daily cron (api/cron/daily-snapshot.ts);
+      // the client no longer persists them. PnL is read straight from the stored
+      // snapshots, so we just refresh from the DB here — no recompute needed.
       const data = await getPnLData();
       setPnlData(data);
     } catch (error) {

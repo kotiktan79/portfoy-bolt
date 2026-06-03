@@ -13,7 +13,8 @@ export interface FxRates {
 
 export function getFxRatesFromHoldings(holdings: Holding[]): FxRates {
   const usdH = holdings.find(h => h.symbol === 'USD' && h.asset_type === 'currency');
-  const eurH = holdings.find(h => h.symbol === 'EURO' && h.asset_type === 'currency');
+  // Currency cash row may be stored as either 'EURO' or 'EUR' across the app.
+  const eurH = holdings.find(h => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
   const gbpH = holdings.find(h => h.symbol === 'GBP' && h.asset_type === 'currency');
   const usd = (usdH?.current_price && usdH.current_price > 1) ? usdH.current_price : DEFAULT_USD_TRY_RATE;
   const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : usd * 1.08;

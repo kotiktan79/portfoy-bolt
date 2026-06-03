@@ -30,21 +30,44 @@ export function computeRiskMetrics(snapshots: PortfolioSnapshot[]): RiskMetrics 
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
+  // Net external cash flow into the portfolio for period i (deposits added,
+  // withdrawals removed). The user injects new money regularly (e.g. weekly
+  // buys); that is NOT investment return and must be stripped out before
+  // computing any return-based metric, otherwise a deposit day reads as a huge
+  // positive "return" and inflates mean/vol/Sharpe/Sortino/best-day.
+  const cashFlow = (i: number): number => {
+    const prevDep = sorted[i - 1].total_deposits ?? 0;
+    const currDep = sorted[i].total_deposits ?? 0;
+    const prevWd = sorted[i - 1].total_withdrawals ?? 0;
+    const currWd = sorted[i].total_withdrawals ?? 0;
+    return (currDep - prevDep) - (currWd - prevWd);
+  };
+
   const dailyReturns: number[] = [];
   const dailyChanges: { date: string; changePct: number; changeTry: number }[] = [];
+  // Deposit-adjusted time-weighted return index (starts at 1) + the underlying
+  // portfolio value at each point, used for a deposit-clean drawdown.
+  const indexSeries: { date: string; idx: number; value: number }[] = [
+    { date: sorted[0].date, idx: 1, value: sorted[0].total_value },
+  ];
+  let acc = 1;
 
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1].total_value;
     const curr = sorted[i].total_value;
     if (prev > 0) {
-      const r = (curr - prev) / prev;
+      const cf = cashFlow(i);
+      const gainTry = curr - prev - cf; // pure investment gain, deposits removed
+      const r = gainTry / prev;
       dailyReturns.push(r);
       dailyChanges.push({
         date: sorted[i].date,
         changePct: r * 100,
-        changeTry: curr - prev,
+        changeTry: gainTry,
       });
+      acc *= 1 + r;
     }
+    indexSeries.push({ date: sorted[i].date, idx: acc, value: curr });
   }
 
   if (dailyReturns.length === 0) return null;
@@ -77,24 +100,29 @@ export function computeRiskMetrics(snapshots: PortfolioSnapshot[]): RiskMetrics 
       ? (meanExcess / downsideDeviation) * Math.sqrt(TRADING_DAYS_PER_YEAR)
       : null;
 
-  let peak = sorted[0].total_value;
-  let peakDate = sorted[0].date;
+  // Drawdown is measured on the deposit-adjusted return index, not raw value —
+  // otherwise a deposit (which raises value without any gain) would reset the
+  // peak and mask real drawdowns.
+  let peakIdx = indexSeries[0].idx;
+  let peakValue = indexSeries[0].value;
+  let peakDate = indexSeries[0].date;
   let maxDrawdownPct = 0;
   let maxDrawdownValueTry = 0;
   let maxDrawdownStart: string | null = null;
   let maxDrawdownTrough: string | null = null;
   let maxDrawdownRecovered: string | null = null;
-  let currentDrawdownPeak = sorted[0].total_value;
+  let currentDrawdownPeakIdx = indexSeries[0].idx;
 
-  for (const s of sorted) {
-    if (s.total_value > peak) {
-      peak = s.total_value;
+  for (const s of indexSeries) {
+    if (s.idx > peakIdx) {
+      peakIdx = s.idx;
+      peakValue = s.value;
       peakDate = s.date;
     }
-    if (s.total_value > currentDrawdownPeak) currentDrawdownPeak = s.total_value;
+    if (s.idx > currentDrawdownPeakIdx) currentDrawdownPeakIdx = s.idx;
 
-    const ddPct = peak > 0 ? ((peak - s.total_value) / peak) * 100 : 0;
-    const ddTry = peak - s.total_value;
+    const ddPct = peakIdx > 0 ? ((peakIdx - s.idx) / peakIdx) * 100 : 0;
+    const ddTry = (ddPct / 100) * peakValue;
 
     if (ddPct > maxDrawdownPct) {
       maxDrawdownPct = ddPct;
@@ -106,16 +134,16 @@ export function computeRiskMetrics(snapshots: PortfolioSnapshot[]): RiskMetrics 
       maxDrawdownTrough &&
       maxDrawdownRecovered === null &&
       s.date > maxDrawdownTrough &&
-      s.total_value >= peak * 0.999
+      s.idx >= peakIdx * 0.999
     ) {
       maxDrawdownRecovered = s.date;
     }
   }
 
-  const lastValue = sorted[sorted.length - 1].total_value;
+  const lastIdx = indexSeries[indexSeries.length - 1].idx;
   const currentDrawdownPct =
-    currentDrawdownPeak > 0
-      ? ((currentDrawdownPeak - lastValue) / currentDrawdownPeak) * 100
+    currentDrawdownPeakIdx > 0
+      ? ((currentDrawdownPeakIdx - lastIdx) / currentDrawdownPeakIdx) * 100
       : 0;
 
   const bestDay = dailyChanges.length > 0

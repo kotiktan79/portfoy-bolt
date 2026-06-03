@@ -131,7 +131,6 @@ async function fetchMarketData(): Promise<string> {
     if (fxRes.ok) {
       const fxData = await fxRes.json();
       const usdTry = fxData.rates?.TRY || 0;
-      const eurTry = (fxData.rates?.TRY || 0) / (fxData.rates?.EUR ? 1 / fxData.rates.EUR * fxData.rates.TRY / fxData.rates.TRY : 1);
       lines.push(`USD/TRY: ${usdTry.toFixed(2)}`);
 
       // EUR/TRY

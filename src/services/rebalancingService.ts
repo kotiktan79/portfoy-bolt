@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { getFxRatesFromHoldings, holdingValueTRY, fxToTRY } from '../lib/fx';
 
 export interface Holding {
   id: string;
@@ -266,12 +266,22 @@ export function generateRebalancingTrades(
         : (defaults?.price && defaults.price > 0 ? defaults.price : 100);
       const platform = inferPlatform(symbol, assetType);
 
+      // `difference` is in TRY but `currentPrice` is in the holding's own
+      // currency (USD/EUR for Revolut stocks/eurobonds). Convert the TRY amount
+      // back to the holding currency before dividing, otherwise share counts are
+      // overstated by the FX rate (~30-45x for USD). For `currency` holdings the
+      // stored price is already TRY-per-unit, so no conversion (rate = 1).
+      const buyCcy = assetType === 'currency'
+        ? 'TRY'
+        : (holdingsOfType.length > 0 ? (holdingsOfType[0].currency || 'TRY') : (platform === 'Revolut' ? 'USD' : 'TRY'));
+      const buyRate = fxToTRY(1, buyCcy, fxRates);
+
       trades.push({
         symbol,
         asset_type: assetType,
         action: 'buy',
         amount: difference,
-        shares: currentPrice > 0 ? difference / currentPrice : 0,
+        shares: currentPrice > 0 && buyRate > 0 ? (difference / buyRate) / currentPrice : 0,
         current_price: currentPrice,
         reason: `Hedef: %${targetAllocations[assetType]?.toFixed(1) || 0}, Mevcut: %${((currentValue / totalValue) * 100).toFixed(1)}${defaults && holdingsOfType.length === 0 ? ` · öneri: ${defaults.note}` : ''}`,
         platform,
@@ -324,7 +334,11 @@ export function generateRebalancingTrades(
 
         const holdingValue = holdingValueTRY(holding as never, fxRates);
         const sellValue = Math.min(holdingValue, remainingToSell);
-        const sellShares = holding.current_price > 0 ? sellValue / holding.current_price : 0;
+        // sellValue is TRY; convert back to the holding currency before dividing
+        // by its (own-currency) price so the share count is correct (this branch
+        // only runs for non-currency, non-commodity types).
+        const sellRate = fxToTRY(1, holding.currency || 'TRY', fxRates);
+        const sellShares = holding.current_price > 0 && sellRate > 0 ? (sellValue / sellRate) / holding.current_price : 0;
 
         trades.push({
           symbol: holding.symbol,

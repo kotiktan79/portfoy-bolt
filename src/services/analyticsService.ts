@@ -93,21 +93,10 @@ export interface AssetAllocation {
   rebalance_amount: number;
 }
 
-export async function savePortfolioSnapshot(
-  _totalValue: number,
-  _totalInvestment: number,
-  _totalPnl: number,
-  _pnlPercentage: number,
-  _totalDeposits: number = 0,
-  _totalWithdrawals: number = 0
-) {
-  // ⛔ KALICI: Client artık snapshot YAZMIYOR.
-  // Snapshot'ı yalnızca günlük cron (api/cron/daily-snapshot.ts) yazar — günde 1 kez,
-  // 18:00 UTC (BIST kapanış sonrası), tutarlı deposit ile.
-  // Client'ın yazması duplicate + tarih kayması + deposit tutarsızlığı yaratıyordu.
-  // Canlı portföy değeri holdings'ten anlık hesaplanır, snapshot'a ihtiyaç yok.
-  return;
-}
+// NOTE: savePortfolioSnapshot was removed. The client no longer writes
+// snapshots — only the daily cron (api/cron/daily-snapshot.ts) does, once per
+// day after BIST close, with consistent deposit figures. Client writes used to
+// cause duplicate / date-shifted / deposit-inconsistent rows.
 
 export async function getPnLData(): Promise<{
   daily: PnLData;
@@ -191,37 +180,13 @@ export async function getPnLData(): Promise<{
     const weeklyResult = calculateChange(lastWeek);
     const monthlyResult = calculateChange(lastMonth);
 
-    const today = new Date().toISOString().split('T')[0];
-    const currentSnapshotDate = current.snapshot_date;
-    const isDailyFromToday = currentSnapshotDate === today;
-
-    if (!yesterday && isDailyFromToday) {
-      const stored = typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem('portfolio_open_value')
-        : null;
-      const storedDate = typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem('portfolio_open_date')
-        : null;
-
-      if (stored && storedDate === today) {
-        const openValue = parseFloat(stored);
-        if (openValue > 0) {
-          const valueChange = currentValue - openValue;
-          const pct = (valueChange / openValue) * 100;
-          return {
-            daily: {
-              period: 'Günlük',
-              value: currentValue,
-              change: isFinite(valueChange) ? valueChange : 0,
-              percentage: isFinite(pct) ? pct : 0,
-            },
-            weekly: { period: 'Haftalık', ...weeklyResult },
-            monthly: { period: 'Aylık', ...monthlyResult },
-          };
-        }
-      }
-    }
-
+    // NOTE: a previous intraday fallback here read 'portfolio_open_value' from
+    // sessionStorage and reported (currentValue - openValue) as the daily gain.
+    // It was both dead (the writer stores the value under 'portfolio_open_value_v2',
+    // so the key never matched) and wrong (a raw value delta counts intraday
+    // deposits as gain). Intraday change is handled correctly by
+    // computeIntradayChange in PortfolioContext; here we always use the
+    // deposit-aware computePeriodChange result.
     return {
       daily: { period: 'Günlük', ...dailyResult },
       weekly: { period: 'Haftalık', ...weeklyResult },
@@ -316,23 +281,32 @@ export interface AdvancedMetrics {
   alpha: number;
 }
 
-export async function calculateSharpeRatio(riskFreeRate: number = 0.15): Promise<number> {
-  const snapshots = await getHistoricalSnapshots(365);
-  if (snapshots.length < 2) return 0;
-
+// Deposit-adjusted daily returns. The portfolio receives regular external
+// deposits (e.g. weekly buys); a raw (curr-prev)/prev return would count that
+// new money as performance and inflate every return-based metric. Here we strip
+// the net cash flow (deposits in, withdrawals out) of each period.
+function depositAdjustedDailyReturns(snapshots: PortfolioSnapshot[]): number[] {
   const returns: number[] = [];
   for (let i = 1; i < snapshots.length; i++) {
     const prevValue = snapshots[i - 1].total_value;
     const currValue = snapshots[i].total_value;
-
     if (prevValue <= 0) continue;
-
-    const dailyReturn = (currValue - prevValue) / prevValue;
-
+    const cashFlow =
+      ((snapshots[i].total_deposits ?? 0) - (snapshots[i - 1].total_deposits ?? 0)) -
+      ((snapshots[i].total_withdrawals ?? 0) - (snapshots[i - 1].total_withdrawals ?? 0));
+    const dailyReturn = (currValue - prevValue - cashFlow) / prevValue;
     if (!isNaN(dailyReturn) && isFinite(dailyReturn)) {
       returns.push(dailyReturn);
     }
   }
+  return returns;
+}
+
+export async function calculateSharpeRatio(riskFreeRate: number = 0.15): Promise<number> {
+  const snapshots = await getHistoricalSnapshots(365);
+  if (snapshots.length < 2) return 0;
+
+  const returns = depositAdjustedDailyReturns(snapshots);
 
   if (returns.length < 2) return 0;
 
@@ -353,18 +327,20 @@ export async function calculateMaxDrawdown(): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
+  // Measure drawdown on the deposit-adjusted return index, not raw value — a
+  // deposit raises value without any gain and would otherwise reset the peak
+  // and mask real drawdowns.
+  const returns = depositAdjustedDailyReturns(snapshots);
+  if (returns.length < 1) return 0;
+
   let maxDrawdown = 0;
-  let peak = snapshots[0].total_value;
-
-  if (peak <= 0) return 0;
-
-  for (const snapshot of snapshots) {
-    if (snapshot.total_value > peak) {
-      peak = snapshot.total_value;
-    }
-
+  let peak = 1;
+  let idx = 1;
+  for (const r of returns) {
+    idx *= 1 + r;
+    if (idx > peak) peak = idx;
     if (peak > 0) {
-      const drawdown = (peak - snapshot.total_value) / peak;
+      const drawdown = (peak - idx) / peak;
       if (drawdown > maxDrawdown && isFinite(drawdown)) {
         maxDrawdown = drawdown;
       }
@@ -378,19 +354,7 @@ export async function calculateVolatility(): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
-  const returns: number[] = [];
-  for (let i = 1; i < snapshots.length; i++) {
-    const prevValue = snapshots[i - 1].total_value;
-    const currValue = snapshots[i].total_value;
-
-    if (prevValue <= 0) continue;
-
-    const dailyReturn = (currValue - prevValue) / prevValue;
-
-    if (!isNaN(dailyReturn) && isFinite(dailyReturn)) {
-      returns.push(dailyReturn);
-    }
-  }
+  const returns = depositAdjustedDailyReturns(snapshots);
 
   if (returns.length < 2) return 0;
 
@@ -406,13 +370,23 @@ export async function calculateCAGR(): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
-  const firstValue = snapshots[0].total_value;
-  const lastValue = snapshots[snapshots.length - 1].total_value;
-  const years = snapshots.length / 365;
+  // CAGR must be a return, not a money-growth figure. A naive lastValue/firstValue
+  // would be dominated by the new money deposited over the window. Instead we
+  // compound the deposit-adjusted daily returns (true time-weighted growth) and
+  // annualize over the ACTUAL elapsed calendar span (not snapshots.length/365,
+  // which assumes one gap-free snapshot per day).
+  const returns = depositAdjustedDailyReturns(snapshots);
+  if (returns.length < 1) return 0;
 
-  if (firstValue <= 0 || years <= 0 || lastValue < 0) return 0;
+  const firstDate = new Date(snapshots[0].date).getTime();
+  const lastDate = new Date(snapshots[snapshots.length - 1].date).getTime();
+  const years = (lastDate - firstDate) / (365.25 * 86400000);
+  if (years <= 0) return 0;
 
-  const cagr = (Math.pow(lastValue / firstValue, 1 / years) - 1) * 100;
+  const totalGrowth = returns.reduce((acc, r) => acc * (1 + r), 1);
+  if (totalGrowth <= 0) return 0;
+
+  const cagr = (Math.pow(totalGrowth, 1 / years) - 1) * 100;
   return isFinite(cagr) ? cagr : 0;
 }
 

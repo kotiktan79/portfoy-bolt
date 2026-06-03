@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { sendTelegram } from '../lib/telegram.js';
+import { requireCronAuth } from '../lib/auth.js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -37,10 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Verify cron secret (optional but recommended)
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (requireCronAuth(req, res)) return;
 
   const startTime = Date.now();
   const log: string[] = [];
@@ -75,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Eskiden || 45 / || 51 hardcoded fallback vardı — USD holding silindiği gün
     // snapshot'lar 45 ile yazılır, sonra 32 ile yazılır → sahte ₺13M sıçraması.
     const usdHolding = allHoldings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
-    const eurHolding = allHoldings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const eurHolding = allHoldings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
     const usdFromHolding = Number(usdHolding?.current_price) || 0;
     const eurFromHolding = Number(eurHolding?.current_price) || 0;
     const usdRateForTotal = usdFromHolding > 1 ? usdFromHolding : await fetchUsdTry();
@@ -283,7 +281,7 @@ async function updateAllPrices(supabase: any, holdings: any[], log: string[]): P
     promises.push(updateCommodityPrices(supabase, byType.commodity, result, log));
   }
   if (byType.fund) {
-    promises.push(updateFundPrices(supabase, byType.fund, result, log));
+    promises.push(updateFundPrices(supabase, byType.fund, result));
   }
   if (byType.eurobond) {
     promises.push(updateEurobondPrices(supabase, byType.eurobond, result, log));
@@ -580,7 +578,7 @@ async function updateCommodityPrices(supabase: any, holdings: any[], result: Pri
   }
 }
 
-async function updateFundPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
+async function updateFundPrices(supabase: any, holdings: any[], result: PriceResult) {
   // Fonlar genellikle manual_price — sadece Yahoo'da olanları güncelle
   for (const h of holdings) {
     if (h.manual_price) {

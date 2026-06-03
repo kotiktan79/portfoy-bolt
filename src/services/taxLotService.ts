@@ -1,5 +1,6 @@
 import { supabase, Holding } from '../lib/supabase';
 import { Transaction } from './transactionService';
+import { getFxRatesFromHoldings, fxToTRY } from '../lib/fx';
 
 export interface ClosedLot {
   symbol: string;
@@ -33,14 +34,20 @@ export interface OpenLot {
 export interface SymbolPnLSummary {
   symbol: string;
   assetType: string;
+  currency: string;
   closedLots: ClosedLot[];
   openLots: OpenLot[];
-  totalRealizedPnl: number;
-  totalUnrealizedPnl: number;
+  totalRealizedPnl: number;       // in the symbol's own currency
+  totalUnrealizedPnl: number;     // in the symbol's own currency
+  totalRealizedPnlTRY: number;    // FX-converted to TRY
+  totalUnrealizedPnlTRY: number;  // FX-converted to TRY
   remainingQuantity: number;
   averageCostBasis: number;
 }
 
+// Report-level totals are denominated in TRY (a single base) — per-symbol PnL
+// is computed in each holding's own currency, so summing them raw would add
+// dollars to lira. Everything aggregated here is FX-converted first.
 export interface RealizedPnLReport {
   symbols: SymbolPnLSummary[];
   totalRealized: number;
@@ -145,6 +152,7 @@ export async function computeRealizedPnL(): Promise<RealizedPnLReport> {
     txByHolding.get(tx.holding_id)!.push(tx);
   }
 
+  const fxRates = getFxRatesFromHoldings(holdings);
   const symbols: SymbolPnLSummary[] = [];
   const today = new Date();
   const yearStart = new Date(today.getFullYear(), 0, 1).toISOString();
@@ -176,28 +184,44 @@ export async function computeRealizedPnL(): Promise<RealizedPnLReport> {
     const totalUnrealizedPnl = remainingQuantity * (h.current_price || 0) - totalCost;
     const averageCostBasis = remainingQuantity > 0 ? totalCost / remainingQuantity : 0;
 
+    const currency = (h.currency || 'TRY').toUpperCase();
+    const toTRY = (v: number) => fxToTRY(v, currency, fxRates);
+
     symbols.push({
       symbol: h.symbol,
       assetType: h.asset_type,
+      currency,
       closedLots: closed.sort((a, b) => new Date(b.sellDate).getTime() - new Date(a.sellDate).getTime()),
       openLots,
       totalRealizedPnl,
       totalUnrealizedPnl,
+      totalRealizedPnlTRY: toTRY(totalRealizedPnl),
+      totalUnrealizedPnlTRY: toTRY(totalUnrealizedPnl),
       remainingQuantity,
       averageCostBasis,
     });
   }
 
-  const allClosed = symbols.flatMap(s => s.closedLots);
-  const ytdClosed = allClosed.filter(l => l.sellDate >= yearStart);
+  // Aggregate in TRY. ytd* sums need each lot converted by its symbol's FX rate,
+  // so map lots back to their owning symbol's currency.
+  const ytdRealizedTRY = (filter: (l: ClosedLot) => boolean): number =>
+    symbols.reduce((s, sym) => {
+      const rate = fxToTRY(1, sym.currency, fxRates);
+      const ytd = sym.closedLots
+        .filter(l => l.sellDate >= yearStart && filter(l))
+        .reduce((acc, l) => acc + l.realizedPnl, 0);
+      return s + ytd * rate;
+    }, 0);
+
+  const closedLotsCount = symbols.reduce((s, sym) => s + sym.closedLots.length, 0);
 
   return {
-    symbols: symbols.sort((a, b) => Math.abs(b.totalRealizedPnl) - Math.abs(a.totalRealizedPnl)),
-    totalRealized: allClosed.reduce((s, l) => s + l.realizedPnl, 0),
-    totalUnrealized: symbols.reduce((s, sym) => s + sym.totalUnrealizedPnl, 0),
-    yearToDateRealized: ytdClosed.reduce((s, l) => s + l.realizedPnl, 0),
-    ytdLongTerm: ytdClosed.filter(l => l.isLongTerm).reduce((s, l) => s + l.realizedPnl, 0),
-    ytdShortTerm: ytdClosed.filter(l => !l.isLongTerm).reduce((s, l) => s + l.realizedPnl, 0),
-    closedLotsCount: allClosed.length,
+    symbols: symbols.sort((a, b) => Math.abs(b.totalRealizedPnlTRY) - Math.abs(a.totalRealizedPnlTRY)),
+    totalRealized: symbols.reduce((s, sym) => s + sym.totalRealizedPnlTRY, 0),
+    totalUnrealized: symbols.reduce((s, sym) => s + sym.totalUnrealizedPnlTRY, 0),
+    yearToDateRealized: ytdRealizedTRY(() => true),
+    ytdLongTerm: ytdRealizedTRY(l => l.isLongTerm),
+    ytdShortTerm: ytdRealizedTRY(l => !l.isLongTerm),
+    closedLotsCount,
   };
 }

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { requireCronAuth } from '../lib/auth.js';
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -18,10 +19,7 @@ interface Alert {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (requireCronAuth(req, res)) return;
 
   try {
     const supabase = getSupabase();
@@ -35,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // FX-aware: USD/EUR pozisyonları TRY'ye çevir (EURO ₺2M, USD ₺1.5M, ASML/JNJ vb.)
     const usdH = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
-    const eurH = holdings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const eurH = holdings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
     const usdRate = Number(usdH?.current_price) > 1 ? Number(usdH.current_price) : 45;
     const eurRate = Number(eurH?.current_price) > 1 ? Number(eurH.current_price) : 51;
     const fxOf = (c: string) => {
@@ -49,7 +47,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (Number(h[field]) || 0) * (Number(h.quantity) || 0) * fxOf(h.currency); // fx-ok: valTRY helper
 
     const totalValue = holdings.reduce((s, h) => s + valTRY(h), 0);
-    const totalInvestment = holdings.reduce((s, h) => s + valTRY(h, 'purchase_price'), 0);
 
     // 2. Dünkü snapshot ile karşılaştır → portföy düşüşü
     const today = new Date().toISOString().split('T')[0];

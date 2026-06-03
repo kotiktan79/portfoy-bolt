@@ -2,10 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { sendEmail, buildDailyEmail } from '../lib/email.js';
 import { sendTelegram, buildDailyTelegram } from '../lib/telegram.js';
+import { requireCronAuth } from '../lib/auth.js';
 
 // Kullanıcı maaş hedefi — env ile override edilebilir
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
-const SALARY_STRATEGY = process.env.SALARY_STRATEGY || 'total_return'; // total_return|growth|income
 // "Total Return" hedef allokasyon: gelir + büyüme + denge.
 // Maaş = mevcut temettü/kupon + kâra geçmiş hisseden trim. Sermaye uzun vadede büyür.
 const TARGET_ALLOCATION = {
@@ -29,10 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (requireCronAuth(req, res)) return;
 
   const startTime = Date.now();
   const log: string[] = [];
@@ -66,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // FX kurları — holdings'teki USD/EUR pozisyonlarından; yoksa live API.
     // Eski hardcode || 45 / || 51, USD holding silindiğinde snapshot poisoning'e yol açıyordu.
     const usdHolding = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
-    const eurHolding = holdings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const eurHolding = holdings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
     const usdFromHolding = Number(usdHolding?.current_price) || 0;
     const eurFromHolding = Number(eurHolding?.current_price) || 0;
     const usdRate = usdFromHolding > 1 ? usdFromHolding : await fetchLiveRate('USD');

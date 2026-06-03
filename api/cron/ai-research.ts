@@ -2,6 +2,7 @@
 // Portföy + makro + web search → Claude → JSON rapor + öneriler → DB
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { hasCronAuth } from '../lib/auth.js';
 
 // Vercel function timeout — Claude + web search 30-60s sürebilir
 export const config = {
@@ -96,10 +97,14 @@ async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  // This endpoint is intentionally reachable without CRON_SECRET because it is
+  // the manual "Research" button (there is no scheduled cron for it). To keep
+  // it from being a public Claude-spend faucet we bound the cost: an
+  // unauthenticated caller can only ever trigger ONE generation per day — once
+  // today's report exists, every further unauthenticated hit returns the cached
+  // report without calling Claude. Forced regeneration requires CRON_SECRET.
+  const authorized = hasCronAuth(req);
+  const force = authorized && (req.query?.force === 'true' || req.query?.force === '1');
 
   const startTime = Date.now();
   const log: string[] = [];
@@ -108,6 +113,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getSupabase();
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) return res.status(200).json({ success: false, error: 'ANTHROPIC_API_KEY missing' });
+
+    // Cost guard: return today's cached report instead of calling Claude again,
+    // unless an authenticated caller explicitly forces regeneration.
+    if (!force) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const { data: cached } = await supabase
+        .from('ai_research_reports')
+        .select('id, report_date, headline')
+        .eq('report_date', todayStr)
+        .maybeSingle();
+      if (cached?.id) {
+        return res.status(200).json({
+          success: true,
+          cached: true,
+          report_id: cached.id,
+          report_date: cached.report_date,
+          headline: cached.headline,
+          note: 'Report for today already exists; returned from cache. Pass ?force=true with CRON_SECRET to regenerate.',
+        });
+      }
+    }
 
     // 1. Portföy verisi
     const [holdingsRes, snapshotsRes, cashRes, prevRecsRes] = await Promise.all([
@@ -124,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 2. FX ve değer hesabı
     const usdH = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
-    const eurH = holdings.find((h: any) => h.symbol === 'EURO' && h.asset_type === 'currency');
+    const eurH = holdings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
     const usd = Number(usdH?.current_price) || 45;
     const eur = Number(eurH?.current_price) || 51;
     const fx = (c: string) => {
