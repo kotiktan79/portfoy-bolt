@@ -1,18 +1,17 @@
 /*
-  OPTIONAL — NOT a migration, does NOT run automatically.
+  # Drop 15 unused tables
 
-  These 15 tables exist in the schema but have ZERO references in the app
-  (verified across src/ and api/ on 2026-06-04). They are speculative/abandoned
-  features. Dropping them is DESTRUCTIVE and IRREVERSIBLE — any data they hold is
-  lost. This file lives outside supabase/migrations/ on purpose so `supabase db
-  reset/push` never executes it.
-
-  To apply: review, then run manually in the Supabase Dashboard SQL Editor (or
-  `psql`). Take a backup first. Remove CASCADE if you want it to fail instead of
-  silently dropping any dependent objects.
+  These 15 tables had ZERO references in the app (verified across src/ and api/
+  on 2026-06-04) — speculative/abandoned features. On the live DB only 5 of them
+  actually existed (ai_suggestions, email_alerts, leaderboard, portfolio_shares,
+  user_preferences), all with 0 rows; the other 10 were defined in migrations but
+  never materialised on the remote (schema drift). This was applied to the live
+  project via the Management API on 2026-06-04 with zero data loss; kept here as a
+  tracked migration so fresh `db reset` converges to the same state. IF EXISTS +
+  CASCADE make it idempotent and safe to re-run.
 
   Notable: `binance_api_keys` was designed to store api_key/api_secret as plain
-  text (comment says "encrypted" but nothing encrypts them); dropping it removes
+  text (comment said "encrypted" but nothing encrypted them); dropping it removes
   that latent secret-exposure surface.
 
   Intentionally NOT dropped:
