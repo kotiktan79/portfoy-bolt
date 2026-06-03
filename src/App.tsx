@@ -4,6 +4,7 @@ import { PortfolioProvider } from './contexts/PortfolioContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Layout from './components/Layout';
+import AuthGate from './components/AuthGate';
 
 // Lazy load all pages for optimal bundle splitting
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -45,6 +46,7 @@ function SafePage({ children }: { children: ReactNode }) {
 function App() {
   return (
     <BrowserRouter>
+      <AuthGate>
       <LanguageProvider>
       <PortfolioProvider>
         <Routes>
@@ -61,6 +63,7 @@ function App() {
         </Routes>
       </PortfolioProvider>
       </LanguageProvider>
+      </AuthGate>
     </BrowserRouter>
   );
 }
