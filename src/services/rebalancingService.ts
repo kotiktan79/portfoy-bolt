@@ -459,7 +459,10 @@ export async function executeRebalancing(
             transaction_type: 'sell',
             quantity: trade.shares,
             price: trade.current_price,
-            total_amount: trade.amount,
+            // total_amount must be in the SAME currency as `price` (native, e.g.
+            // EUR for IB01) so the row is internally consistent — trade.amount is
+            // TRY and would mismatch price*quantity for non-TRY holdings.
+            total_amount: trade.shares * trade.current_price,
             transaction_date: new Date().toISOString(),
             notes: `Rebalancing: ${trade.reason}`,
           },
