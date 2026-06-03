@@ -130,29 +130,42 @@ function calculateRSI(prices: number[], period: number = 14): number {
   return rsi;
 }
 
-function calculateMACD(prices: number[]): { value: number; signal: number; histogram: number } {
-  const ema12 = calculateEMA(prices, 12);
-  const ema26 = calculateEMA(prices, 26);
-  const macdLine = ema12 - ema26;
-
-  const macdValues = [macdLine];
-  const signal = calculateEMA(macdValues, 9);
-  const histogram = macdLine - signal;
-
-  return { value: macdLine, signal, histogram };
+// Full-series EMA: NaN warm-up for the first (period-1) bars, then seeded with
+// the SMA of the first `period` values. Needed so MACD's signal line is a real
+// 9-period EMA of the MACD series.
+function emaSeries(values: number[], period: number): number[] {
+  const out: number[] = [];
+  if (values.length === 0) return out;
+  const k = 2 / (period + 1);
+  if (values.length < period) {
+    let e = values[0];
+    out.push(e);
+    for (let i = 1; i < values.length; i++) { e = (values[i] - e) * k + e; out.push(e); }
+    return out;
+  }
+  for (let i = 0; i < period - 1; i++) out.push(NaN);
+  let e = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  out.push(e);
+  for (let i = period; i < values.length; i++) { e = (values[i] - e) * k + e; out.push(e); }
+  return out;
 }
 
-function calculateEMA(prices: number[], period: number): number {
-  if (prices.length < period) return prices[prices.length - 1];
-
-  const multiplier = 2 / (period + 1);
-  let ema = calculateSMA(prices.slice(0, period), period);
-
-  for (let i = period; i < prices.length; i++) {
-    ema = (prices[i] - ema) * multiplier + ema;
-  }
-
-  return ema;
+function calculateMACD(prices: number[]): { value: number; signal: number; histogram: number } {
+  const ema12 = emaSeries(prices, 12);
+  const ema26 = emaSeries(prices, 26);
+  // MACD line as a SERIES over history (so the signal line is a real 9-EMA of it).
+  // The old code built the signal from a single-element array, which made
+  // calculateEMA return the MACD line itself → histogram was ALWAYS 0, silently
+  // disabling the MACD buy/sell condition downstream.
+  const macdSeries = prices
+    .map((_, i) => ema12[i] - ema26[i])
+    .filter((v) => !isNaN(v));
+  if (macdSeries.length === 0) return { value: 0, signal: 0, histogram: 0 };
+  const signalSeries = emaSeries(macdSeries, 9);
+  const value = macdSeries[macdSeries.length - 1];
+  const signalRaw = signalSeries[signalSeries.length - 1];
+  const signal = isNaN(signalRaw) ? value : signalRaw;
+  return { value, signal, histogram: value - signal };
 }
 
 function calculateSMA(prices: number[], period: number): number {

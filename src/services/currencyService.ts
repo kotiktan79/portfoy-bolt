@@ -11,6 +11,24 @@ export interface ExchangeRate {
 const rateCache = new Map<string, { rate: number; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000;
 
+// Approximate last-resort rates vs TRY, used ONLY when both the DB and the live
+// API have no value. Deliberately coarse, but prevents the catastrophic 1.0
+// fallback that would treat e.g. 200,000 RUB as 200,000 TRY. Cross rates are
+// derived through TRY. Not cached, so a real rate is used as soon as it returns.
+const FALLBACK_TRY: Record<string, number> = {
+  USD: 45, USDC: 45, USDT: 45, EUR: 53, GBP: 62, CHF: 58, RON: 10, RUB: 0.63,
+};
+
+function fallbackRate(from: string, to: string): number | null {
+  const f = from.toUpperCase();
+  const t = to.toUpperCase();
+  if (f === t) return 1;
+  if (t === 'TRY' && FALLBACK_TRY[f]) return FALLBACK_TRY[f];
+  if (f === 'TRY' && FALLBACK_TRY[t]) return 1 / FALLBACK_TRY[t];
+  if (FALLBACK_TRY[f] && FALLBACK_TRY[t]) return FALLBACK_TRY[f] / FALLBACK_TRY[t];
+  return null;
+}
+
 export async function getExchangeRate(from: string, to: string): Promise<number> {
   if (from === to) return 1;
 
@@ -45,11 +63,21 @@ export async function getExchangeRate(from: string, to: string): Promise<number>
       return fetchedRate;
     }
 
-    console.error(`[FX] No rate found for ${from}→${to} — falling back to 1.0 (DANGEROUS: ${from} treated as ${to})`);
-    return 1;
+    const fb = fallbackRate(from, to);
+    if (fb !== null) {
+      console.warn(`[FX] No rate for ${from}→${to} — using approximate fallback ${fb} (not cached)`);
+      return fb;
+    }
+    console.error(`[FX] No rate and no fallback for ${from}→${to} — returning 0 (excluded from totals, never treated 1:1)`);
+    return 0;
   } catch (error) {
-    console.error(`[FX] Error fetching ${from}→${to}:`, error, '— falling back to 1.0 (DANGEROUS)');
-    return 1;
+    const fb = fallbackRate(from, to);
+    if (fb !== null) {
+      console.warn(`[FX] Error fetching ${from}→${to}:`, error, `— using approximate fallback ${fb}`);
+      return fb;
+    }
+    console.error(`[FX] Error fetching ${from}→${to}:`, error, '— returning 0 (excluded, never 1:1)');
+    return 0;
   }
 }
 
@@ -212,9 +240,13 @@ export function detectCurrency(symbol: string, assetType: string): string {
   }
 
   if (assetType === 'stock') {
-    if (upperSymbol.match(/^[A-Z]{3,5}$/)) {
-      return 'TRY';
-    }
+    // Known non-TRY tickers; everything else (incl. BIST 4-5 letter tickers) is
+    // TRY-denominated. Previously ALL stocks defaulted to TRY, so a USD-priced US
+    // stock (added without an explicit currency) was undervalued ~45×.
+    const KNOWN_EUR = ['ASML', 'V3YL'];
+    const KNOWN_US = ['JNJ', 'AAPL', 'MSFT', 'GOOGL', 'NVDA', 'AMZN', 'META', 'TSLA', 'KO', 'PEP', 'PG', 'WMT', 'JPM', 'V', 'MCD', 'O', 'SCHD', 'VYM', 'VIG', 'HDV'];
+    if (KNOWN_EUR.includes(upperSymbol)) return 'EUR';
+    if (KNOWN_US.includes(upperSymbol)) return 'USD';
     return 'TRY';
   }
 

@@ -43,7 +43,8 @@ export async function updateCashBalance(
   amount: number,
   transactionType: TransactionType,
   notes?: string,
-  relatedHoldingId?: string
+  relatedHoldingId?: string,
+  realizedDelta: number = 0
 ): Promise<boolean> {
   try {
     if (amount < 0 || !isFinite(amount)) {
@@ -80,6 +81,10 @@ export async function updateCashBalance(
         break;
       case 'sell':
         balanceAfter = balanceBefore + amount;
+        // Capital gain on the sale counts as realized income (the caller passes
+        // proceeds − cost basis). Previously sells left realized_profit untouched,
+        // so it only ever reflected dividends — understating realized income.
+        realizedProfit += realizedDelta;
         break;
       case 'dividend':
         balanceAfter = balanceBefore + amount;
@@ -161,7 +166,7 @@ export async function getTotalCashValue(): Promise<number> {
     const ratePromises = data.map(balance =>
       balance.currency === 'TRY'
         ? Promise.resolve(1)
-        : getExchangeRate(balance.currency, 'TRY').then(r => r || 1)
+        : getExchangeRate(balance.currency, 'TRY')
     );
     const rates = await Promise.all(ratePromises);
 
@@ -199,7 +204,7 @@ export async function getAllCashBalanceTotals(): Promise<{
     const ratePromises = cashBalances.map(cb =>
       cb.currency === 'TRY'
         ? Promise.resolve(1)
-        : getExchangeRate(cb.currency, 'TRY').then(r => r || 1)
+        : getExchangeRate(cb.currency, 'TRY')
     );
     const rates = await Promise.all(ratePromises);
 

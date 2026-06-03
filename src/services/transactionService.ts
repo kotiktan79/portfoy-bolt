@@ -187,11 +187,17 @@ export function calculateAverageCost(transactions: Transaction[]): number {
 }
 
 export function calculateRealizedPnL(transactions: Transaction[]): number {
-  const buyTransactions = transactions.filter((t) => t.transaction_type === 'buy');
   const sellTransactions = transactions.filter((t) => t.transaction_type === 'sell');
+  if (sellTransactions.length === 0) return 0;
 
-  const totalBuyCost = buyTransactions.reduce((sum, t) => sum + t.total_amount + t.fee, 0);
+  // Average-cost realized PnL: only the cost basis of the shares ACTUALLY SOLD
+  // is realized. The previous version subtracted the FULL buy cost from sell
+  // revenue, which understated realized PnL for any partial sell (cost of shares
+  // still held leaked into the realized figure). (taxLotService does the FIFO
+  // variant; this is the average-cost variant, consistent with calculateAverageCost.)
+  const avgCost = calculateAverageCost(transactions);
+  const soldQuantity = sellTransactions.reduce((sum, t) => sum + t.quantity, 0);
   const totalSellRevenue = sellTransactions.reduce((sum, t) => sum + t.total_amount - t.fee, 0);
 
-  return totalSellRevenue - totalBuyCost;
+  return totalSellRevenue - avgCost * soldQuantity;
 }

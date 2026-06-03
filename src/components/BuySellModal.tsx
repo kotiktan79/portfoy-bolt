@@ -103,7 +103,8 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
 
         await updateCashBalance('TRY', totalWithFee, 'sell',
           `${holding.symbol} satış - ${quantity} adet x ${price} ₺ (Kar/Zarar: ${realizedProfit.toFixed(2)} ₺)`,
-          holding.id
+          holding.id,
+          realizedProfit
         );
 
         const { error: profitError } = await supabase

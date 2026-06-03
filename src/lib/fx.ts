@@ -17,8 +17,11 @@ export function getFxRatesFromHoldings(holdings: Holding[]): FxRates {
   const eurH = holdings.find(h => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
   const gbpH = holdings.find(h => h.symbol === 'GBP' && h.asset_type === 'currency');
   const usd = (usdH?.current_price && usdH.current_price > 1) ? usdH.current_price : DEFAULT_USD_TRY_RATE;
-  const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : usd * 1.08;
-  const gbp = gbpH?.current_price && gbpH.current_price > 1 ? gbpH.current_price : usd * 1.27;
+  // Fallbacks (only when no currency-cash holding exists) derive from USD via an
+  // approximate cross rate. EUR/USD≈1.16 and GBP/USD≈1.35 as of 2026 — the old
+  // 1.08 EUR peg under-valued EUR holdings (~41 vs real ~53 TRY).
+  const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : usd * 1.16;
+  const gbp = gbpH?.current_price && gbpH.current_price > 1 ? gbpH.current_price : usd * 1.35;
   return { usd, eur, gbp };
 }
 

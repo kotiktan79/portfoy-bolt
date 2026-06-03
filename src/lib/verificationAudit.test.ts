@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { computeRiskMetrics } from '../services/riskMetricsService';
 import { generateRebalancingTrades, Holding } from '../services/rebalancingService';
 import { fxToTRY, holdingValueTRY, getFxRatesFromHoldings } from './fx';
+import { calculateRealizedPnL } from '../services/transactionService';
 
 /*
   Known-answer verification for the recently-changed calculation logic that had
@@ -67,6 +68,22 @@ describe('fx: real IB01 EUR holding converts to TRY correctly', () => {
   it('fxToTRY round-trips through EUR rate', () => {
     expect(fxToTRY(100, 'EUR', rates)).toBeCloseTo(5346.44, 2);
     expect(fxToTRY(100, 'TRY', rates)).toBe(100);
+  });
+});
+
+describe('transactionService: realized PnL on partial sell (average-cost)', () => {
+  // buy 10@100 + buy 10@200 → avgCost 150. Sell 5@300 → realized = 1500 - 150*5 = 750.
+  // Old (buggy) full-buy-cost method gave 1500 - 3000 = -1500.
+  const txs = [
+    { transaction_type: 'buy', quantity: 10, price: 100, total_amount: 1000, fee: 0, transaction_date: '2026-01-01' },
+    { transaction_type: 'buy', quantity: 10, price: 200, total_amount: 2000, fee: 0, transaction_date: '2026-01-02' },
+    { transaction_type: 'sell', quantity: 5, price: 300, total_amount: 1500, fee: 0, transaction_date: '2026-01-03' },
+  ] as never[];
+  it('only the cost basis of SOLD shares is realized (= 750, not -1500)', () => {
+    expect(calculateRealizedPnL(txs)).toBeCloseTo(750, 6);
+  });
+  it('no sells → 0', () => {
+    expect(calculateRealizedPnL([txs[0]])).toBe(0);
   });
 });
 
