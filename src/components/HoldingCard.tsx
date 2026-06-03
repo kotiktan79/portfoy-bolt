@@ -50,8 +50,8 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const currency = (holding as any).currency || detectCurrency(holding.symbol, holding.asset_type);
-      const purchaseCurrency = (holding as any).purchase_currency || currency;
+      const currency = holding.currency || detectCurrency(holding.symbol, holding.asset_type);
+      const purchaseCurrency = holding.purchase_currency || currency;
       const result = await calculatePnLWithCurrency(
         holding.purchase_price, purchaseCurrency,
         holding.current_price, currency,

@@ -35,8 +35,8 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
     }
 
     (async () => {
-      const currency = (holding as any).currency || detectCurrency(holding.symbol, holding.asset_type);
-      const purchaseCurrency = (holding as any).purchase_currency || currency;
+      const currency = holding.currency || detectCurrency(holding.symbol, holding.asset_type);
+      const purchaseCurrency = holding.purchase_currency || currency;
       const result = await calculatePnLWithCurrency(
         holding.purchase_price, purchaseCurrency,
         holding.current_price, currency,
@@ -199,9 +199,9 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             <span className="text-xs text-brand-600 dark:text-brand-400">
               ${formatCurrencyUSD(pnlData.currentValue, usdRate)}
             </span>
-            {((holding as any).currency && (holding as any).currency !== 'TRY') && (
+            {(holding.currency && holding.currency !== 'TRY') && (
               <span className="text-[10px] text-brand-600">
-                {getCurrencySymbol((holding as any).currency)} bazlı
+                {getCurrencySymbol(holding.currency)} bazlı
               </span>
             )}
           </div>

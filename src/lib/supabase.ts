@@ -20,6 +20,7 @@ export interface Holding {
   quantity: number;
   current_price: number;
   currency?: string;
+  purchase_currency?: string;
   source?: string;
   portfolio_id?: string;
   manual_price?: boolean;

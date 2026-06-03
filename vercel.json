@@ -7,7 +7,7 @@
     "silent": true
   },
   "rewrites": [
-    { "source": "/((?!assets|dashboard|sw|manifest|favicon).*)", "destination": "/index.html" }
+    { "source": "/((?!assets|sw|manifest|favicon).*)", "destination": "/index.html" }
   ],
   "crons": [
     {

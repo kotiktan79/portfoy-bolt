@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
@@ -14,16 +13,16 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   build: {
+    chunkSizeWarningLimit: 900,
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        dashboard: resolve(__dirname, 'dashboard.html'),
-      },
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-charts': ['recharts'],
-          'vendor-utils': ['date-fns', 'html2canvas', 'jspdf'],
+          'vendor-tremor': ['@tremor/react'],
+          'vendor-motion': ['framer-motion'],
+          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas'],
+          'vendor-utils': ['date-fns'],
         },
       },
     },

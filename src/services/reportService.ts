@@ -111,8 +111,8 @@ export async function triggerDailyReport(): Promise<{ success: boolean; error?: 
     const res = await fetch('/api/cron/daily-report', { method: 'POST' });
     const data = await res.json();
     return { success: data.success, error: data.error };
-  } catch (e: any) {
-    return { success: false, error: e.message };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -122,7 +122,7 @@ export async function triggerDailySnapshot(): Promise<{ success: boolean; error?
     const res = await fetch('/api/cron/daily-snapshot', { method: 'POST' });
     const data = await res.json();
     return { success: data.success, error: data.error };
-  } catch (e: any) {
-    return { success: false, error: e.message };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
