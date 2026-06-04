@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { X, Target, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Zap, Shield, DollarSign } from 'lucide-react';
-import { AssetAllocation } from '../services/analyticsService';
+import { AssetAllocation, getDefaultTargetAllocations } from '../services/analyticsService';
 import { formatCurrency, formatPercentage } from '../services/priceService';
 
 interface RebalanceModalProps {
@@ -14,12 +14,16 @@ type RebalanceStrategy = 'custom' | 'conservative' | 'balanced' | 'aggressive' |
 export function RebalanceModal({ allocations, onClose, onUpdateTargets }: RebalanceModalProps) {
   const [strategy, setStrategy] = useState<RebalanceStrategy>('custom');
   const [rebalanceThreshold, setRebalanceThreshold] = useState(5);
-  const [targets, setTargets] = useState<Record<string, number>>(
-    allocations.reduce((acc, a) => {
-      acc[a.asset_type] = a.target_percentage;
-      return acc;
-    }, {} as Record<string, number>)
-  );
+  // Seed targets from the canonical default (all asset classes) so a class the
+  // user TARGETS but doesn't currently hold still appears and is rebalanced —
+  // calculateRebalance only emits rows for held holdings, so seeding purely from
+  // `allocations` would truncate targets to held types (totals then wouldn't
+  // sum to 100 / wouldn't balance). Held types override with their actual target.
+  const [targets, setTargets] = useState<Record<string, number>>(() => {
+    const seeded: Record<string, number> = { ...getDefaultTargetAllocations() };
+    allocations.forEach((a) => { seeded[a.asset_type] = a.target_percentage; });
+    return seeded;
+  });
 
   const totalTarget = Object.values(targets).reduce((sum, val) => sum + val, 0);
   const totalPortfolioValue = allocations.reduce((sum, a) => sum + a.value, 0);
@@ -95,28 +99,36 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
           type: allocation.asset_type,
           currentValue: 0,
           currentPercentage: 0,
-          rebalanceAmount: 0,
           assets: [],
         };
       }
       acc[allocation.asset_type].currentValue += allocation.value;
       acc[allocation.asset_type].currentPercentage += allocation.percentage;
-      acc[allocation.asset_type].rebalanceAmount += allocation.rebalance_amount;
+      // NOTE: allocation.rebalance_amount is per-holding and applies the whole
+      // type target to each holding, so summing it would multiply the target by
+      // the holding count. The correct type-level figure is computed below in
+      // rebalanceAnalysis (targetValue - currentValue); this field is dropped.
       acc[allocation.asset_type].assets.push(allocation);
       return acc;
     }, {} as Record<string, any>);
   }, [allocations]);
 
   const rebalanceAnalysis = useMemo(() => {
-    const actions = Object.values(assetTypeGroups).map((group: any) => {
+    // Build the action set from the UNION of target types and held types, so a
+    // type the user TARGETS but doesn't currently hold (currentValue 0) still
+    // produces a buy row — otherwise its required buy is silently omitted and
+    // totalBuy/totalSell don't balance.
+    const allTypes = Array.from(new Set([...Object.keys(targets), ...Object.keys(assetTypeGroups)]));
+    const actions = allTypes.map((type) => {
+      const group = assetTypeGroups[type] || { currentValue: 0, currentPercentage: 0 };
       const currentPct = group.currentPercentage;
-      const targetPct = targets[group.type] || 0;
+      const targetPct = targets[type] || 0;
       const deviation = Math.abs(currentPct - targetPct);
       const targetValue = (totalPortfolioValue * targetPct) / 100;
       const difference = targetValue - group.currentValue;
 
       return {
-        type: group.type,
+        type,
         currentValue: group.currentValue,
         currentPct,
         targetPct,
@@ -129,7 +141,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
 
     const totalBuy = actions.filter(a => a.difference > 0).reduce((sum, a) => sum + a.difference, 0);
     const totalSell = actions.filter(a => a.difference < 0).reduce((sum, a) => sum + Math.abs(a.difference), 0);
-    const maxDeviation = Math.max(...actions.map(a => a.deviation));
+    const maxDeviation = actions.length ? Math.max(...actions.map(a => a.deviation)) : 0;
     const needsRebalance = actions.some(a => a.needsAction);
 
     return {
@@ -279,19 +291,19 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-              {Object.values(assetTypeGroups).map((group: any) => (
-                <div key={group.type} className="space-y-2">
+              {Object.keys(targets).map((type) => (
+                <div key={type} className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    {getAssetTypeLabel(group.type)}
+                    {getAssetTypeLabel(type)}
                   </label>
                   <input
                     type="number"
                     step="0.1"
                     min="0"
                     max="100"
-                    value={targets[group.type] || 0}
+                    value={targets[type] || 0}
                     onChange={(e) =>
-                      setTargets({ ...targets, [group.type]: parseFloat(e.target.value) || 0 })
+                      setTargets({ ...targets, [type]: parseFloat(e.target.value) || 0 })
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
