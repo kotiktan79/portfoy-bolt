@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, DollarSign, Plus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getExchangeRate } from '../services/currencyService';
 
 interface IncomeRecordModalProps {
   isOpen: boolean;
@@ -33,16 +34,23 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
 
   if (!isOpen) return null;
 
+  // Auto-fill the TRY equivalent from the live FX rate so it isn't a hand-typed
+  // (drift-prone) number. Still editable — the user can override the suggestion.
+  const autoFillTry = async (amt: string, ccy: string) => {
+    if (!amt || isNaN(parseFloat(amt))) { setAmountTry(''); return; }
+    if (ccy === 'TRY') { setAmountTry(amt); return; }
+    const rate = await getExchangeRate(ccy, 'TRY');
+    if (rate > 0) setAmountTry((parseFloat(amt) * rate).toFixed(2));
+  };
+
   const handleCurrencyChange = (newCurrency: string) => {
     setCurrency(newCurrency);
-    if (newCurrency === 'TRY' && amount) {
-      setAmountTry(amount);
-    }
+    autoFillTry(amount, newCurrency);
   };
 
   const handleAmountChange = (val: string) => {
     setAmount(val);
-    if (currency === 'TRY') setAmountTry(val);
+    autoFillTry(val, currency);
   };
 
   const handleSave = async () => {

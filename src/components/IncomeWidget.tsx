@@ -18,12 +18,17 @@ export default function IncomeWidget() {
   }, []);
 
   const loadData = async () => {
-    const monthStart = `${new Date().toISOString().substring(0, 7)}-01`;
+    const now = new Date();
+    const monthStart = `${now.toISOString().substring(0, 7)}-01`;
+    // Exclusive upper bound = first day of next month, so "this month" never
+    // pulls in future-dated realized rows.
+    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const nextMonthStart = nextMonth.toISOString().substring(0, 10);
 
     const [salaryRes, incomeRes, reportRes] = await Promise.all([
-      supabase.from('monthly_salary').select('*').eq('salary_month', monthStart).single(),
-      supabase.from('income_records').select('amount_try').gte('income_date', monthStart).eq('is_projected', false),
-      supabase.from('daily_reports').select('report_date').order('report_date', { ascending: false }).limit(1).single(),
+      supabase.from('monthly_salary').select('*').eq('salary_month', monthStart).maybeSingle(),
+      supabase.from('income_records').select('amount_try').gte('income_date', monthStart).lt('income_date', nextMonthStart).eq('is_projected', false),
+      supabase.from('daily_reports').select('report_date').order('report_date', { ascending: false }).limit(1).maybeSingle(),
     ]);
 
     const monthlyIncome = (incomeRes.data || []).reduce((s: number, r: any) => s + (r.amount_try || 0), 0);

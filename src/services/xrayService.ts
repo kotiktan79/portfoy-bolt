@@ -126,7 +126,10 @@ function regionOf(h: Holding): string {
 function isCurrencyHolding(h: Holding): boolean {
   if (h.asset_type === 'currency') return true;
   if (h.asset_type === 'fund' && FUND_CURRENCY_PROXY[h.symbol.toUpperCase()]) return true;
-  if (h.asset_type === 'eurobond') return true;
+  // Eurobonds count as foreign-currency exposure ONLY when actually denominated
+  // in a foreign currency. A TRY-denominated bond (e.g. US900123CJ75, currency
+  // ='TRY') would otherwise be double-miscounted as both EUR and TL exposure.
+  if (h.asset_type === 'eurobond') return (h.currency || 'TRY').toUpperCase() !== 'TRY';
   return false;
 }
 

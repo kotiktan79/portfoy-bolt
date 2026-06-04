@@ -8,6 +8,7 @@ import {
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
 import { analyzePortfolio } from '../services/smartInvestmentEngine';
+import { getDefaultTargetAllocations } from '../services/analyticsService';
 import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
 import { buildMemoryContext, saveRecommendations, recordPortfolioValue } from '../services/aiMemoryService';
 
@@ -197,8 +198,10 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
     report.currentAllocation.forEach(a => { typeWeights[a.type] = a.weight; });
     const ownedSymbols = new Set(investmentHoldings.map(h => h.symbol));
 
-    // Ideal: stock 35%, commodity 15%, crypto 10%, currency 10%, fund 10%
-    const IDEAL: Record<string, number> = { stock: 35, commodity: 15, crypto: 10, currency: 10, fund: 10, eurobond: 10 };
+    // Single source of truth for target allocation — same table the RebalanceModal
+    // uses — so the homepage's rebalance advice doesn't contradict it. (The old
+    // local table summed to 90% with currency 10 vs the canonical 15.)
+    const IDEAL: Record<string, number> = getDefaultTargetAllocations();
     const TYPE_NAMES: Record<string, string> = { stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz', commodity: 'Emtia', fund: 'Fon', eurobond: 'Eurobond' };
     const STOCK_PICKS = ['THYAO', 'ASELS', 'BIMAS', 'TUPRS', 'KCHOL', 'GARAN', 'SISE', 'EREGL'];
 
