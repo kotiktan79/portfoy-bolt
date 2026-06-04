@@ -12,6 +12,10 @@ interface HeroDashboardProps {
   dailyChangePct?: number;
   historicalData?: { date: string; value: number }[];
   dynamicSafeMaxUSD?: number;
+  // Total profit incl. realized (from portfolioMetrics) so the hero KPI matches
+  // the rest of the page; falls back to the unrealized-only local computation.
+  totalPnLTRY?: number;
+  totalPnLPct?: number;
 }
 
 function fmtTRY(n: number): string {
@@ -46,11 +50,17 @@ export default function HeroDashboard({
   dailyChangePct,
   historicalData,
   dynamicSafeMaxUSD,
+  totalPnLTRY,
+  totalPnLPct,
 }: HeroDashboardProps) {
   const m = useMemo(() => computePortfolioMetrics(holdings), [holdings]);
   const usdRate = m.fxRates.usd;
   const grandTotal = m.totalValueTRY + totalCashValue;
   const grandTotalUSD = usdRate > 0 ? grandTotal / usdRate : 0;
+
+  // Prefer the page-wide profit (incl. realized); fall back to unrealized-only.
+  const pnlTRY = totalPnLTRY ?? m.totalPnLTRY;
+  const pnlPct = totalPnLPct ?? m.totalPnLPct;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
@@ -183,10 +193,10 @@ export default function HeroDashboard({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
-            label: 'Toplam Kâr', icon: Coins, accent: 'emerald',
-            valueRaw: m.totalPnLPct,
-            valueFmt: (n: number) => `+${n.toFixed(1)}%`,
-            subtitle: `+₺${fmtTRY(m.totalPnLTRY)}`,
+            label: 'Toplam Kâr', icon: Coins, accent: pnlTRY >= 0 ? 'emerald' : 'rose',
+            valueRaw: pnlPct,
+            valueFmt: (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`,
+            subtitle: `${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))}`,
             symbol: '✦',
           },
           {

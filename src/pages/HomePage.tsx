@@ -147,6 +147,8 @@ export default function HomePage() {
                 dailyChangePct={livePnlData?.daily.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
                 dynamicSafeMaxUSD={dynamic?.safeMonthlyUSD}
+                totalPnLTRY={totalProfitLoss}
+                totalPnLPct={totalProfitLossPercent}
               />
             )}
 
