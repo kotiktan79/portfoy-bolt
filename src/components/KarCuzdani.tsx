@@ -36,6 +36,9 @@ export default function KarCuzdani({ holdings }: Props) {
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
   const [dynamic, setDynamic] = useState<DynamicWithdrawal | null>(null);
+  // Net external deposits (TRY) made AFTER the baseline date — principal, not
+  // profit, so excluded from the withdrawable reservoir.
+  const [netDepositsSinceBaselineTry, setNetDepositsSinceBaselineTry] = useState(0);
 
   useEffect(() => {
     loadAll();
@@ -53,6 +56,21 @@ export default function KarCuzdani({ holdings }: Props) {
       setNewTarget(String(s.data.target_monthly_usd));
     }
     if (w.data) setWithdrawals(w.data);
+
+    // Deposits made since the baseline date are re-deposited principal, not
+    // profit; compute the net (deposits − withdrawals) from cumulative snapshot
+    // figures so they can be stripped from the reservoir.
+    if (s.data?.baseline_set_at) {
+      const [cur, base] = await Promise.all([
+        supabase.from('portfolio_snapshots').select('total_deposits,total_withdrawals').order('snapshot_date', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('portfolio_snapshots').select('total_deposits,total_withdrawals').gte('snapshot_date', s.data.baseline_set_at).order('snapshot_date', { ascending: true }).limit(1).maybeSingle(),
+      ]);
+      if (cur.data && base.data) {
+        const dep = (Number(cur.data.total_deposits) || 0) - (Number(base.data.total_deposits) || 0);
+        const wd = (Number(cur.data.total_withdrawals) || 0) - (Number(base.data.total_withdrawals) || 0);
+        setNetDepositsSinceBaselineTry(Math.max(0, dep - wd));
+      }
+    }
     setLoading(false);
   }
 
@@ -66,28 +84,32 @@ export default function KarCuzdani({ holdings }: Props) {
 
   const totalWithdrawnUsd = withdrawals.reduce((sum, w) => sum + Number(w.amount_usd), 0);
   const baseline = Number(settings?.baseline_usd ?? 0);
-  const reservoirUsd = Math.max(0, portfolioUsd - baseline - totalWithdrawnUsd);
+  // Deposits since baseline are principal (exclude). Salary withdrawals already
+  // reduce the source holding → they're reflected in portfolioUsd, so do NOT
+  // subtract totalWithdrawnUsd again (that was a double-count). salary_withdrawals
+  // stays purely as an audit log.
+  const depositsSinceBaselineUsd = fxRates.usd > 0 ? netDepositsSinceBaselineTry / fxRates.usd : 0;
+  const reservoirUsd = Math.max(0, portfolioUsd - baseline - depositsSinceBaselineUsd);
   const target = Number(settings?.target_monthly_usd ?? 2000);
   const monthsAvailable = target > 0 ? reservoirUsd / target : 0;
   const canWithdraw = reservoirUsd >= target;
-  const portfolioAboveBaseline = portfolioUsd > baseline + totalWithdrawnUsd;
+  const portfolioAboveBaseline = portfolioUsd > baseline + depositsSinceBaselineUsd;
 
   // Likit kaynaklar (cash & cash equivalents)
   const cashSources = useMemo(() => {
+    // One consistent path for EVERY currency holding: TRY value via holdingValueTRY,
+    // then /usd. The old bespoke per-symbol logic only handled USD/EURO and
+    // mis-valued anything else (e.g. USDC came out ~46x too small and got dropped
+    // by the >=100 filter). current_price is TRY-per-unit, so units-per-USD = usd/price.
     const sources = holdings
-      .filter(h => h.asset_type === 'currency' && h.quantity > 0)
-      .map(h => {
-        const ccy = h.currency || 'TRY';
-        const ratePerUnit = ccy === 'USD' ? 1 : ccy === 'EUR' ? fxRates.eur / fxRates.usd : 1 / fxRates.usd;
-        const valueUsd = h.quantity * (h.symbol === 'USD' ? 1 : h.symbol === 'EURO' ? fxRates.eur / fxRates.usd : ratePerUnit);
-        return {
-          symbol: h.symbol,
-          quantity: h.quantity,
-          valueUsd,
-          ccyDisplay: h.symbol === 'EURO' ? 'EUR' : h.symbol,
-          unitsPerUsd: h.symbol === 'USD' ? 1 : h.symbol === 'EURO' ? fxRates.usd / fxRates.eur : fxRates.usd,
-        };
-      })
+      .filter(h => h.asset_type === 'currency' && h.quantity > 0 && h.current_price > 0)
+      .map(h => ({
+        symbol: h.symbol,
+        quantity: h.quantity,
+        valueUsd: fxRates.usd > 0 ? holdingValueTRY(h, fxRates) / fxRates.usd : 0,
+        ccyDisplay: h.symbol === 'EURO' ? 'EUR' : h.symbol,
+        unitsPerUsd: fxRates.usd > 0 ? fxRates.usd / h.current_price : 0,
+      }))
       .filter(s => s.valueUsd >= 100)
       .sort((a, b) => b.valueUsd - a.valueUsd);
     return sources;
