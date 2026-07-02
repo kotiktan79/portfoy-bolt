@@ -3,7 +3,7 @@ import { Wallet, TrendingUp, AlertCircle, Settings, Check, X, Gauge } from 'luci
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicWithdrawal } from '../services/analyticsService';
-import { DynamicWithdrawal } from '../lib/portfolioMetrics';
+import { DynamicWithdrawal, computeSafeSalaryFromProfit } from '../lib/portfolioMetrics';
 
 interface SalarySettings {
   id: number;
@@ -36,8 +36,10 @@ export default function KarCuzdani({ holdings }: Props) {
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
   const [dynamic, setDynamic] = useState<DynamicWithdrawal | null>(null);
-  // Net external deposits (TRY) made AFTER the baseline date — principal, not
-  // profit, so excluded from the withdrawable reservoir.
+  // Net external deposits made AFTER the baseline date — principal, not profit,
+  // so excluded from the withdrawable reservoir. Captured in USD at snapshot time
+  // (FX-move proof). Falls back to a TRY figure for legacy snapshots without USD.
+  const [netDepositsSinceBaselineUsd, setNetDepositsSinceBaselineUsd] = useState<number | null>(null);
   const [netDepositsSinceBaselineTry, setNetDepositsSinceBaselineTry] = useState(0);
 
   useEffect(() => {
@@ -62,10 +64,19 @@ export default function KarCuzdani({ holdings }: Props) {
     // figures so they can be stripped from the reservoir.
     if (s.data?.baseline_set_at) {
       const [cur, base] = await Promise.all([
-        supabase.from('portfolio_snapshots').select('total_deposits,total_withdrawals').order('snapshot_date', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('portfolio_snapshots').select('total_deposits,total_withdrawals').gte('snapshot_date', s.data.baseline_set_at).order('snapshot_date', { ascending: true }).limit(1).maybeSingle(),
+        supabase.from('portfolio_snapshots').select('total_deposits,total_withdrawals,total_deposits_usd,total_withdrawals_usd').order('snapshot_date', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('portfolio_snapshots').select('total_deposits,total_withdrawals,total_deposits_usd,total_withdrawals_usd').gte('snapshot_date', s.data.baseline_set_at).order('snapshot_date', { ascending: true }).limit(1).maybeSingle(),
       ]);
       if (cur.data && base.data) {
+        // Tercih: snapshot anında yakalanmış USD değerleri (FX-hareketinden bağımsız).
+        // İki uç da USD'ye sahipse delta = gerçek yeni para; aksi halde TRY fallback.
+        const curDepUsd = cur.data.total_deposits_usd, baseDepUsd = base.data.total_deposits_usd;
+        const curWdUsd = cur.data.total_withdrawals_usd, baseWdUsd = base.data.total_withdrawals_usd;
+        if (curDepUsd != null && baseDepUsd != null) {
+          const depU = (Number(curDepUsd) || 0) - (Number(baseDepUsd) || 0);
+          const wdU = (Number(curWdUsd) || 0) - (Number(baseWdUsd) || 0);
+          setNetDepositsSinceBaselineUsd(Math.max(0, depU - wdU));
+        }
         const dep = (Number(cur.data.total_deposits) || 0) - (Number(base.data.total_deposits) || 0);
         const wd = (Number(cur.data.total_withdrawals) || 0) - (Number(base.data.total_withdrawals) || 0);
         setNetDepositsSinceBaselineTry(Math.max(0, dep - wd));
@@ -88,8 +99,13 @@ export default function KarCuzdani({ holdings }: Props) {
   // reduce the source holding → they're reflected in portfolioUsd, so do NOT
   // subtract totalWithdrawnUsd again (that was a double-count). salary_withdrawals
   // stays purely as an audit log.
-  const depositsSinceBaselineUsd = fxRates.usd > 0 ? netDepositsSinceBaselineTry / fxRates.usd : 0;
+  const depositsSinceBaselineUsd = netDepositsSinceBaselineUsd != null
+    ? netDepositsSinceBaselineUsd
+    : (fxRates.usd > 0 ? netDepositsSinceBaselineTry / fxRates.usd : 0);
   const reservoirUsd = Math.max(0, portfolioUsd - baseline - depositsSinceBaselineUsd);
+  // Güvenli aylık maaş — BİRİKEN KÂRA göre (rezervuar) + sürdürülebilir %4 tavan.
+  // Yıllık-büyüme extrapolasyonu DEĞİL (o şişiyordu). Bkz computeSafeSalaryFromProfit.
+  const safeSalaryUsd = computeSafeSalaryFromProfit(reservoirUsd, portfolioUsd);
   const target = Number(settings?.target_monthly_usd ?? 2000);
   const monthsAvailable = target > 0 ? reservoirUsd / target : 0;
   const canWithdraw = reservoirUsd >= target;
@@ -209,41 +225,34 @@ export default function KarCuzdani({ holdings }: Props) {
         </button>
       </div>
 
-      {/* Dinamik güvenli maaş — USD bazlı reel büyümeye göre */}
-      {dynamic && (
-        <div className={`mx-5 mt-4 rounded-xl p-4 border ${
-          dynamic.status === 'positive'
-            ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900'
-            : dynamic.status === 'low'
-            ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'
-            : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'
-        }`}>
-          <div className="flex items-center gap-2 mb-1">
-            <Gauge size={16} className={
-              dynamic.status === 'positive' ? 'text-blue-600 dark:text-blue-400'
-              : dynamic.status === 'low' ? 'text-amber-600 dark:text-amber-400'
-              : 'text-red-600 dark:text-red-400'
-            } />
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">
-              Bu Ay Güvenli Max (dinamik)
-            </p>
-          </div>
-          {dynamic.status === 'negative' ? (
-            <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-              Reel büyüme negatif (%{dynamic.annualGrowthPct.toFixed(1)}/yıl). Anaparaya dokunma — sadece pasif gelir + trim.
-            </p>
-          ) : (
-            <>
-              <p className={`text-3xl font-bold ${dynamic.status === 'positive' ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                ${dynamic.safeMonthlyUSD.toFixed(0)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
-              </p>
-              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-                Son {Math.round(dynamic.periodDays)} günde reel büyüme <strong>%{dynamic.annualGrowthPct.toFixed(1)}/yıl</strong> (USD bazlı, yeni para hariç). Büyümenin %85'i güvenli çekim.
-              </p>
-            </>
-          )}
+      {/* Güvenli maaş — BİRİKEN KÂRA göre (rezervuar + sürdürülebilir %4 tavan) */}
+      <div className={`mx-5 mt-4 rounded-xl p-4 border ${
+        safeSalaryUsd > 0
+          ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900'
+          : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'
+      }`}>
+        <div className="flex items-center gap-2 mb-1">
+          <Gauge size={16} className={safeSalaryUsd > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'} />
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">
+            Bu Ay Güvenli Max (biriken kâra göre)
+          </p>
         </div>
-      )}
+        {safeSalaryUsd > 0 ? (
+          <>
+            <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+              ${safeSalaryUsd.toFixed(0)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
+            </p>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+              Biriken kâr <strong>${reservoirUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong> (anapara üstü). Sürdürülebilir çekim: portföyün %4 tavanı + kârı ~4 yıla yayma — anaparaya dokunmaz.
+              {dynamic && ` Son ${Math.round(dynamic.periodDays)} günde reel büyüme %${dynamic.annualGrowthPct.toFixed(1)}/yıl (bilgi).`}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            Anapara üstünde biriken kâr yok → bu ay güvenli maaş <strong>$0</strong>. Kâr birikene kadar çekme, anaparayı koru.
+          </p>
+        )}
+      </div>
 
       {/* Ana içerik */}
       <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">

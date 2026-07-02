@@ -1,5 +1,6 @@
 import { Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
+import { TARGET_PCT } from '../config/portfolioPolicy';
 
 export interface XRayFinding {
   id: string;
@@ -84,16 +85,10 @@ const FUND_CURRENCY_PROXY: Record<string, string> = {
 
 // PROFİL: Romanya/EUR-bazlı yatırımcı.
 // Kullanıcı Romanya'da yaşıyor → EUR ev parası. EUR maruziyeti "risk" değil "ev",
-// TL maruziyeti gerçek foreign-currency risk. Türkiye %20-30 sağlıklı EM exposure.
-// HOME_CURRENCY = 'EUR' (kullanıcı Romanya'da yaşıyor — yorumlama için)
-const DEFAULT_TARGETS: Record<string, number> = {
-  stock: 25,        // EM (BIST) + Global beraber
-  fund: 12,
-  crypto: 8,
-  currency: 25,     // EUR/USD nakit pozisyon — ev parası dahil
-  commodity: 10,
-  eurobond: 20,     // EUR-bazlı sabit getiri (sigorta + faiz)
-};
+// Hedef dağılım TEK KAYNAKTAN — config/portfolioPolicy (memory ile senkron).
+// Eskiden burada ayrı hardcoded hedef vardı (%25 hisse/%25 nakit/%20 eurobond) → AI
+// Yönetici ile çelişiyordu. Artık üçü de aynı politikadan okuyor.
+const DEFAULT_TARGETS: Record<string, number> = TARGET_PCT;
 
 // Sembol → coğrafi bölge (Global = ABD/Avrupa yabancı hisseler, TR = BIST/TL)
 const GLOBAL_SYMBOLS = new Set([

@@ -53,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ASML: 'ASML.AS', LVMH: 'MC.PA', SAP: 'SAP.DE', TTE: 'TTE.PA',
           OR: 'OR.PA', SAN: 'SAN.PA', AIR: 'AIR.PA', SU: 'SU.PA',
           NOKIA: 'NOKIA.HE', BMW: 'BMW.DE', SIE: 'SIE.DE', ADYEN: 'ADYEN.AS', PROSUS: 'PRX.AS',
+          V3YL: 'V3YL.DE',
         };
         const tickers = symbols.map(s => euroTickers[s] || s).join(',');
         const data = await fetchYahoo(tickers);

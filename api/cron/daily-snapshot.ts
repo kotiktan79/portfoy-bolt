@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { sendTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
+import { syncBinanceHoldings } from '../lib/binanceSync.js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -57,6 +58,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     log.push(`${holdings.length} holding bulundu`);
+
+    // 1.5. Binance gerçek-hesap senkronu — notlu kripto + USDC adetlerini gerçeğe
+    // eşitle (fiyat güncelleme + snapshot'tan ÖNCE, ki değerler doğru hesaplansın).
+    await syncBinanceHoldings(supabase, log);
 
     // 2. Her holding için güncel fiyat çek ve güncelle
     const priceUpdates = await updateAllPrices(supabase, holdings, log);
@@ -129,7 +134,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalDepositsTRY += (Number(cb.total_deposits) || 0) * rate;
       totalWithdrawalsTRY += (Number(cb.total_withdrawals) || 0) * rate;
     }
-    log.push(`Deposits: ₺${totalDepositsTRY.toFixed(0)} (canlı FX), Withdrawals: ₺${totalWithdrawalsTRY.toFixed(0)}`);
+    // USD karşılığını da yaz: native→TRY-bugün / USD-bugün = native × (ccyTRY/usdTRY),
+    // yani EUR deposit için EUR×EURUSD → TRY hareketinden BAĞIMSIZ, kümülatif USD stabil.
+    // KarCuzdani iki snapshot'ın USD farkını alır → sahte FX-deposit'i ortadan kalkar.
+    const totalDepositsUSD = usdRateForTotal > 0 ? totalDepositsTRY / usdRateForTotal : 0;
+    const totalWithdrawalsUSD = usdRateForTotal > 0 ? totalWithdrawalsTRY / usdRateForTotal : 0;
+    log.push(`Deposits: ₺${totalDepositsTRY.toFixed(0)} ($${totalDepositsUSD.toFixed(0)}, canlı FX), Withdrawals: ₺${totalWithdrawalsTRY.toFixed(0)}`);
 
     const snapshotData = {
       snapshot_date: today,
@@ -139,6 +149,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pnl_percentage: pnlPercentage,
       total_deposits: totalDepositsTRY,
       total_withdrawals: totalWithdrawalsTRY,
+      total_deposits_usd: totalDepositsUSD,
+      total_withdrawals_usd: totalWithdrawalsUSD,
     };
 
     // 1) Burst-protection: bugün için 10 saniye içinde yazılmış snapshot varsa SKIP.
@@ -557,8 +569,17 @@ async function updateCommodityPrices(supabase: any, holdings: any[], result: Pri
       let price: number | null = null;
 
       if (sym.includes('GOLD') || sym.includes('ALTIN') || sym === 'XAU') {
-        const goldOz = await fetchGoldPrice();
-        if (goldOz) price = (goldOz / 31.1035) * usdTry; // gram TRY
+        // Türkiye gram altın (yerel prim dahil) — kullanıcının takip ettiği fiyat.
+        // truncgil zaten TRY/gram döner, oz→USD→TRY çevrimi YOK. Başarısızsa
+        // uluslararası spot'a düş (eski mantık).
+        const trGram = await fetchTRGramGold();
+        if (trGram) {
+          price = trGram;
+          log.push(`Altın: TR gram altın ${trGram.toFixed(2)} TRY (truncgil)`);
+        } else {
+          const goldOz = await fetchGoldPrice();
+          if (goldOz) { price = (goldOz / 31.1035) * usdTry; log.push(`Altın: spot fallback ${price.toFixed(2)} TRY`); }
+        }
       } else if (sym.includes('SILVER') || sym.includes('GUMUS') || sym === 'XAG') {
         const silverOz = await fetchSilverPrice();
         if (silverOz) price = (silverOz / 31.1035) * usdTry;
@@ -740,6 +761,24 @@ async function fetchYahooPrices(symbols: string): Promise<Record<string, number>
   }
 
   return prices;
+}
+
+// Türkiye gram altın (satış) — truncgil. Değer zaten TRY/gram, yerel prim dahil.
+// Format "6.409,16" → 6409.16 (binlik nokta sil, ondalık virgülü noktaya çevir).
+async function fetchTRGramGold(): Promise<number | null> {
+  try {
+    const res = await fetch('https://finans.truncgil.com/today.json', {
+      headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    const raw = d?.['gram-altin']?.['Satış'] ?? d?.['gram-altin']?.['Selling'];
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/\./g, '').replace(',', '.'));
+    // Sanity: gram altın makul aralıkta mı (1.000–50.000 TRY)
+    if (isFinite(num) && num > 1000 && num < 50000) return num;
+    return null;
+  } catch { return null; }
 }
 
 async function fetchGoldPrice(): Promise<number | null> {

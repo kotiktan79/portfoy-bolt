@@ -89,19 +89,22 @@ interface AIPlan {
 }
 
 const AI_CACHE_KEY = 'tandor_ai_daily_plan';
+// Politika/prompt değişince BUMP et → eski cache'lenmiş planlar otomatik geçersiz,
+// kullanıcı yeniden çekmek zorunda kalmadan güncel politikayla yeni plan üretilir.
+const AI_PLAN_VERSION = '2026-06-15-policy-v1';
 
 function getCachedAIPlan(): AIPlan | null {
   try {
     const raw = localStorage.getItem(AI_CACHE_KEY);
     if (!raw) return null;
-    const { date, plan } = JSON.parse(raw);
-    if (date !== getTodayKey()) return null;
+    const { date, plan, v } = JSON.parse(raw);
+    if (date !== getTodayKey() || v !== AI_PLAN_VERSION) return null;
     return plan;
   } catch { return null; }
 }
 
 function cacheAIPlan(plan: AIPlan) {
-  localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ date: getTodayKey(), plan }));
+  localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ date: getTodayKey(), v: AI_PLAN_VERSION, plan }));
 }
 
 export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanProps) {

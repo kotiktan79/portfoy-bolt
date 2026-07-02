@@ -8,6 +8,7 @@
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from './priceService';
 import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
+import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES } from '../config/portfolioPolicy';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -116,16 +117,10 @@ const TYPE_NAMES: Record<string, string> = {
   fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia', cash: 'Nakit',
 };
 
-// İdeal portföy dağılımı (uzun vadeli büyüme + gelir)
-// %60 büyüme (hisse + kripto) + %40 gelir/koruma (temettü + altın + döviz + tahvil)
-const IDEAL_ALLOCATION: Record<string, { min: number; max: number; target: number }> = {
-  stock:     { min: 30, max: 55, target: 45 },  // büyüme + temettü hisseleri
-  commodity: { min: 10, max: 25, target: 15 },  // altın - enflasyon koruması
-  crypto:    { min: 5,  max: 15, target: 10 },  // BTC/ETH uzun vadeli
-  currency:  { min: 5,  max: 15, target: 10 },  // kur koruması
-  fund:      { min: 0,  max: 15, target: 10 },  // fon/tahvil - sabit gelir
-  eurobond:  { min: 0,  max: 15, target: 10 },  // eurobond - döviz gelir
-};
+// İdeal portföy dağılımı — TEK KAYNAKTAN (config/portfolioPolicy, memory ile senkron).
+// Eskiden burada ayrı hardcoded hedef vardı (%45 hisse/%15 altın/%10 kripto) → X-Ray
+// ve AI Advisor ile çelişiyordu. Artık üçü de aynı politikadan okuyor.
+const IDEAL_ALLOCATION = TARGET_ALLOCATION;
 
 // BIST hisseler - büyüme + temettü
 const BIST_PICKS = [
@@ -470,6 +465,9 @@ function calculateRebalanceActions(
     if (Math.abs(diff) > 5) {
       const amount = Math.abs(diff / 100 * totalValue);
       if (diff > 0) {
+        // FİZİKİ/satılamaz varlık (altın) → SATMA önerme; fazlaysa "gerisini büyüt,
+        // seyrelt" mantığı geçerli (kullanıcı: altın fiziki satamam).
+        if (PHYSICAL_FIXED_TYPES.has(type)) continue;
         // Fazla → en kârlıdan sat
         const candidates = holdings.filter(h => h.assetType === type).sort((a, b) => b.pnlPct - a.pnlPct);
         if (candidates.length > 0) {

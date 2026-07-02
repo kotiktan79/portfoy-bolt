@@ -6,6 +6,7 @@ import {
   computePeriodChange,
   computeIntradayChange,
   computeDynamicWithdrawal,
+  computeSafeSalaryFromProfit,
   topWinners,
   topLosers,
 } from './portfolioMetrics';
@@ -250,5 +251,20 @@ describe('top winners/losers', () => {
     expect(winners.find(w => w.holding.symbol === 'C')).toBeUndefined();
     const losers = topLosers([a, b, c]);
     expect(losers[0].holding.symbol).toBe('C');
+  });
+});
+
+describe('computeSafeSalaryFromProfit (biriken kâra göre)', () => {
+  it('16. rezervuar ≤ 0 → maaş 0 (anapara altı)', () => {
+    expect(computeSafeSalaryFromProfit(0, 150000)).toBe(0);
+    expect(computeSafeSalaryFromProfit(-5000, 150000)).toBe(0);
+  });
+  it('17. küçük rezervuar → biriken-kâr tavanı bağlar (rezervuar/48)', () => {
+    // reservoir 24000 → 24000/48 = 500; SWR 150000*0.04/12 = 500 → min 500
+    expect(computeSafeSalaryFromProfit(24000, 150000)).toBeCloseTo(500, 0);
+  });
+  it('18. büyük rezervuar → SWR tavanı bağlar (portföyün %4/12), şişmez', () => {
+    // reservoir 100000/48 = 2083 ama SWR 150000*0.04/12 = 500 → min 500
+    expect(computeSafeSalaryFromProfit(100000, 150000)).toBeCloseTo(500, 0);
   });
 });

@@ -9,8 +9,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.BINANCE_API_KEY;
-  const apiSecret = process.env.BINANCE_API_SECRET;
+  // Env'e kazara kaçmış literal "\n" / boşlukları temizle (bilinen tuzak:
+  // değerler trailing \n ile kaydedilince Binance "-2014 API-key format invalid" döner).
+  const apiKey = (process.env.BINANCE_API_KEY || '').replace(/\\n$/, '').replace(/\s+/g, '');
+  const apiSecret = (process.env.BINANCE_API_SECRET || '').replace(/\\n$/, '').replace(/\s+/g, '');
 
   if (!apiKey || !apiSecret) {
     return res.status(200).json({ success: false, error: 'Binance API not configured' });

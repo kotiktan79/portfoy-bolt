@@ -1,5 +1,5 @@
-const CACHE_NAME = 'portfolio-tracker-v3';
-const RUNTIME_CACHE = 'runtime-cache-v3';
+const CACHE_NAME = 'portfolio-tracker-v10';
+const RUNTIME_CACHE = 'runtime-cache-v10';
 
 const STATIC_ASSETS = [
   '/',

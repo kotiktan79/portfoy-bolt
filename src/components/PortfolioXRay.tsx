@@ -5,6 +5,17 @@ import { analyzeXRay, XRayFinding } from '../services/xrayService';
 import { formatCurrency } from '../services/priceService';
 import { Card } from './ui/Card';
 
+// Varlık tipi → Türkçe etiket (HEDEF vs GERÇEK ALLOKASYON bar'ları için).
+const ASSET_TYPE_TR: Record<string, string> = {
+  stock: 'Hisse',
+  eurobond: 'Eurobond',
+  fund: 'Fon',
+  commodity: 'Altın',
+  crypto: 'Kripto',
+  currency: 'Döviz',
+  cash: 'Nakit',
+};
+
 const SEVERITY_STYLES: Record<XRayFinding['severity'], { ring: string; pillBg: string; pillText: string; iconBg: string; iconColor: string; label: string }> = {
   high: {
     ring: 'border-l-red-500',
@@ -228,7 +239,7 @@ export default function PortfolioXRay() {
                       const driftColor = Math.abs(d.drift) > 10 ? 'text-amber-600 dark:text-amber-400' : Math.abs(d.drift) > 5 ? 'text-gray-600 dark:text-gray-400' : 'text-emerald-600 dark:text-emerald-400';
                       return (
                         <div key={d.asset_type} className="flex items-center gap-2 text-xs">
-                          <span className="font-semibold text-gray-700 dark:text-gray-300 w-20 truncate capitalize">{d.asset_type}</span>
+                          <span className="font-semibold text-gray-700 dark:text-gray-300 w-20 truncate">{ASSET_TYPE_TR[d.asset_type] || d.asset_type}</span>
                           <div className="flex-1 relative h-2.5 rounded-full bg-white dark:bg-gray-900 ring-1 ring-slate-200 dark:ring-gray-800 overflow-hidden">
                             <div className="absolute left-0 top-0 h-full bg-gradient-to-r from-brand-400 to-brand-600" style={{ width: `${Math.min(100, d.currentPct)}%` }} />
                             <div className="absolute top-0 h-full w-0.5 bg-gray-900 dark:bg-white" style={{ left: `${Math.min(100, d.targetPct)}%` }} title={`Hedef %${d.targetPct}`} />

@@ -10,52 +10,48 @@ export interface BeforeInstallPromptEvent extends Event {
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
 export function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        const registration = await navigator.serviceWorker.register('/sw.js', {
-          scope: '/',
-        });
+  if (!('serviceWorker' in navigator)) return;
 
-        console.log('Service Worker registered:', registration);
+  // Yeni SW kontrolü ele alınca sayfayı OTOMATİK yenile (banner/tıklama yok).
+  // Guard ile reload-loop engellenir. "Hala eski sürüm" sorununun kök çözümü.
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
 
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                showUpdateNotification();
-              }
-            });
+  window.addEventListener('load', async () => {
+    try {
+      // updateViaCache:'none' → tarayıcı sw.js'i HTTP cache'ten DEĞİL hep taze
+      // çeker; yeni sürüm güvenilir tespit edilir.
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
+        updateViaCache: 'none',
+      });
+
+      // Zaten bekleyen yeni sürüm varsa hemen aktive et.
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
+      // Yeni sürüm bulununca → kurulunca → OTOMATİK aktive et (skipWaiting),
+      // sonra controllerchange tetiklenir → otomatik reload.
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            newWorker.postMessage({ type: 'SKIP_WAITING' });
           }
         });
+      });
 
-        if (registration.waiting) {
-          showUpdateNotification();
-        }
-      } catch (error) {
-        console.error('Service Worker registration failed:', error);
-      }
-    });
-  }
-}
-
-function showUpdateNotification() {
-  const updateBanner = document.createElement('div');
-  updateBanner.className = 'fixed bottom-4 left-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg z-50 flex items-center justify-between';
-  updateBanner.innerHTML = `
-    <span>Yeni versiyon mevcut!</span>
-    <button id="update-btn" class="bg-white text-blue-600 px-4 py-2 rounded font-semibold hover:bg-blue-50 transition-colors">
-      Güncelle
-    </button>
-  `;
-  document.body.appendChild(updateBanner);
-
-  document.getElementById('update-btn')?.addEventListener('click', () => {
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+      // Her açılışta yeni sürüm var mı diye zorla kontrol et.
+      registration.update();
+    } catch (error) {
+      console.error('Service Worker registration failed:', error);
     }
-    window.location.reload();
   });
 }
 

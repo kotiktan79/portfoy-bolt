@@ -290,6 +290,37 @@ export function computeDynamicWithdrawal(
 }
 
 // ============================================================
+// KÂR-BAZLI GÜVENLİ MAAŞ (biriken kâr + sürdürülebilir SWR tavanı)
+// ============================================================
+
+/**
+ * Çekilebilir aylık maaş — BİRİKEN KÂRA göre (yıllık büyüme extrapolasyonu DEĞİL).
+ *
+ * Mantık (kullanıcı talebi + deep-research SWR literatürü):
+ *  1. Rezervuar (biriken kâr = portföy − anapara − yeni para) ≤ 0 ise → 0
+ *     (anaparanın altındasın, maaş yok).
+ *  2. Pozitifse iki tavanın KÜÇÜĞÜ:
+ *     - Sürdürülebilirlik tavanı: portföyün swrAnnual'ı /12 (araştırma: %3-4 →
+ *       anaparayı reel olarak korur, kalıcı gelir).
+ *     - Biriken-kâr tavanı: rezervuarı profitSpreadYears'a yayma → kârı aşma.
+ *
+ * Eski computeDynamicWithdrawal son-dönem büyümeyi yıllığa çevirip %85'ini
+ * veriyordu → boğa döneminde 4-5× şişiyordu (ör. $2.300/ay). Bu fonksiyon
+ * gerçek biriken kâra dayanır, şişmez.
+ */
+export function computeSafeSalaryFromProfit(
+  reservoirUSD: number,
+  portfolioUSD: number,
+  swrAnnual: number = 0.04,
+  profitSpreadYears: number = 4,
+): number {
+  if (!(reservoirUSD > 0) || !(portfolioUSD > 0)) return 0;
+  const swrMonthly = (portfolioUSD * swrAnnual) / 12;
+  const profitMonthly = reservoirUSD / (profitSpreadYears * 12);
+  return Math.max(0, Math.min(swrMonthly, profitMonthly));
+}
+
+// ============================================================
 // INTRADAY CHANGE (sessionStorage tabanlı "bugün açılışından beri")
 // ============================================================
 
@@ -340,20 +371,26 @@ export function computeIntradayChange(
 // PASSIVE YEARLY INCOME (yıllık beklenen dividend/coupon, USD)
 // ============================================================
 
-// Holding bazlı yıllık getiri beklentisi (kuponlar/dividendler).
-// Kaynak: ETF prospectus'ları, son 4 çeyrek dividend ortalaması.
-// HARDCODE: dividend_yield kolonu DB'de yok; eklenince buraya geçilir.
+// Holding bazlı yıllık temettü/kupon getirisi (GERÇEKÇİ, 2026-06).
+// BIST: TOASO 6.45% / SAHOL 3.39% / SISE 2.2% / EREGL ~1.1% araştırma; gerisi makul
+// tahmin (Türk temettüsü yıllık değişir). Yabancı: V3YL ~1.4% (eskiden hatalı 4.5%
+// yazılıydı), JNJ ~3%, ASML ~1%. Tahmindir, yıllık güncellenmeli.
 const YIELD_BY_SYMBOL: Record<string, number> = {
-  // Dividend stocks
-  JNJ: 0.03, KO: 0.03, PG: 0.025, SCHD: 0.035, NESN: 0.03,
-  // Eurobond ETF'leri
-  IB01: 0.045, IBTL: 0.045, V3YL: 0.045, JNK: 0.07, HYG: 0.07,
-  TLT: 0.04, SGOV: 0.052, IUSB: 0.04, BND: 0.04,
+  // Yabancı hisse / ETF
+  JNJ: 0.03, ASML: 0.01, V3YL: 0.014, KO: 0.03, PG: 0.025, SCHD: 0.035, NESN: 0.03,
+  // Revolut Robo (88% hisse/11% tahvil/1% nakit) → harmanlanmış ~%1,8
+  'REVOLUT-ROBO': 0.018,
+  // USD tahvil / eurobond (kupon getirisi)
+  IB01: 0.043, IBTL: 0.045, JNK: 0.07, HYG: 0.07, TLT: 0.04, SGOV: 0.052, IUSB: 0.04, BND: 0.04,
+  // BIST temettü ödeyenler (2026 ~gerçekçi)
+  TOASO: 0.064, TUPRS: 0.035, SAHOL: 0.034, TCELL: 0.025, SISE: 0.022,
+  BIMAS: 0.02, ENKAI: 0.02, CCOLA: 0.015, EREGL: 0.015, AKSEN: 0.01, ASELS: 0.008,
+  // THYAO/EKGYO temettü ~0 → listede yok (fallback 0)
 };
 function symbolYield(h: Holding): number {
   if (YIELD_BY_SYMBOL[h.symbol]) return YIELD_BY_SYMBOL[h.symbol];
-  if (h.asset_type === 'eurobond') return 0.045;
-  if (h.asset_type === 'fund') return 0.03;
+  if (h.asset_type === 'eurobond') return 0.04;
+  if (h.asset_type === 'fund') return 0.015; // TEFAS fonları çoğu accumulating → düşük nakit dağıtım
   return 0;
 }
 

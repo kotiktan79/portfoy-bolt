@@ -1,5 +1,6 @@
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
+import { TARGET_ALLOCATION } from '../config/portfolioPolicy';
 
 export interface RiskProfile {
   level: 'conservative' | 'moderate' | 'aggressive' | 'very_aggressive';
@@ -168,33 +169,25 @@ export async function generateAIRecommendations(
     });
   }
 
+  // Kripto eşiği POLİTİKADAN (config/portfolioPolicy) — eskiden "%10-15 ideal"
+  // diyordu, politikayla (%3-5) çelişiyordu. Artık tek kaynak.
   const cryptoAllocation = ((assetTypes.get('crypto') || 0) / totalValue) * 100;
-  if (cryptoAllocation > 30 && riskProfile.level === 'conservative') {
+  const cryptoMax = TARGET_ALLOCATION.crypto.max;
+  const cryptoTarget = TARGET_ALLOCATION.crypto.target;
+  if (cryptoAllocation > cryptoMax + 3) {
     recommendations.push({
       type: 'rebalance',
-      priority: 'high',
+      priority: cryptoAllocation > cryptoMax * 3 ? 'high' : 'medium',
       title: 'Kripto Ağırlığı Yüksek',
-      description: `Portföyünüzün %${cryptoAllocation.toFixed(1)}'i kriptoda. Risk profilinize göre fazla.`,
-      reason: 'Muhafazakar profil için %10-15 kripto ideal.',
-      impact: 'Volatilite %40 azalabilir',
+      description: `Portföyünüzün %${cryptoAllocation.toFixed(1)}'i kriptoda (politika hedefi %${cryptoTarget}).`,
+      reason: `Politikaya göre kripto %${TARGET_ALLOCATION.crypto.min}-${cryptoMax} bandında olmalı.`,
+      impact: 'Volatilite düşer',
       action: {
         target_allocation: {
-          crypto: 15,
+          crypto: cryptoTarget,
         },
       },
       confidence: 90,
-    });
-  }
-
-  if (cryptoAllocation > 50 && riskProfile.level === 'aggressive') {
-    recommendations.push({
-      type: 'warning',
-      priority: 'medium',
-      title: 'Yüksek Kripto Konsantrasyonu',
-      description: `Portföyünüzün %${cryptoAllocation.toFixed(1)}'i kriptoda.`,
-      reason: 'Agresif profil için bile %30-40 kripto yeterli.',
-      impact: 'Aşırı volatilite riski',
-      confidence: 80,
     });
   }
 

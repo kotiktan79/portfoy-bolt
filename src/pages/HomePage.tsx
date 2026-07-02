@@ -24,6 +24,7 @@ import InstallPWA from '../components/InstallPWA';
 import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
 import IncomeWidget from '../components/IncomeWidget';
 import PortfolioXRay from '../components/PortfolioXRay';
+import { RebalancePlan } from '../components/RebalancePlan';
 import KarCuzdani from '../components/KarCuzdani';
 import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
 import HeroDashboard from '../components/HeroDashboard';
@@ -450,12 +451,13 @@ export default function HomePage() {
   );
 }
 
-// Sağ ray: X-Ray, Gelir, Temettü tab'ları (Çekim ve Maaş tab'ları Kâr Cüzdanı'na taşındı)
-type RightRailTab = 'xray' | 'income' | 'dividend';
+// Sağ ray: Plan, X-Ray, Gelir, Temettü tab'ları (Çekim ve Maaş tab'ları Kâr Cüzdanı'na taşındı)
+type RightRailTab = 'rebalance' | 'xray' | 'income' | 'dividend';
 
 function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; totalCashValue: number }) {
-  const [tab, setTab] = useState<RightRailTab>('xray');
+  const [tab, setTab] = useState<RightRailTab>('rebalance');
   const tabs: { key: RightRailTab; label: string }[] = [
+    { key: 'rebalance', label: 'Plan' },
     { key: 'xray', label: 'X-Ray' },
     { key: 'income', label: 'Gelir' },
     { key: 'dividend', label: 'Temettü' },
@@ -479,6 +481,7 @@ function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; tota
         ))}
       </div>
       <div>
+        {tab === 'rebalance' && <RebalancePlan holdings={holdings} totalCashValue={totalCashValue} />}
         {tab === 'xray' && <PortfolioXRay />}
         {tab === 'income' && <IncomeWidget />}
         {tab === 'dividend' && <DividendInvestmentPlanner holdings={holdings} totalCashValue={totalCashValue} />}
