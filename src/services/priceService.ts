@@ -130,6 +130,7 @@ const EURONEXT_STOCKS: { [key: string]: string } = {
   'SIEMENS': 'SIE.DE',
   'ADYEN': 'ADYEN.AS',
   'PROSUS': 'PRX.AS',
+  'V3YL': 'V3YL.DE',   // Vanguard ESG North America All Cap, EUR-quoted Xetra
 };
 
 const US_STOCKS: Record<string, string> = {
@@ -224,6 +225,15 @@ const FALLBACK_PRICES: PriceData = {
   'DOGE': 8,
   'AKBNK': 70.00,
 };
+
+// Fiyat hardcoded fallback değeriyle birebir aynıysa fallback say. API'ler
+// erişilemezken (ör. VPN/ağ kesintisi) fetchMultiplePrices bu değerleri
+// döndürür — bunlar EKRAN içindir, asla DB'ye persist edilmemeli.
+// (2026-07-02: USD 38.50 fallback'i holdings'e yazıldı → portföy ₺277K eksik göründü.)
+export function isFallbackPrice(symbol: string, price: number): boolean {
+  if (priceCache[symbol]?.source === 'fallback' && priceCache[symbol].price === price) return true;
+  return FALLBACK_PRICES[symbol] !== undefined && price === FALLBACK_PRICES[symbol];
+}
 
 const CACHE_DURATIONS: Record<string, number> = {
   'stock': 30000,

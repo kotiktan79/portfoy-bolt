@@ -3,6 +3,7 @@ import { supabase, Holding, AssetType } from '../lib/supabase';
 import { holdingValueTRY, holdingCostTRY, FxRates } from '../lib/fx';
 import {
   fetchMultiplePrices,
+  isFallbackPrice,
   formatCurrency,
   initializeWebSocketConnection,
   closeWebSocketConnection,
@@ -333,8 +334,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         }
         // KONTRAT: priceService artık holding.currency cinsinden ham fiyat döndürür
         // (US stock → USD, EU stock → EUR, BIST → TRY, crypto → TRY). Doğrudan yazılır.
+        // Fallback fiyat DB'ye YAZILMAZ — eski gerçek fiyat, uydurma sabitten iyidir.
         const newPrice = prices[holding.symbol];
-        if (newPrice && Math.abs(newPrice - holding.current_price) > 0.01) {
+        if (newPrice && !isFallbackPrice(holding.symbol, newPrice) && Math.abs(newPrice - holding.current_price) > 0.01) {
           const { error } = await supabase
             .from('holdings')
             .update({
