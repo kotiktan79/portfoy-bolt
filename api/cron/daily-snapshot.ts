@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { sendTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
+import { fetchTefasFundPrice } from '../lib/fundPrice.js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -119,15 +120,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: cashBalances } = await supabase
       .from('cash_balances')
       .select('currency, total_deposits, total_withdrawals');
+    // Canlı çapraz kurlar (open.er-api tek istekte tüm birimleri verir).
+    // API erişilemezse eski kaba yaklaşımlara düşülür.
+    const crossRates = await fetchUsdCrossRates();
+    const crossToTry = (ccy: string, approx: number): number => {
+      const perUsd = crossRates?.[ccy];
+      return perUsd && perUsd > 0 ? usdRateForTotal / perUsd : approx;
+    };
     const ccyRate = (c: string): number => {
       const cur = (c || 'TRY').toUpperCase();
+      if (cur === 'TRY') return 1;
       if (cur === 'USD') return usdRateForTotal;
       if (cur === 'EUR') return eurRateForTotal;
-      if (cur === 'GBP') return usdRateForTotal * 1.27;
-      if (cur === 'CHF') return usdRateForTotal * 1.13;
-      if (cur === 'RON') return eurRateForTotal / 4.95;
-      if (cur === 'RUB') return usdRateForTotal / 100;
-      return 1;
+      if (cur === 'GBP') return crossToTry('GBP', usdRateForTotal * 1.27);
+      if (cur === 'CHF') return crossToTry('CHF', usdRateForTotal * 1.13);
+      if (cur === 'RON') return crossToTry('RON', eurRateForTotal / 4.95);
+      if (cur === 'RUB') return crossToTry('RUB', usdRateForTotal / 100);
+      return crossToTry(cur, 1);
     };
     for (const cb of cashBalances || []) {
       const rate = ccyRate(cb.currency);
@@ -140,6 +149,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const totalDepositsUSD = usdRateForTotal > 0 ? totalDepositsTRY / usdRateForTotal : 0;
     const totalWithdrawalsUSD = usdRateForTotal > 0 ? totalWithdrawalsTRY / usdRateForTotal : 0;
     log.push(`Deposits: ₺${totalDepositsTRY.toFixed(0)} ($${totalDepositsUSD.toFixed(0)}, canlı FX), Withdrawals: ₺${totalWithdrawalsTRY.toFixed(0)}`);
+
+    // exchange_rates tablosunu tazele — UI'daki getExchangeRate en yeni satırı
+    // okur; tazelenmezse nakit bakiyeler aylar önceki elle girilmiş kurla
+    // değerlenir (2026-07: USD 38.4 Nisan kaydı, gerçek 46.7).
+    try {
+      const fxRows = ['USD', 'EUR', 'GBP', 'CHF', 'RON', 'RUB']
+        .map(c => ({ from_currency: c, to_currency: 'TRY', rate: ccyRate(c), recorded_at: new Date().toISOString(), source: 'api' }))
+        .filter(r => isFinite(r.rate) && r.rate > 0);
+      await supabase.from('exchange_rates').insert(fxRows);
+      log.push(`FX tablosu tazelendi: ${fxRows.map(r => `${r.from_currency}=${r.rate.toFixed(3)}`).join(' ')}`);
+    } catch { /* kritik değil */ }
 
     const snapshotData = {
       snapshot_date: today,
@@ -293,7 +313,7 @@ async function updateAllPrices(supabase: any, holdings: any[], log: string[]): P
     promises.push(updateCommodityPrices(supabase, byType.commodity, result, log));
   }
   if (byType.fund) {
-    promises.push(updateFundPrices(supabase, byType.fund, result));
+    promises.push(updateFundPrices(supabase, byType.fund, result, log));
   }
   if (byType.eurobond) {
     promises.push(updateEurobondPrices(supabase, byType.eurobond, result, log));
@@ -599,16 +619,30 @@ async function updateCommodityPrices(supabase: any, holdings: any[], result: Pri
   }
 }
 
-async function updateFundPrices(supabase: any, holdings: any[], result: PriceResult) {
-  // Fonlar genellikle manual_price — sadece Yahoo'da olanları güncelle
+async function updateFundPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
+  // Önce TEFAS (hangikredi kaynağı) — TR fon kodları Yahoo'da yok. Bulunamazsa
+  // Yahoo denenir (yabancı fon ihtimali). manual_price=true olana dokunulmaz.
   for (const h of holdings) {
     if (h.manual_price) {
       result.details[h.symbol] = h.current_price;
       continue;
     }
     try {
-      const prices = await fetchYahooPrices(h.symbol);
-      const price = prices[h.symbol];
+      let price: number | null = null;
+      const tefas = await fetchTefasFundPrice(h.symbol);
+      if (tefas) {
+        price = tefas.price;
+        log.push(`${h.symbol}: TEFAS ${price}`);
+      } else {
+        const prices = await fetchYahooPrices(h.symbol);
+        price = prices[h.symbol] || null;
+      }
+      // Parse hatası / yanlış fon guard'ı: tek günde %25+ sapma yazılmaz
+      const old = Number(h.current_price) || 0;
+      if (price && old > 0 && Math.abs(price - old) / old > 0.25) {
+        log.push(`${h.symbol}: fon anomali reddedildi (${old} → ${price})`);
+        price = null;
+      }
       if (price) {
         await supabase.from('holdings').update({ current_price: price, updated_at: new Date().toISOString() }).eq('id', h.id);
         result.updated++;
@@ -699,12 +733,12 @@ async function fetchUsdTry(): Promise<number> {
     const res = await fetch('https://open.er-api.com/v6/latest/USD');
     if (res.ok) {
       const data = await res.json();
-      const rate = data.rates?.TRY || 38;
+      const rate = data.rates?.TRY || 46.7;
       _usdTryCache = { value: rate, ts: Date.now() };
       return rate;
     }
   } catch { /* fallback */ }
-  return _usdTryCache?.value || 38;
+  return _usdTryCache?.value || 46.7;
 }
 
 async function fetchEurTry(): Promise<number> {
@@ -713,12 +747,31 @@ async function fetchEurTry(): Promise<number> {
     const res = await fetch('https://open.er-api.com/v6/latest/EUR');
     if (res.ok) {
       const data = await res.json();
-      const rate = data.rates?.TRY || 41;
+      const rate = data.rates?.TRY || 53.3;
       _eurTryCache = { value: rate, ts: Date.now() };
       return rate;
     }
   } catch { /* fallback */ }
-  return _eurTryCache?.value || 41;
+  return _eurTryCache?.value || 53.3;
+}
+
+// Tüm para birimlerinin USD karşılıkları (1 USD = rates[CCY]). Tek istek,
+// snapshot boyunca cache'li. RON/RUB/GBP/CHF nakit bakiyelerin TRY değerlemesi
+// ve exchange_rates tazeleme için kullanılır.
+let _crossRatesCache: { value: Record<string, number> | null; ts: number } | null = null;
+async function fetchUsdCrossRates(): Promise<Record<string, number> | null> {
+  if (_crossRatesCache && Date.now() - _crossRatesCache.ts < 60000) return _crossRatesCache.value;
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.rates && typeof data.rates === 'object') {
+        _crossRatesCache = { value: data.rates, ts: Date.now() };
+        return data.rates;
+      }
+    }
+  } catch { /* fallback */ }
+  return _crossRatesCache?.value || null;
 }
 
 async function fetchYahooPrices(symbols: string): Promise<Record<string, number>> {

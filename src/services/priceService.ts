@@ -164,72 +164,29 @@ const US_STOCKS: Record<string, string> = {
   'MSTR': 'MSTR',
 };
 
+// Fallback fiyatlar — statik el-yazması liste DEĞİL, DB'deki son bilinen
+// fiyatlarla beslenir (seedFallbackPrices, PortfolioContext holdings yükleyince
+// çağırır). API'ler erişilemezken EKRAN için kullanılır; isFallbackPrice
+// guard'ı sayesinde asla DB'ye geri yazılmaz.
+// (Tarihçe: eski sabit liste çürümüştü — USD 38.50 kalmış, gerçek 46.71 iken
+// 2026-07-02'de DB'ye yazılıp portföyü ₺279K eksik gösterdi.)
 const FALLBACK_PRICES: PriceData = {
-  'AKSEN': 55.00,
-  'ALTIN': 3200,
-  'GOLD': 3200,
-  'XAG': 38,
-  'SILVER': 38,
-  'GUMUS': 38,
-  'ASELS': 90.00,
-  'BIMAS': 600.00,
-  'BTC': 3200000,
-  'CCOLA': 58.00,
-  'ASML': 12000,
-  'LVMH': 3900,
-  'SAP': 10200,
-  'TTE': 3300,
-  'OR': 2500,
-  'SAN': 2200,
-  'AIR': 7800,
-  'SU': 1850,
-  'NOKIA': 185,
-  'BMW': 4350,
-  'SIEMENS': 9100,
-  'ADYEN': 6400,
-  'PROSUS': 1700,
-  'EKGYO': 21.50,
-  'ENKAI': 80.00,
-  'EREGL': 60.00,
-  'ETH': 120000,
-  'EURO': 41.50,
-  'EUR': 41.50,
-  'GARAN': 150.00,
-  'HALKB': 60.00,
-  'ISCTR': 29.50,
-  'KCHOL': 230.00,
-  'KOZAL': 47.00,
-  'PGSUS': 320.00,
-  'PETKM': 170.00,
-  'GPA': 20.00,
-  'IPV': 66.00,
-  'LINK': 750,
-  'SAHOL': 95.00,
-  'SISE': 50.00,
-  'SOL': 8500,
-  'TCELL': 120.00,
-  'THYAO': 350.00,
-  'TOASO': 320.00,
-  'TUPRS': 230.00,
-  'VAKBN': 50.00,
-  'YKBNK': 45.00,
-  'US900123CJ75': 43000,
-  'USD': DEFAULT_USD_TRY_RATE,
   'TRY': 1.00,
-  'XRP': 95,
-  'ADA': 20,
-  'AVAX': 1200,
-  'DOT': 250,
-  'MATIC': 18,
-  'BNB': 25000,
-  'DOGE': 8,
-  'AKBNK': 70.00,
+  'USD': DEFAULT_USD_TRY_RATE,
 };
 
-// Fiyat hardcoded fallback değeriyle birebir aynıysa fallback say. API'ler
-// erişilemezken (ör. VPN/ağ kesintisi) fetchMultiplePrices bu değerleri
-// döndürür — bunlar EKRAN içindir, asla DB'ye persist edilmemeli.
-// (2026-07-02: USD 38.50 fallback'i holdings'e yazıldı → portföy ₺277K eksik göründü.)
+// DB'deki son gerçek fiyatları fallback havuzuna aktar (symbol → current_price).
+export function seedFallbackPrices(prices: Record<string, number>) {
+  for (const [symbol, price] of Object.entries(prices)) {
+    if (isFinite(price) && price > 0) FALLBACK_PRICES[symbol] = price;
+  }
+  // Holdings 'EURO' sembolünü kullanır, kod yer yer 'EUR' arar — iki yönlü alias
+  if (FALLBACK_PRICES['EURO'] && !FALLBACK_PRICES['EUR']) FALLBACK_PRICES['EUR'] = FALLBACK_PRICES['EURO'];
+  if (FALLBACK_PRICES['EUR'] && !FALLBACK_PRICES['EURO']) FALLBACK_PRICES['EURO'] = FALLBACK_PRICES['EUR'];
+}
+
+// Fiyat fallback havuzundaki değerle birebir aynıysa fallback say — bunlar
+// ekran içindir, DB'ye persist edilmez (eski gerçek fiyat korunur).
 export function isFallbackPrice(symbol: string, price: number): boolean {
   if (priceCache[symbol]?.source === 'fallback' && priceCache[symbol].price === price) return true;
   return FALLBACK_PRICES[symbol] !== undefined && price === FALLBACK_PRICES[symbol];
@@ -286,7 +243,7 @@ async function fetchUSDTRYFromAlternative(): Promise<number> {
     return result.rates.TRY;
   }
 
-  return FALLBACK_PRICES['USD'];
+  return FALLBACK_PRICES['USD'] || DEFAULT_USD_TRY_RATE;
 }
 
 export async function fetchEURTRYRate(): Promise<number> {
@@ -319,7 +276,7 @@ export async function fetchEURTRYRate(): Promise<number> {
     return result.rates.TRY;
   }
 
-  return FALLBACK_PRICES['EURO'];
+  return FALLBACK_PRICES['EURO'] || DEFAULT_USD_TRY_RATE * 1.08;
 }
 
 export async function fetchCryptoPrice(symbol: string): Promise<number | null> {

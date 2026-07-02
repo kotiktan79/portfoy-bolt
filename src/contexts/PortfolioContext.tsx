@@ -4,6 +4,7 @@ import { holdingValueTRY, holdingCostTRY, FxRates } from '../lib/fx';
 import {
   fetchMultiplePrices,
   isFallbackPrice,
+  seedFallbackPrices,
   formatCurrency,
   initializeWebSocketConnection,
   closeWebSocketConnection,
@@ -262,6 +263,12 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
       if (data) {
         setHoldings(data);
+
+        // DB'deki son gerçek fiyatlar fallback havuzunu besler — API kesintisinde
+        // ekran bayat-ama-gerçek fiyat gösterir, uydurma sabit değil.
+        const seed: Record<string, number> = {};
+        data.forEach(h => { if (h.current_price > 0) seed[h.symbol] = h.current_price; });
+        seedFallbackPrices(seed);
 
         const holdingIds = data.map(h => h.id);
         const dailyPrices = await loadDailyOpenPrices(holdingIds);

@@ -21,7 +21,9 @@ export const TIMING = {
 } as const;
 
 // ── Currency ─────────────────────────────────────────────────────────────
-export const DEFAULT_USD_TRY_RATE = 38.50;
+// Mutlak son çare (DB fiyatları henüz yüklenmemişken ekran için). Gerçek
+// fallback'ler DB'den beslenir: priceService.seedFallbackPrices.
+export const DEFAULT_USD_TRY_RATE = 46.70;
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 export const ANON_USER_ID = '00000000-0000-0000-0000-000000000001';
