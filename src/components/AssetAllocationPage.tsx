@@ -1,7 +1,9 @@
 import { Holding } from '../lib/supabase';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine } from 'recharts';
 import { TrendingUp, TrendingDown, PieChart as PieIcon } from 'lucide-react';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { assetColor, assetName, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -19,16 +21,9 @@ interface AssetTypeData {
   color: string;
 }
 
-const ASSET_TYPE_INFO: { [key: string]: { name: string; color: string } } = {
-  stock: { name: 'BIST Hisseleri', color: '#3B82F6' },
-  crypto: { name: 'Kripto Para', color: '#F59E0B' },
-  currency: { name: 'Döviz', color: '#10B981' },
-  commodity: { name: 'Emtia (Altın)', color: '#EF4444' },
-  fund: { name: 'Fon', color: '#8B5CF6' },
-  eurobond: { name: 'Eurobond', color: '#EC4899' },
-};
-
 export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPageProps) {
+  const { isDark } = useDarkMode();
+  const chrome = chartChrome(isDark);
   const assetTypeMap = new Map<string, AssetTypeData>();
   const fxRates = getFxRatesFromHoldings(holdings);
 
@@ -40,16 +35,15 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
     const profit = currentValue - investmentValue;
 
     if (!assetTypeMap.has(holding.asset_type)) {
-      const info = ASSET_TYPE_INFO[holding.asset_type] || { name: holding.asset_type, color: '#6B7280' };
       assetTypeMap.set(holding.asset_type, {
         type: holding.asset_type,
-        typeName: info.name,
+        typeName: assetName(holding.asset_type),
         value: 0,
         investment: 0,
         profit: 0,
         profitPercent: 0,
         count: 0,
-        color: info.color,
+        color: assetColor(holding.asset_type, isDark),
       });
     }
 
@@ -108,30 +102,32 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
         {/* Total Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl p-4 sm:p-6 shadow-lg">
-            <div className="text-brand-100 text-sm mb-2">Toplam Değer</div>
-            <div className="text-2xl sm:text-3xl font-bold">{totalValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
-          </div>
-
-          <div className="bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl p-4 sm:p-6 shadow-lg">
-            <div className="text-brand-100 text-sm mb-2">Toplam Yatırım</div>
-            <div className="text-2xl sm:text-3xl font-bold">{totalInvestment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
-          </div>
-
-          <div className={`bg-gradient-to-br ${totalProfit >= 0 ? 'from-green-600 to-green-700' : 'from-red-600 to-red-700'} rounded-xl p-4 sm:p-6 shadow-lg`}>
-            <div className={`${totalProfit >= 0 ? 'text-green-100' : 'text-red-100'} text-sm mb-2`}>Toplam K/Z</div>
-            <div className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-              {totalProfit >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-              {totalProfit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-            </div>
-          </div>
-
-          <div className={`bg-gradient-to-br ${totalProfitPercent >= 0 ? 'from-accent-600 to-accent-700' : 'from-brand-600 to-brand-700'} rounded-xl p-4 sm:p-6 shadow-lg`}>
-            <div className={`${totalProfitPercent >= 0 ? 'text-accent-100' : 'text-brand-100'} text-sm mb-2`}>Getiri Oranı</div>
-            <div className="text-2xl sm:text-3xl font-bold">
-              {totalProfitPercent >= 0 ? '+' : ''}{totalProfitPercent.toFixed(2)}%
-            </div>
-          </div>
+          {[
+            { label: 'Toplam Değer', value: fmtTRY0(totalValue), tone: '' },
+            { label: 'Toplam Yatırım', value: fmtTRY0(totalInvestment), tone: '' },
+            {
+              label: 'Toplam K/Z',
+              value: `${totalProfit >= 0 ? '+' : '−'}${fmtTRY0(Math.abs(totalProfit))}`,
+              tone: totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+              icon: totalProfit >= 0 ? TrendingUp : TrendingDown,
+            },
+            {
+              label: 'Getiri Oranı',
+              value: `${totalProfitPercent >= 0 ? '+' : ''}${totalProfitPercent.toFixed(2)}%`,
+              tone: totalProfitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+            },
+          ].map((card) => {
+            const Icon = (card as { icon?: typeof TrendingUp }).icon;
+            return (
+              <div key={card.label} className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-slate-200 dark:border-gray-700 shadow-sm">
+                <div className="text-slate-500 dark:text-gray-400 text-sm mb-2">{card.label}</div>
+                <div className={`text-2xl sm:text-3xl font-bold tabular-nums tracking-tight flex items-center gap-2 ${card.tone || 'text-gray-900 dark:text-white'}`}>
+                  {Icon && <Icon className="w-6 h-6 flex-shrink-0" />}
+                  {card.value}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Charts Section */}
@@ -146,9 +142,12 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry: any) => `${(entry.percent * 100).toFixed(1)}%`}
-                  outerRadius={80}
-                  fill="#6366f1"
+                  label={(entry: any) => `${entry.percent.toFixed(1)}%`}
+                  innerRadius={52}
+                  outerRadius={92}
+                  paddingAngle={2}
+                  stroke={isDark ? '#1f2937' : '#ffffff'}
+                  strokeWidth={2}
                   dataKey="value"
                 >
                   {pieData.map((_entry, index) => {
@@ -157,10 +156,11 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                   })}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => value.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺'}
-                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                  formatter={(value: number) => fmtTRY0(value)}
+                  contentStyle={{ backgroundColor: chrome.tooltipBg, border: `1px solid ${chrome.tooltipBorder}`, borderRadius: '8px', color: chrome.tooltipText }}
+                  itemStyle={{ color: chrome.tooltipText }}
                 />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 13 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -169,15 +169,18 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-slate-200 dark:border-gray-700 shadow-sm">
             <h2 className="text-lg sm:text-xl font-bold mb-4 text-gray-900 dark:text-white">Getiri Karşılaştırması</h2>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={profitData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
-                <YAxis tick={{ fill: '#9CA3AF' }} />
+              <BarChart data={profitData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke={chrome.grid} />
+                <XAxis dataKey="name" tick={{ fill: chrome.axis, fontSize: 12 }} angle={-30} textAnchor="end" height={70} axisLine={false} tickLine={false} interval={0} />
+                <YAxis tick={{ fill: chrome.axis, fontSize: 12 }} tickFormatter={fmtAxisTRY} axisLine={false} tickLine={false} width={64} />
+                <ReferenceLine y={0} stroke={chrome.axis} strokeWidth={1} />
                 <Tooltip
-                  formatter={(value: number) => value.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺'}
-                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                  formatter={(value: number) => `${value >= 0 ? '+' : ''}${fmtTRY0(value)}`}
+                  contentStyle={{ backgroundColor: chrome.tooltipBg, border: `1px solid ${chrome.tooltipBorder}`, borderRadius: '8px', color: chrome.tooltipText }}
+                  itemStyle={{ color: chrome.tooltipText }}
+                  cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
                 />
-                <Bar dataKey="profit" radius={[8, 8, 0, 0]}>
+                <Bar dataKey="profit" name="K/Z" radius={[4, 4, 0, 0]} maxBarSize={48}>
                   {profitData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
@@ -215,10 +218,10 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                         </div>
                       </td>
                       <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">{asset.count}</td>
-                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">{asset.investment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
-                      <td className="px-4 py-4 text-right font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100">{asset.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
+                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">{fmtTRY0(asset.investment)}</td>
+                      <td className="px-4 py-4 text-right font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100">{fmtTRY0(asset.value)}</td>
                       <td className={`px-4 py-4 text-right font-semibold text-sm sm:text-base ${asset.profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {asset.profit >= 0 ? '+' : ''}{asset.profit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                        {asset.profit >= 0 ? '+' : ''}{fmtTRY0(asset.profit)}
                       </td>
                       <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">
                         {totalValue > 0 ? ((asset.value / totalValue) * 100).toFixed(1) : 0}%
@@ -233,10 +236,10 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                 <tr>
                   <td className="px-4 py-4 text-sm sm:text-base">TOPLAM</td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">{holdings.length}</td>
-                  <td className="px-4 py-4 text-right text-sm sm:text-base">{totalInvestment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
-                  <td className="px-4 py-4 text-right text-sm sm:text-base">{totalValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
+                  <td className="px-4 py-4 text-right text-sm sm:text-base">{fmtTRY0(totalInvestment)}</td>
+                  <td className="px-4 py-4 text-right text-sm sm:text-base">{fmtTRY0(totalValue)}</td>
                   <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                    {totalProfit >= 0 ? '+' : ''}{fmtTRY0(totalProfit)}
                   </td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">100%</td>
                   <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>

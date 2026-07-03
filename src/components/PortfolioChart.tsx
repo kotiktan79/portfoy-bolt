@@ -3,6 +3,8 @@ import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cartesia
 import { format } from 'date-fns';
 import { PortfolioSnapshot } from '../services/analyticsService';
 import { Activity, TrendingUp, BarChart3 } from 'lucide-react';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { chartChrome, fmtAxisTRY, fmtTRY0, paddedDomain } from '../lib/chartTheme';
 
 interface PortfolioChartProps {
   data: PortfolioSnapshot[];
@@ -12,7 +14,17 @@ interface PortfolioChartProps {
 
 export function PortfolioChart({ data, type: initialType = 'area', showControls = true }: PortfolioChartProps) {
   const [chartType, setChartType] = useState<'line' | 'area' | 'bar'>(initialType);
-  const [showPnL, setShowPnL] = useState(true);
+  // Kapalı başlar: K/Z serisi (≈₺1,3M) değer serisiyle (≈₺7M+) aynı eksende
+  // trendi eziyor; isteyen aç/kapa yapabilir.
+  const [showPnL, setShowPnL] = useState(false);
+  const { isDark } = useDarkMode();
+  const chrome = chartChrome(isDark);
+  const axisTick = { fontSize: 12, fill: chrome.axis };
+  const brushProps = {
+    dataKey: 'date', height: 22, stroke: chrome.neutralLine,
+    fill: 'transparent', travellerWidth: 8,
+    tickFormatter: () => '',
+  } as const;
 
   const chartData = data
     .filter((snapshot) => snapshot.date)
@@ -48,14 +60,14 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
           <p className="text-sm font-semibold text-slate-700 dark:text-gray-200 mb-2">{payload[0].payload.date}</p>
           <div className="space-y-1">
             <p className="text-sm text-slate-600 dark:text-gray-400">
-              Değer: <span className="font-bold text-slate-900 dark:text-gray-100">{valueData.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+              Değer: <span className="font-bold tabular-nums text-slate-900 dark:text-gray-100">{fmtTRY0(valueData.value)}</span>
             </p>
             <p className="text-sm text-slate-600 dark:text-gray-400">
-              Yatırım: <span className="font-bold text-slate-900 dark:text-gray-100">{investmentData.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+              Yatırım: <span className="font-bold tabular-nums text-slate-900 dark:text-gray-100">{fmtTRY0(investmentData.value)}</span>
             </p>
             <p className="text-sm text-slate-600 dark:text-gray-400">
-              PnL: <span className={`font-bold ${pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                {pnl.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+              K/Z: <span className={`font-bold tabular-nums ${pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {pnl >= 0 ? '+' : ''}{fmtTRY0(pnl)}
               </span>
             </p>
           </div>
@@ -69,16 +81,16 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
     if (chartType === 'bar') {
       return (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="date" stroke="#64748b" style={{ fontSize: '12px' }} />
-            <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
+          <BarChart data={chartData} barGap={2}>
+            <CartesianGrid vertical={false} stroke={chrome.grid} />
+            <XAxis dataKey="date" tick={axisTick} axisLine={false} tickLine={false} />
+            <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisTRY} width={64} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar dataKey="value" fill="#6366f1" name="Portföy Değeri" radius={[8, 8, 0, 0]} />
-            <Bar dataKey="investment" fill="#64748b" name="Yatırım" radius={[8, 8, 0, 0]} />
-            {showPnL && <Bar dataKey="pnl" fill="#10b981" name="Kar/Zarar" radius={[8, 8, 0, 0]} />}
-            <Brush dataKey="date" height={30} stroke="#6366f1" />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="value" fill="#6366f1" name="Portföy Değeri" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="investment" fill={chrome.neutralLine} name="Yatırım" radius={[4, 4, 0, 0]} />
+            {showPnL && <Bar dataKey="pnl" fill={chrome.positive} name="Kar/Zarar" radius={[4, 4, 0, 0]} />}
+            <Brush {...brushProps} />
           </BarChart>
         </ResponsiveContainer>
       );
@@ -90,19 +102,15 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
         <AreaChart data={chartData}>
           <defs>
             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
               <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
             </linearGradient>
-            <linearGradient id="colorInvestment" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#64748b" stopOpacity={0.2}/>
-              <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
-            </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="date" stroke="#64748b" style={{ fontSize: '12px' }} />
-          <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
+          <CartesianGrid vertical={false} stroke={chrome.grid} />
+          <XAxis dataKey="date" tick={axisTick} axisLine={false} tickLine={false} />
+          <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisTRY} width={64} domain={paddedDomain} />
           <Tooltip content={<CustomTooltip />} />
-          <Legend />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
           <Area
             type="monotone"
             dataKey="value"
@@ -111,17 +119,21 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
             fillOpacity={1}
             fill="url(#colorValue)"
             name="Portföy Değeri"
+            dot={false}
+            activeDot={{ r: 5, strokeWidth: 2 }}
           />
           <Area
             type="monotone"
             dataKey="investment"
-            stroke="#64748b"
-            strokeWidth={2}
-            fillOpacity={1}
-            fill="url(#colorInvestment)"
+            stroke={chrome.neutralLine}
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+            fill="none"
             name="Yatırım"
+            dot={false}
+            activeDot={{ r: 4 }}
           />
-          <Brush dataKey="date" height={30} stroke="#6366f1" />
+          <Brush {...brushProps} />
         </AreaChart>
       </ResponsiveContainer>
     );
@@ -130,41 +142,42 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
     return (
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="date" stroke="#64748b" style={{ fontSize: '12px' }} />
-          <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
+          <CartesianGrid vertical={false} stroke={chrome.grid} />
+          <XAxis dataKey="date" tick={axisTick} axisLine={false} tickLine={false} />
+          <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisTRY} width={64} domain={showPnL ? undefined : paddedDomain} />
           <Tooltip content={<CustomTooltip />} />
-          <Legend />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
           <Line
             type="monotone"
             dataKey="value"
             stroke="#6366f1"
-            strokeWidth={3}
-            dot={{ fill: '#3b82f6', r: 4 }}
-            activeDot={{ r: 7, stroke: '#3b82f6', strokeWidth: 2 }}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 5, stroke: '#6366f1', strokeWidth: 2 }}
             name="Portföy Değeri"
           />
           <Line
             type="monotone"
             dataKey="investment"
-            stroke="#64748b"
-            strokeWidth={2}
-            dot={{ fill: '#64748b', r: 3 }}
-            activeDot={{ r: 6 }}
+            stroke={chrome.neutralLine}
+            strokeWidth={1.5}
+            dot={false}
+            activeDot={{ r: 4 }}
             name="Yatırım"
-            strokeDasharray="5 5"
+            strokeDasharray="5 4"
           />
           {showPnL && (
             <Line
               type="monotone"
               dataKey="pnl"
-              stroke="#10b981"
+              stroke={chrome.positive}
               strokeWidth={2}
-              dot={{ fill: '#10b981', r: 3 }}
+              dot={false}
+              activeDot={{ r: 4 }}
               name="Kar/Zarar"
             />
           )}
-          <Brush dataKey="date" height={30} stroke="#6366f1" />
+          <Brush {...brushProps} />
         </LineChart>
       </ResponsiveContainer>
     );

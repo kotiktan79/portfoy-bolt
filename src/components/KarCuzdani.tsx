@@ -240,7 +240,7 @@ export default function KarCuzdani({ holdings }: Props) {
         {safeSalaryUsd > 0 ? (
           <>
             <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-              ${safeSalaryUsd.toFixed(0)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
+              ${safeSalaryUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
             </p>
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
               Biriken kâr <strong>${reservoirUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong> (anapara üstü). Sürdürülebilir çekim: portföyün %4 tavanı + kârı ~4 yıla yayma — anaparaya dokunmaz.
@@ -262,7 +262,7 @@ export default function KarCuzdani({ holdings }: Props) {
             💰 Birikmiş Cüzdan
           </p>
           <p className={`text-4xl font-bold ${reservoirUsd > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-gray-500'}`}>
-            ${reservoirUsd.toFixed(0)}
+            ${reservoirUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
           </p>
           <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
             Anapara üzerine biriken çekilebilir kâr
@@ -272,11 +272,11 @@ export default function KarCuzdani({ holdings }: Props) {
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
             <div>
               <p className="text-slate-500 dark:text-gray-400">Portföy</p>
-              <p className="font-bold text-gray-900 dark:text-white">${portfolioUsd.toFixed(0)}</p>
+              <p className="font-bold text-gray-900 dark:text-white">${portfolioUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
             </div>
             <div>
               <p className="text-slate-500 dark:text-gray-400">Toplam Çekilen</p>
-              <p className="font-bold text-gray-900 dark:text-white">${totalWithdrawnUsd.toFixed(0)}</p>
+              <p className="font-bold text-gray-900 dark:text-white">${totalWithdrawnUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
 
@@ -330,7 +330,7 @@ export default function KarCuzdani({ holdings }: Props) {
             </div>
           ) : (
             <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
-              ${target.toFixed(0)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
+              ${target.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
             </p>
           )}
 
@@ -349,7 +349,7 @@ export default function KarCuzdani({ holdings }: Props) {
               >
                 {cashSources.map((s) => (
                   <option key={s.symbol} value={s.symbol}>
-                    {s.ccyDisplay} cash — {s.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} {s.ccyDisplay} (${s.valueUsd.toFixed(0)})
+                    {s.ccyDisplay} cash — {s.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} {s.ccyDisplay} (${s.valueUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })})
                   </option>
                 ))}
               </select>
@@ -365,7 +365,7 @@ export default function KarCuzdani({ holdings }: Props) {
             <div className="space-y-2">
               <p className="text-xs text-slate-700 dark:text-gray-300">
                 <strong>{targetSourceQty.toFixed(0)} {selectedSource?.ccyDisplay}</strong> ({selectedSource?.symbol} cash) düşülecek.
-                <br/>Cüzdan: ${reservoirUsd.toFixed(0)} → ${(reservoirUsd - target).toFixed(0)}
+                <br/>Cüzdan: ${reservoirUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })} → ${(reservoirUsd - target).toFixed(0)}
               </p>
               <div className="flex gap-2">
                 <button
@@ -392,7 +392,7 @@ export default function KarCuzdani({ holdings }: Props) {
                   : 'bg-slate-200 dark:bg-gray-700 text-slate-400 dark:text-gray-500 cursor-not-allowed'
               }`}
             >
-              {!canWithdraw ? 'Cüzdan Yetersiz' : !sourceSufficient ? `Kaynak Yetersiz (${selectedSource?.ccyDisplay})` : `💸 ${target.toFixed(0)}$ Maaşı Çek`}
+              {!canWithdraw ? 'Cüzdan Yetersiz' : !sourceSufficient ? `Kaynak Yetersiz (${selectedSource?.ccyDisplay})` : `💸 ${target.toLocaleString('en-US', { maximumFractionDigits: 0 })}$ Maaşı Çek`}
             </button>
           )}
         </div>

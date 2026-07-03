@@ -76,10 +76,10 @@ export function SmartAlerts() {
       for (const alert of filteredAlerts) {
         showNotification(
           alert.severity === 'critical'
-            ? 'Kritik Portf\u00F6y Uyar\u0131s\u0131'
+            ? 'Kritik Portföy Uyarısı'
             : alert.severity === 'warning'
-              ? 'Portf\u00F6y Uyar\u0131s\u0131'
-              : 'Portf\u00F6y F\u0131rsat\u0131',
+              ? 'Portföy Uyarısı'
+              : 'Portföy Fırsatı',
           {
             body: alert.message,
             tag: `smart-alert-${alert.symbol}-${alert.type}`,
@@ -168,14 +168,14 @@ export function SmartAlerts() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-gray-400">
           <Bell size={12} />
-          <span>Ak\u0131ll\u0131 Uyar\u0131lar ({visibleAlerts.length})</span>
+          <span>Akıllı Uyarılar ({visibleAlerts.length})</span>
         </div>
         {visibleAlerts.length > 1 && (
           <button
             onClick={dismissAll}
             className="text-[10px] text-slate-400 dark:text-gray-500 hover:text-slate-600 dark:hover:text-gray-300 transition-colors"
           >
-            T\u00FCm\u00FCn\u00FC kapat
+            Tümünü kapat
           </button>
         )}
       </div>

@@ -58,10 +58,10 @@ export function PriceUpdateNotification() {
 
   const getStatusLabel = () => {
     switch (connectionStatus) {
-      case 'connected': return 'Canli';
-      case 'connecting': return 'Baglaniyor';
+      case 'connected': return 'Canlı';
+      case 'connecting': return 'Bağlanıyor';
       case 'error': return 'Hata';
-      default: return 'Kapali';
+      default: return 'Kapalı';
     }
   };
 
@@ -74,7 +74,7 @@ export function PriceUpdateNotification() {
         </span>
         {updateCount > 0 && (
           <span className="text-[10px] text-slate-500 dark:text-slate-400 border-l border-slate-300 dark:border-slate-600 pl-2">
-            {updateCount} guncelleme {lastSymbol && `(${lastSymbol})`}
+            {updateCount} güncelleme {lastSymbol && `(${lastSymbol})`}
           </span>
         )}
       </div>

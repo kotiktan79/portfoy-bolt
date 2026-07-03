@@ -1,6 +1,5 @@
 import { useMemo, useEffect, useState } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
-import { AreaChart } from '@tremor/react';
 import { TrendingUp, TrendingDown, Wallet, Gauge, Coins, ArrowUpRight } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
@@ -32,6 +31,35 @@ function AnimatedNumber({ value, format }: { value: number; format: (n: number) 
   useEffect(() => { spring.set(value); }, [spring, value]);
   useEffect(() => display.on('change', setText), [display]);
   return <>{text}</>;
+}
+
+// Hero sparkline — Tremor'un 0-tabanlı ekseni 30 günlük seriyi dev bir leke
+// yapıyordu. Veriye oturan min/max domain'li, hafif inline SVG.
+function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
+  const W = 600, H = 96, PAD = 4;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = max - min || 1;
+  const stepX = (W - PAD * 2) / (data.length - 1);
+  const y = (v: number) => PAD + (H - PAD * 2) * (1 - (v - min) / range);
+  const points = data.map((v, i) => `${(PAD + i * stepX).toFixed(1)},${y(v).toFixed(1)}`);
+  const line = `M${points.join(' L')}`;
+  const area = `${line} L${(PAD + (data.length - 1) * stepX).toFixed(1)},${H} L${PAD},${H} Z`;
+  const stroke = positive ? '#059669' : '#dc2626';
+  const gradId = positive ? 'heroSparkPos' : 'heroSparkNeg';
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24 md:h-28" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity={0.22} />
+          <stop offset="100%" stopColor={stroke} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gradId})`} />
+      <path d={line} fill="none" stroke={stroke} strokeWidth={2} vectorEffect="non-scaling-stroke"
+        strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={PAD + (data.length - 1) * stepX} cy={y(data[data.length - 1])} r={3.5} fill={stroke} />
+    </svg>
+  );
 }
 
 const container = {
@@ -70,10 +98,7 @@ export default function HeroDashboard({
     computeHoldingMetrics(holdings).sort((a, b) => b.weight - a.weight).slice(0, 3),
     [holdings]);
 
-  const chartData = (historicalData || []).slice(-30).map(d => ({
-    date: d.date.slice(5),
-    'Portföy (₺)': d.value,
-  }));
+  const sparkValues = (historicalData || []).slice(-30).map(d => d.value);
 
   const today = new Date().toLocaleDateString('tr-TR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -159,31 +184,22 @@ export default function HeroDashboard({
             )}
           </div>
 
-          {/* Altın çizgi separator + chart */}
-          {chartData.length > 1 && (
+          {/* Altın çizgi separator + sparkline */}
+          {sparkValues.length > 1 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
               className="mt-5"
             >
-              <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center justify-between gap-3 mb-1">
                 <span className="font-serif italic text-xs text-ink-500 dark:text-gold-200/50">Son 30 gün</span>
                 <div className="flex-1 h-px bg-gradient-to-r from-gold-400/40 via-gold-400/20 to-transparent" />
+                <span className="text-[11px] tabular-nums text-ink-500 dark:text-gold-200/50">
+                  ₺{fmtTRY(Math.min(...sparkValues))} – ₺{fmtTRY(Math.max(...sparkValues))}
+                </span>
               </div>
-              <AreaChart
-                className="!h-28"
-                data={chartData}
-                index="date"
-                categories={['Portföy (₺)']}
-                colors={[isPos ? 'emerald' : 'rose']}
-                showLegend={false}
-                showYAxis={false}
-                showGridLines={false}
-                showXAxis={false}
-                curveType="monotone"
-                valueFormatter={(n) => '₺' + fmtTRY(n)}
-              />
+              <Sparkline data={sparkValues} positive={sparkValues[sparkValues.length - 1] >= sparkValues[0]} />
             </motion.div>
           )}
         </div>

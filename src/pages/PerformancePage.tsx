@@ -25,6 +25,8 @@ import {
   BenchmarkKey,
   BenchmarkPoint,
 } from '../services/benchmarkService';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { chartChrome, fmtTRY0, paddedDomain } from '../lib/chartTheme';
 
 type Period = 7 | 30 | 90 | 9999;
 
@@ -52,6 +54,8 @@ function formatTooltipDate(dateStr: string): string {
 
 export default function PerformancePage() {
   const { holdings, livePnlData } = usePortfolio();
+  const { isDark } = useDarkMode();
+  const chrome = chartChrome(isDark);
   const [period, setPeriod] = useState<Period>(30);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -220,40 +224,34 @@ export default function PerformancePage() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={360}>
+              {/* Benchmark seçiliyken İKİ ölçek tek eksende buluşur: ikisi de
+                  dönem başı = 100 endeksi. Çift y-ekseni (₺ + endeks) okunaksız
+                  ve yanıltıcıydı. */}
               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={isPositive ? '#22c55e' : '#ef4444'} stopOpacity={0.3} />
+                    <stop offset="5%" stopColor={isPositive ? '#22c55e' : '#ef4444'} stopOpacity={0.22} />
                     <stop offset="95%" stopColor={isPositive ? '#22c55e' : '#ef4444'} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+                <CartesianGrid vertical={false} stroke={chrome.grid} />
                 <XAxis
                   dataKey="dateLabel"
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
+                  tick={{ fontSize: 12, fill: chrome.axis }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
                   yAxisId="left"
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
+                  tick={{ fontSize: 12, fill: chrome.axis }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(v: number) => formatCurrency(v, 0)}
-                  width={90}
+                  tickFormatter={(v: number) =>
+                    benchmarkKey ? v.toFixed(0) : formatCurrency(v, 0)
+                  }
+                  domain={paddedDomain}
+                  width={benchmarkKey ? 50 : 90}
                 />
-                {benchmarkKey && (
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: 11, fill: '#6366f1' }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v: number) => `${v.toFixed(0)}`}
-                    domain={['auto', 'auto']}
-                    width={50}
-                  />
-                )}
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload || payload.length === 0) return null;
@@ -264,7 +262,7 @@ export default function PerformancePage() {
                           {formatTooltipDate(data.date)}
                         </p>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">
-                          Portföy: {formatCurrency(data.value)}
+                          Portföy: {fmtTRY0(data.value)}
                           <span className="ml-2 text-xs text-gray-500">
                             (idx {data.portfolioIdx?.toFixed(1)})
                           </span>
@@ -286,9 +284,9 @@ export default function PerformancePage() {
                 <Area
                   yAxisId="left"
                   type="monotone"
-                  dataKey="value"
+                  dataKey={benchmarkKey ? 'portfolioIdx' : 'value'}
                   stroke={isPositive ? '#22c55e' : '#ef4444'}
-                  strokeWidth={2.5}
+                  strokeWidth={2}
                   fill="url(#valueGradient)"
                   name="Portföy"
                   dot={false}
@@ -296,7 +294,7 @@ export default function PerformancePage() {
                 />
                 {benchmarkKey && (
                   <Line
-                    yAxisId="right"
+                    yAxisId="left"
                     type="monotone"
                     dataKey="benchmarkIdx"
                     stroke="#6366f1"
@@ -318,26 +316,26 @@ export default function PerformancePage() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <StatCard
               label="Dönem başı değer"
-              value={formatCurrency(stats.startValue)}
+              value={fmtTRY0(stats.startValue)}
             />
             <StatCard
               label="Şu anki değer"
-              value={formatCurrency(stats.endValue)}
+              value={fmtTRY0(stats.endValue)}
             />
             <StatCard
               label="Değişim"
-              value={`${isPositive ? '+' : ''}${formatCurrency(stats.changeTL)}`}
+              value={`${isPositive ? '+' : ''}${fmtTRY0(stats.changeTL)}`}
               sub={`${isPositive ? '+' : ''}${stats.changePct.toFixed(2)}%`}
               color={isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
             />
             <StatCard
               label="En yüksek"
-              value={formatCurrency(stats.highest)}
+              value={fmtTRY0(stats.highest)}
               color="text-green-600 dark:text-green-400"
             />
             <StatCard
               label="En düşük"
-              value={formatCurrency(stats.lowest)}
+              value={fmtTRY0(stats.lowest)}
               color="text-red-600 dark:text-red-400"
             />
             <StatCard
