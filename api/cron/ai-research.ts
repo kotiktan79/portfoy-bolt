@@ -69,7 +69,8 @@ async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
       'anthropic-beta': 'web-search-2025-03-05',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
+      thinking: { type: 'disabled' },
       max_tokens: 8000,
       system: SYSTEM_PROMPT,
       tools: [
@@ -254,7 +255,7 @@ UYARI: Sadece geçerli JSON ver, başka metin yok. Markdown code block kullanma.
       await supabase.from('ai_research_reports').update({
         content: parsed,
         headline,
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         tokens_used: (usage?.input_tokens || 0) + (usage?.output_tokens || 0),
         generated_at: new Date().toISOString(),
       }).eq('id', reportId);
@@ -267,7 +268,7 @@ UYARI: Sadece geçerli JSON ver, başka metin yok. Markdown code block kullanma.
           report_date: reportDate,
           content: parsed,
           headline,
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-5',
           tokens_used: (usage?.input_tokens || 0) + (usage?.output_tokens || 0),
         })
         .select('id')

@@ -29,7 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
+        thinking: { type: 'disabled' },
         max_tokens: 3000,
         system: `Sen kişisel portföy yöneticisisin. Müşterinin tüm portföy verileri ve CANLI piyasa verileri sana sağlanıyor. Gerçek bir portföy yöneticisi gibi davran - genel tavsiye değil, bu portföye özel, bugünkü piyasa koşullarına dayalı somut yönlendirme yap.
 

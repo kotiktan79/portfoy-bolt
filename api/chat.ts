@@ -40,7 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
+        thinking: { type: 'disabled' },
         max_tokens: 1500,
         system: systemPrompt,
         messages,
@@ -58,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       success: true,
       response: data.content[0].text,
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
     });
   } catch (error: any) {
     console.error('Error:', error);
