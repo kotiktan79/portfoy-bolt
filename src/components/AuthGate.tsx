@@ -66,12 +66,12 @@ function LoginScreen() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 shadow-xl border border-slate-200 dark:border-gray-800 p-6 space-y-4"
       >
-        <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100">
-          <span className="h-9 w-9 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-800 dark:text-slate-100">
+          <span className="h-10 w-10 rounded-xl bg-gradient-to-br from-gold-400 to-gold-600 text-white flex items-center justify-center shadow-sm">
             <Lock size={18} />
           </span>
           <div>
-            <h1 className="text-lg font-semibold leading-tight">Portföy</h1>
+            <h1 className="text-lg font-semibold leading-tight tracking-tight">Tandor Finans</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">Devam etmek için giriş yap</p>
           </div>
         </div>

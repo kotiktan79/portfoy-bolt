@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Pencil, Trash2, TrendingUp, TrendingDown, Lock, Wallet, Coins, Banknote, PieChart, Package, Gem, LucideIcon } from 'lucide-react';
 import { Holding } from '../lib/supabase';
+import { fmtQty, fmtPrice } from '../lib/chartTheme';
 import { formatCurrency, formatPercentage } from '../services/priceService';
 import { BuySellModal } from './BuySellModal';
 import { detectCurrency, calculatePnLWithCurrency } from '../services/currencyService';
@@ -92,7 +93,7 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-lg font-bold tabular-nums text-gray-900 dark:text-white">
-                {formatCurrency(holding.current_price, 4)} ₺
+                {fmtPrice(holding.current_price)} ₺
               </span>
               {holding.manual_price && (
                 <Lock size={11} className="text-brand-600" />
@@ -116,13 +117,13 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
           <div>
             <p className="t-eyebrow !text-[9px]">Miktar</p>
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 tabular-nums truncate">
-              {holding.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 8 })}
+              {fmtQty(holding.quantity)}
             </p>
           </div>
           <div>
             <p className="t-eyebrow !text-[9px]">Alış</p>
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 tabular-nums">
-              {formatCurrency(holding.purchase_price, 2)} ₺
+              {fmtPrice(holding.purchase_price)} ₺
             </p>
           </div>
           <div>

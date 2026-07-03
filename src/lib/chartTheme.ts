@@ -72,6 +72,26 @@ export function fmtSignedTRY0(n: number): string {
   return (n >= 0 ? '+' : '−') + fmtTRY0(Math.abs(n));
 }
 
+// Miktar: tam sayılar ondalıksız, kesirliler en çok 4 anlamlı ondalıkla,
+// kuyruk sıfırları olmadan. (37.550,00000000 → 37.550 · 0,06321882 → 0,0632)
+export function fmtQty(n: number): string {
+  if (!isFinite(n)) return '0';
+  if (Number.isInteger(n) || Math.abs(n - Math.round(n)) < 1e-9) {
+    return Math.round(n).toLocaleString('tr-TR');
+  }
+  const decimals = Math.abs(n) >= 1 ? 4 : 6;
+  return n.toLocaleString('tr-TR', { maximumFractionDigits: decimals });
+}
+
+// Fiyat: büyüklüğe göre ondalık — ₺3.350.478 gibi büyükler tam sayı,
+// normal fiyatlar 2 hane, kuruş-altı fiyatlar 4 hane.
+export function fmtPrice(n: number): string {
+  if (!isFinite(n)) return '0';
+  const abs = Math.abs(n);
+  const decimals = abs >= 10000 ? 0 : abs >= 1 ? 2 : 4;
+  return n.toLocaleString('tr-TR', { maximumFractionDigits: decimals, minimumFractionDigits: abs >= 1 && abs < 10000 ? 2 : 0 });
+}
+
 // Recharts YAxis domain'i: 0-tabanlı düz çizgi yerine veriye oturan,
 // %1,5 nefes paylı aralık. (Pozitif seriler için; negatifler kırpılmaz.)
 export const paddedDomain: [(dataMin: number) => number, (dataMax: number) => number] = [

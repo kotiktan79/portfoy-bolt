@@ -95,9 +95,9 @@ export function DashboardHeader({
   const statusLabel = (): string => {
     switch (connectionStatus) {
       case 'connected':
-        return 'Canli';
+        return 'Canlı';
       case 'connecting':
-        return 'Baglaniyor';
+        return 'Bağlanıyor';
       case 'error':
         return 'Hata';
       default:

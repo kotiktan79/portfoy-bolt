@@ -7,6 +7,18 @@ import { ManualPriceUpdateModal } from './ManualPriceUpdateModal';
 import { detectCurrency, calculatePnLWithCurrency, getCurrencySymbol, getExchangeRate } from '../services/currencyService';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
 import { DEFAULT_USD_TRY_RATE } from '../config';
+import { assetColor, fmtQty, fmtPrice } from '../lib/chartTheme';
+
+// Varlık tipi renk noktası — palet light/dark için farklı step kullanır,
+// hook'suz CSS-only çözüm: iki nokta, biri light'ta biri dark'ta görünür.
+function TypeDot({ assetType }: { assetType: string }) {
+  return (
+    <>
+      <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 dark:hidden" style={{ backgroundColor: assetColor(assetType, false) }} />
+      <span className="hidden dark:inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: assetColor(assetType, true) }} />
+    </>
+  );
+}
 
 interface HoldingRowProps {
   holding: Holding;
@@ -131,8 +143,11 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
         {/* Varlik */}
         <td className="px-3 md:px-5 py-3 md:py-4">
           <div className="flex flex-col">
-            <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white">{holding.symbol}</span>
-            <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">{getAssetTypeLabel(holding.asset_type)}</span>
+            <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+              <TypeDot assetType={holding.asset_type} />
+              {holding.symbol}
+            </span>
+            <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 pl-[14px]">{getAssetTypeLabel(holding.asset_type)}</span>
             {holding.price_notes && (
               <span className="text-[9px] text-gray-400 dark:text-gray-500">
                 {holding.price_notes.includes('Binance') ? '\u2B21 Binance' :
@@ -143,20 +158,20 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
           </div>
         </td>
         {/* Alis Fiyati - hidden on mobile */}
-        <td className="px-3 md:px-5 py-3 md:py-4 text-right text-xs md:text-sm text-gray-700 dark:text-gray-300 hidden sm:table-cell">
-          {formatCurrency(holding.purchase_price, 4)}
+        <td className="px-3 md:px-5 py-3 md:py-4 text-right text-xs md:text-sm tabular-nums text-gray-700 dark:text-gray-300 hidden sm:table-cell">
+          {fmtPrice(holding.purchase_price)}
         </td>
         {/* Miktar - hidden on mobile */}
-        <td className="px-3 md:px-5 py-3 md:py-4 text-right text-xs md:text-sm text-gray-700 dark:text-gray-300 hidden md:table-cell">
-          {formatCurrency(holding.quantity, 8)}
+        <td className="px-3 md:px-5 py-3 md:py-4 text-right text-xs md:text-sm tabular-nums text-gray-700 dark:text-gray-300 hidden md:table-cell">
+          {fmtQty(holding.quantity)}
         </td>
         {/* Guncel Fiyat */}
         <td className="px-3 md:px-5 py-3 md:py-4 text-right">
           <div className="flex items-center justify-end gap-1 md:gap-2">
             <div className="flex flex-col items-end">
               <div className="flex items-center gap-1">
-                <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white">
-                  {formatCurrency(holding.current_price, 4)}
+                <span className="font-semibold text-xs md:text-sm tabular-nums text-gray-900 dark:text-white">
+                  {fmtPrice(holding.current_price)}
                 </span>
                 {holding.manual_price && (
                   <Lock size={10} className="text-brand-600 md:hidden" />
@@ -209,10 +224,10 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
         {/* K/Z */}
         <td className="px-3 md:px-5 py-3 md:py-4 text-right">
           <div className="flex flex-col items-end">
-            <span className={`font-bold text-xs md:text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(pnlData.pnl)} ₺
+            <span className={`font-bold text-xs md:text-sm tabular-nums ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              {isPositive ? '+' : ''}{formatCurrency(pnlData.pnl)} ₺
             </span>
-            <span className={`text-[10px] md:text-xs font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+            <span className={`text-[10px] md:text-xs font-semibold tabular-nums ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatPercentage(pnlData.pnlPercent)}
             </span>
           </div>
