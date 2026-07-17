@@ -184,8 +184,9 @@ export default function AnnualReportCard() {
               </tfoot>
             </table>
             <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-3">
-              💡 Realize kâr FIFO lot eşleştirmesiyle satış yılına yazılır; TRY çevrimi güncel kurla yapılır.
-              Yatırılan para kâr değildir, karşılaştırma için gösterilir.
+              💡 Realize kâr FIFO lot eşleştirmesiyle satış yılına yazılır; TRY çevrimi satış günü
+              kuruyla, nakit hareketleri işlem günü kuruyla yapılır (kur verisi olmayan eski tarihler
+              en yakın mevcut kura düşer). Yatırılan para kâr değildir, karşılaştırma için gösterilir.
             </p>
           </div>
         </>
