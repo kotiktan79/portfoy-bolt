@@ -127,6 +127,7 @@ export default function HomePage() {
             onShowAllocation={() => navigate('/allocation')}
             onShowAIAdvisor={() => navigate('/ai-advisor')}
             onShowResearch={() => navigate('/research')}
+            onShowProjection={() => navigate('/projection')}
             onShowRebalanceModal={() => setShowRebalanceModal(true)}
             onEnableNotifications={enableNotifications}
             onThemeCycle={() => {

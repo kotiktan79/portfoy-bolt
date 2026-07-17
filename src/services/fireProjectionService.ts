@@ -1,9 +1,15 @@
+// FIRE (finansal bağımsızlık) projeksiyonu — para biriminden bağımsız saf hesap.
+// Girdiler hangi para birimindeyse çıktılar da o birimdedir (UI USD kullanıyor).
+
 export interface FireInputs {
   currentValue: number;
   monthlyContribution: number;
   annualReturnPct: number;
   targetMonthlyIncome: number;
   safeWithdrawalRatePct: number;
+  // Hedefin bugünkü alım gücünü koruması için yıllık enflasyon varsayımı.
+  // USD bazlı projeksiyonda ~%3 makul; 0 = düzeltme yok.
+  annualInflationPct?: number;
 }
 
 export interface YearProjection {
@@ -18,7 +24,7 @@ export interface YearProjection {
 
 export interface FireProjection {
   targetPortfolio: number;
-  currentGapTry: number;
+  currentGap: number;
   currentMonthlyAtSWR: number;
   yearsToTarget: number | null;
   inflationAdjustedTarget: number;
@@ -34,11 +40,12 @@ export function projectFire(inputs: FireInputs): FireProjection {
     annualReturnPct,
     targetMonthlyIncome,
     safeWithdrawalRatePct,
+    annualInflationPct = 0,
   } = inputs;
 
   const swr = safeWithdrawalRatePct / 100;
   const targetPortfolio = swr > 0 ? (targetMonthlyIncome * 12) / swr : 0;
-  const currentGapTry = Math.max(0, targetPortfolio - currentValue);
+  const currentGap = Math.max(0, targetPortfolio - currentValue);
   const currentMonthlyAtSWR = (currentValue * swr) / 12;
 
   const monthlyRate = annualReturnPct / 100 / 12;
@@ -61,7 +68,7 @@ export function projectFire(inputs: FireInputs): FireProjection {
     }
 
     cumulativeContributions += yearContributions;
-    const reachedTarget = value >= targetPortfolio;
+    const reachedTarget = targetPortfolio > 0 && value >= targetPortfolio;
     if (yearsToTarget === null && reachedTarget) yearsToTarget = y;
 
     yearByYear.push({
@@ -77,17 +84,14 @@ export function projectFire(inputs: FireInputs): FireProjection {
     if (yearsToTarget !== null && y >= yearsToTarget + 5) break;
   }
 
-  // Inflation-adjusted target (TR ortalama %35 enflasyon — kaba tahmin)
-  // Hedef yıl × yıllık enflasyon × hedef
-  const inflationPct = 35;
   const inflationFactor = yearsToTarget
-    ? Math.pow(1 + inflationPct / 100, yearsToTarget)
+    ? Math.pow(1 + annualInflationPct / 100, yearsToTarget)
     : 1;
   const inflationAdjustedTarget = targetPortfolio * inflationFactor;
 
   return {
     targetPortfolio,
-    currentGapTry,
+    currentGap,
     currentMonthlyAtSWR,
     yearsToTarget,
     inflationAdjustedTarget,

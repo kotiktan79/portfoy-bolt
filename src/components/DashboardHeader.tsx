@@ -24,6 +24,7 @@ interface DashboardHeaderProps {
   onShowAIAdvisor: () => void;
   onShowPerformance: () => void;
   onShowResearch?: () => void;
+  onShowProjection?: () => void;
   onShowRebalanceModal: () => void;
   onEnableNotifications: () => void;
   onThemeCycle: () => void;
@@ -45,6 +46,7 @@ export function DashboardHeader({
   onShowAIAdvisor,
   onShowPerformance,
   onShowResearch,
+  onShowProjection,
   onShowRebalanceModal,
   onEnableNotifications,
   onThemeCycle,
@@ -110,6 +112,7 @@ export function DashboardHeader({
     { label: 'Araştırma', onClick: onShowResearch || (() => {}), icon: Brain },
     { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
+    { label: 'Hedef', onClick: onShowProjection || (() => {}), icon: Target },
   ];
 
   const iconBtn = 'p-2 rounded-xl text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors';
