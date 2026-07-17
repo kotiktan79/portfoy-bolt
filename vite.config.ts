@@ -16,13 +16,34 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts': ['recharts'],
-          'vendor-tremor': ['@tremor/react'],
-          'vendor-motion': ['framer-motion'],
-          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas'],
-          'vendor-utils': ['date-fns'],
+        // Fonksiyon formu şart: obje formu, paylaşılan interop/yardımcı
+        // modülleri vendor chunk'larının içine koyuyor ve entry o chunk'ları
+        // statik import etmek zorunda kalıyordu → 763KB tremor + charts + pdf
+        // ilk açılışta iniyordu (lazy sayfalar boşa çıkıyordu).
+        manualChunks(id: string) {
+          // Paylaşılan interop/yardımcı modüller eager chunk'ta durmalı;
+          // yoksa Rollup bunları bir vendor chunk'ına gömüyor ve entry o
+          // koca chunk'ı statik import etmek zorunda kalıyor.
+          if (
+            /\/(tslib|react-is|prop-types|use-sync-external-store|clsx)\//.test(id) ||
+            id.includes('commonjsHelpers')
+          ) {
+            return 'vendor-react';
+          }
+          if (!id.includes('node_modules')) return;
+          if (id.includes('@tremor/')) return 'vendor-tremor';
+          if (id.includes('/recharts/')) return 'vendor-charts';
+          if (id.includes('/framer-motion/')) return 'vendor-motion';
+          if (id.includes('/jspdf') || id.includes('html2canvas')) return 'vendor-pdf';
+          if (id.includes('/date-fns/')) return 'vendor-utils';
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/react-router') ||
+            id.includes('/scheduler/')
+          ) {
+            return 'vendor-react';
+          }
         },
       },
     },
