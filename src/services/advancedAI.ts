@@ -104,30 +104,32 @@ export function calculateTechnicalIndicators(prices: number[]): TechnicalIndicat
   };
 }
 
+// Wilder RSI: seeded with the SMA of the first `period` changes, then smoothed
+// as (prev*(period-1)+current)/period over the rest of the series — matches the
+// standard RSI(14) shown on charting platforms.
 function calculateRSI(prices: number[], period: number = 14): number {
   if (prices.length < period + 1) return 50;
 
-  let gains = 0;
-  let losses = 0;
-
-  for (let i = prices.length - period; i < prices.length; i++) {
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
     const change = prices[i] - prices[i - 1];
-    if (change > 0) {
-      gains += change;
-    } else {
-      losses += Math.abs(change);
-    }
+    if (change > 0) avgGain += change;
+    else avgLoss -= change;
   }
+  avgGain /= period;
+  avgLoss /= period;
 
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
+  for (let i = period + 1; i < prices.length; i++) {
+    const change = prices[i] - prices[i - 1];
+    avgGain = (avgGain * (period - 1) + Math.max(change, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
+  }
 
   if (avgLoss === 0) return 100;
 
   const rs = avgGain / avgLoss;
-  const rsi = 100 - 100 / (1 + rs);
-
-  return rsi;
+  return 100 - 100 / (1 + rs);
 }
 
 // Full-series EMA: NaN warm-up for the first (period-1) bars, then seeded with

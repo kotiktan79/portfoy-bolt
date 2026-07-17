@@ -142,7 +142,7 @@ export default function KarCuzdani({ holdings }: Props) {
     // 1. Kaynak holding'in quantity'sini düşür
     const sourceHolding = holdings.find(h => h.symbol === selectedSource.symbol && h.asset_type === 'currency');
     if (!sourceHolding) return;
-    const newQty = sourceHolding.quantity - targetSourceQty;
+    const newQty = Math.max(0, sourceHolding.quantity - targetSourceQty);
     const { error: updErr } = await supabase
       .from('holdings')
       .update({ quantity: newQty })
@@ -152,7 +152,8 @@ export default function KarCuzdani({ holdings }: Props) {
       return;
     }
 
-    // 2. Çekim kaydını yaz
+    // 2. Çekim kaydını yaz — başarısızsa 1. adımı geri al, yoksa holding
+    // düşmüş ama çekim kaydı yok tutarsızlığı kalır.
     const { error } = await supabase.from('salary_withdrawals').insert({
       amount_usd: target,
       reservoir_after_usd: newReservoir,
@@ -160,12 +161,23 @@ export default function KarCuzdani({ holdings }: Props) {
       source_symbol: selectedSource.symbol,
       source_quantity_deducted: targetSourceQty,
     });
-    if (!error) {
-      setConfirmWithdraw(false);
-      await loadAll();
-      // Sayfayı yenile ki holdings de tazelensin
-      window.location.reload();
+    if (error) {
+      const { error: rbErr } = await supabase
+        .from('holdings')
+        .update({ quantity: sourceHolding.quantity })
+        .eq('id', sourceHolding.id);
+      alert(
+        'Çekim kaydedilemedi: ' + error.message +
+        (rbErr
+          ? ` — DİKKAT: ${selectedSource.symbol} miktarı geri alınamadı (${rbErr.message}). Elle düzeltin: ${sourceHolding.quantity}`
+          : ' (holding miktarı geri alındı, değişiklik olmadı)')
+      );
+      return;
     }
+    setConfirmWithdraw(false);
+    await loadAll();
+    // Sayfayı yenile ki holdings de tazelensin
+    window.location.reload();
   }
 
   async function handleSaveTarget() {
