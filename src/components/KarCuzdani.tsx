@@ -139,41 +139,60 @@ export default function KarCuzdani({ holdings }: Props) {
     if (!canWithdraw || !settings || !selectedSource || !sourceSufficient) return;
     const newReservoir = reservoirUsd - target;
 
-    // 1. Kaynak holding'in quantity'sini düşür
     const sourceHolding = holdings.find(h => h.symbol === selectedSource.symbol && h.asset_type === 'currency');
     if (!sourceHolding) return;
     const newQty = Math.max(0, sourceHolding.quantity - targetSourceQty);
-    const { error: updErr } = await supabase
-      .from('holdings')
-      .update({ quantity: newQty })
-      .eq('id', sourceHolding.id);
-    if (updErr) {
-      alert('Kaynak holding güncellenemedi: ' + updErr.message);
+
+    // Tercih edilen yol: holding düşümü + çekim kaydı tek DB transaction'ında
+    // (migration 20260717000000_withdraw_salary_rpc). Fonksiyon canlıda yoksa
+    // (PGRST202) aşağıdaki iki-adımlı telafi yoluna düşülür.
+    const { error: rpcErr } = await supabase.rpc('withdraw_salary', {
+      p_holding_id: sourceHolding.id,
+      p_new_quantity: newQty,
+      p_amount_usd: target,
+      p_reservoir_after_usd: newReservoir,
+      p_portfolio_value_usd: portfolioUsd,
+      p_source_symbol: selectedSource.symbol,
+      p_source_quantity_deducted: targetSourceQty,
+    });
+    if (rpcErr && rpcErr.code !== 'PGRST202') {
+      alert('Çekim başarısız: ' + rpcErr.message);
       return;
     }
 
-    // 2. Çekim kaydını yaz — başarısızsa 1. adımı geri al, yoksa holding
-    // düşmüş ama çekim kaydı yok tutarsızlığı kalır.
-    const { error } = await supabase.from('salary_withdrawals').insert({
-      amount_usd: target,
-      reservoir_after_usd: newReservoir,
-      portfolio_value_usd: portfolioUsd,
-      source_symbol: selectedSource.symbol,
-      source_quantity_deducted: targetSourceQty,
-    });
-    if (error) {
-      const { error: rbErr } = await supabase
+    if (rpcErr) {
+      // Fallback: RPC henüz yok — iki adım + hata halinde geri alma.
+      const { error: updErr } = await supabase
         .from('holdings')
-        .update({ quantity: sourceHolding.quantity })
+        .update({ quantity: newQty })
         .eq('id', sourceHolding.id);
-      alert(
-        'Çekim kaydedilemedi: ' + error.message +
-        (rbErr
-          ? ` — DİKKAT: ${selectedSource.symbol} miktarı geri alınamadı (${rbErr.message}). Elle düzeltin: ${sourceHolding.quantity}`
-          : ' (holding miktarı geri alındı, değişiklik olmadı)')
-      );
-      return;
+      if (updErr) {
+        alert('Kaynak holding güncellenemedi: ' + updErr.message);
+        return;
+      }
+
+      const { error } = await supabase.from('salary_withdrawals').insert({
+        amount_usd: target,
+        reservoir_after_usd: newReservoir,
+        portfolio_value_usd: portfolioUsd,
+        source_symbol: selectedSource.symbol,
+        source_quantity_deducted: targetSourceQty,
+      });
+      if (error) {
+        const { error: rbErr } = await supabase
+          .from('holdings')
+          .update({ quantity: sourceHolding.quantity })
+          .eq('id', sourceHolding.id);
+        alert(
+          'Çekim kaydedilemedi: ' + error.message +
+          (rbErr
+            ? ` — DİKKAT: ${selectedSource.symbol} miktarı geri alınamadı (${rbErr.message}). Elle düzeltin: ${sourceHolding.quantity}`
+            : ' (holding miktarı geri alındı, değişiklik olmadı)')
+        );
+        return;
+      }
     }
+
     setConfirmWithdraw(false);
     await loadAll();
     // Sayfayı yenile ki holdings de tazelensin
