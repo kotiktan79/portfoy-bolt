@@ -1,6 +1,7 @@
 import { Target } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import FireProjection from '../components/FireProjection';
+import StressTestCard from '../components/StressTestCard';
 import AnnualReportCard from '../components/AnnualReportCard';
 
 export default function ProjectionPage() {
@@ -14,6 +15,7 @@ export default function ProjectionPage() {
         />
         <div className="space-y-6">
           <FireProjection />
+          <StressTestCard />
           <AnnualReportCard />
         </div>
       </div>
