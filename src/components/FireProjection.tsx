@@ -294,10 +294,10 @@ export default function FireProjection() {
                   y.reachedTarget ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''
                 }`}
               >
-                <td className="py-1.5 pr-3 font-semibold text-gray-900 dark:text-white">
+                <td className="py-1.5 pr-3 font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                   {baseYear + y.year}
                   {projection.yearsToTarget === y.year && (
-                    <span className="ml-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">🎯 HEDEF</span>
+                    <span className="ml-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">🎯</span>
                   )}
                 </td>
                 <td className="py-1.5 pr-3 text-right font-semibold text-gray-900 dark:text-white">{fmtUSD0(y.endOfYearValue)}</td>

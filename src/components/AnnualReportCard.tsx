@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { CalendarRange, Download } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { CalendarRange, Download, RefreshCw } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -33,14 +33,25 @@ export default function AnnualReportCard() {
   const chrome = chartChrome(isDark);
   const [report, setReport] = useState<AnnualReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
     let cancelled = false;
-    computeAnnualReport()
+    setLoading(true);
+    setFailed(false);
+    // Ağ takılırsa sonsuz iskelet yerine 20 sn'de hata durumuna düş
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('annual-report-timeout')), 20000)
+    );
+    Promise.race([computeAnnualReport(), timeout])
       .then((r) => { if (!cancelled) setReport(r); })
+      .catch(() => { if (!cancelled) setFailed(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   // Seri kimliği sabittir: realize kâr = mavi, pasif gelir = yeşil (chartTheme slotları)
   const realizedColor = isDark ? '#3987e5' : '#2a78d6';
@@ -73,13 +84,27 @@ export default function AnnualReportCard() {
             <div key={i} className="h-12 bg-slate-100 dark:bg-gray-700 rounded-lg animate-pulse" />
           ))}
         </div>
+      ) : failed ? (
+        <div className="p-6 flex items-center justify-between flex-wrap gap-3">
+          <p className="text-sm text-slate-500 dark:text-gray-400">
+            Rapor yüklenemedi (ağ yavaş veya kesildi).
+          </p>
+          <button
+            onClick={retry}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+          >
+            <RefreshCw size={14} /> Tekrar dene
+          </button>
+        </div>
       ) : !report || report.years.length === 0 ? (
         <p className="p-6 text-sm text-slate-400 dark:text-gray-500 italic">
           Henüz kapanan lot, gelir kaydı veya nakit hareketi yok.
         </p>
       ) : (
         <>
-          {/* Yıl bazlı çubuklar — iki seri, kimlik renkleri sabit */}
+          {/* Yıl bazlı çubuklar — iki seri, kimlik renkleri sabit.
+              Her iki seri de sıfırsa grafik atlanır (₺0-₺4'lük anlamsız eksen olmasın). */}
+          {report.years.some(y => Math.round(y.realizedPnlTRY) !== 0 || Math.round(y.incomeTRY) !== 0) && (
           <div className="px-5 pt-5">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={report.years.map((y) => ({
@@ -119,6 +144,7 @@ export default function AnnualReportCard() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          )}
 
           {/* Tablo */}
           <div className="p-5 overflow-x-auto">

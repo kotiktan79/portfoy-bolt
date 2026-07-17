@@ -12,7 +12,7 @@
  */
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, useSpring, useTransform, AnimatePresence } from 'framer-motion';
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import { TrendingUp, TrendingDown, RefreshCw, Wifi, Wallet, Gauge, ArrowUpRight, ArrowDownRight, DollarSign } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
@@ -202,6 +202,9 @@ export default function LivePage() {
             <div className="mt-3 sm:mt-4 md:mt-6" style={{ height: 'clamp(80px, 12vh, 180px)' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  {/* 0-tabanlı varsayılan ölçek 7M'lik seriyi düz çizgi yapıyordu —
+                      eksen gizli ama domain veriye oturur (tremor davranışı) */}
+                  <YAxis hide domain={['dataMin', 'dataMax']} />
                   <defs>
                     <linearGradient id="liveSpark" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={isPos ? '#10b981' : '#f43f5e'} stopOpacity={0.35} />

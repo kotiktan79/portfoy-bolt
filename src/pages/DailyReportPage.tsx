@@ -4,7 +4,7 @@ import {
   RefreshCw, ChevronLeft, ChevronRight, Wallet, BarChart3, Globe, Newspaper,
   ArrowUpRight, Clock, Zap, Shield, PiggyBank
 } from 'lucide-react';
-import { getLatestReport, getReportHistory, getMonthlySalaryHistory, triggerDailyReport, triggerDailySnapshot, type DailyReport, type MonthlySalary } from '../services/reportService';
+import { getLatestReport, getReportHistory, getMonthlySalaryHistory, triggerDailyReport, triggerDailySnapshot, salvageBrokenReport, type DailyReport, type MonthlySalary } from '../services/reportService';
 import IncomeRecordModal from '../components/IncomeRecordModal';
 import IncomeCalendar from '../components/IncomeCalendar';
 import ForwardDividendCalendar from '../components/ForwardDividendCalendar';
@@ -29,8 +29,8 @@ export default function DailyReportPage() {
       getReportHistory(30),
       getMonthlySalaryHistory(12),
     ]);
-    if (reportData) setReport(reportData);
-    setReports(historyData);
+    if (reportData) setReport(salvageBrokenReport(reportData));
+    setReports(historyData.map(salvageBrokenReport));
     setSalaryHistory(salaryData);
     setSelectedIndex(0);
     setLoading(false);
@@ -213,9 +213,27 @@ export default function DailyReportPage() {
               </div>
             )}
 
+            {/* Kesik kaydedilmiş rapor uyarısı (onarılamayan eski kayıtlar) */}
+            {report.salvage_failed && (
+              <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">Rapor bozuk kaydedilmiş</span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Bu günün AI çıktısı üretim sırasında kesilmiş ve yapılandırılamamış (17 Tem öncesi
+                  max_tokens sınırı kaynaklı). Yeni raporlar bu sorundan etkilenmez.
+                </p>
+                <details className="mt-2">
+                  <summary className="text-[11px] cursor-pointer font-semibold text-amber-700 dark:text-amber-400">Ham çıktıyı gör</summary>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed text-slate-600 dark:text-gray-400 bg-white/60 dark:bg-gray-900/40 rounded-lg p-3">{report.market_outlook}</pre>
+                </details>
+              </div>
+            )}
+
             {/* Piyasa Görünümü + Teşhis */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {report.market_outlook && (
+              {report.market_outlook && !report.salvage_failed && (
                 <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <BarChart3 className="w-4 h-4 text-brand-600" />

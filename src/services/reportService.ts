@@ -27,6 +27,38 @@ export interface DailyReport {
     fx_impact?: string;
     opportunities?: string;
   };
+  // Kesik AI çıktısı ham metin olarak kaydedilmiş ve istemcide de onarılamamışsa
+  // (max_tokens fix'i öncesi kayıtlar) — UI ham blob yerine uyarı gösterir.
+  salvage_failed?: boolean;
+}
+
+// max_tokens 4000 döneminde kesilen çıktılar JSON.parse'ı düşürüp TÜM ham metni
+// market_outlook'a yazdırıyordu. Bu kayıtları istemcide onarmayı dener: fence'i
+// soyup parse et; alanları dağıt. Parse edilemiyorsa salvage_failed işaretlenir.
+export function salvageBrokenReport(r: DailyReport): DailyReport {
+  const raw = (r.market_outlook || '').trimStart();
+  const looksRaw = raw.startsWith('```') || (raw.startsWith('{') && raw.includes('"actions"'));
+  if (!looksRaw) return r;
+
+  const start = raw.indexOf('{');
+  if (start === -1) return { ...r, salvage_failed: true };
+  const body = raw.slice(start).replace(/```\s*$/, '').trim();
+  try {
+    const p = JSON.parse(body);
+    return {
+      ...r,
+      actions: Array.isArray(p.actions) ? p.actions : r.actions,
+      monthly_income: p.monthly_income ?? r.monthly_income,
+      market_outlook: typeof p.market_outlook === 'string' ? p.market_outlook : '',
+      portfolio_diagnosis: typeof p.portfolio_diagnosis === 'string' ? p.portfolio_diagnosis : r.portfolio_diagnosis,
+      top_pick: typeof p.top_pick === 'string' ? p.top_pick : r.top_pick,
+      news_alerts: Array.isArray(p.news_alerts) ? p.news_alerts : r.news_alerts,
+      wealth_building_tip: typeof p.wealth_building_tip === 'string' ? p.wealth_building_tip : r.wealth_building_tip,
+      market_research: p.market_research ?? r.market_research,
+    };
+  } catch {
+    return { ...r, salvage_failed: true };
+  }
 }
 
 export interface MonthlySalary {
