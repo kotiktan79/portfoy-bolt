@@ -51,13 +51,14 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
     percentage: totalValue > 0 ? ((item.value / totalValue) * 100).toFixed(1) : '0.0',
   }));
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  interface PieTooltipItem { value?: number; payload: { name: string; percentage: string } }
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: PieTooltipItem[] }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-slate-200 dark:border-gray-700">
           <p className="text-sm font-semibold text-slate-700 dark:text-gray-200">{payload[0].payload.name}</p>
           <p className="text-sm text-slate-600 dark:text-gray-400">
-            {payload[0].value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+            {(payload[0].value ?? 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
           </p>
           <p className="text-sm font-bold text-brand-600 dark:text-brand-400">{payload[0].payload.percentage}%</p>
         </div>
@@ -66,8 +67,8 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
     return null;
   };
 
-  const renderCustomLabel = (entry: any) => {
-    return `${entry.percentage}%`;
+  const renderCustomLabel = (entry: unknown) => {
+    return `${(entry as { percentage?: string }).percentage}%`;
   };
 
   if (!holdings || holdings.length === 0) {
@@ -107,8 +108,8 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
         <Legend
           verticalAlign="bottom"
           height={36}
-          formatter={(_value, entry: any) => (
-            <span className="text-sm text-slate-700 dark:text-gray-300">{entry.payload.name}</span>
+          formatter={(_value, entry) => (
+            <span className="text-sm text-slate-700 dark:text-gray-300">{(entry as { payload?: { name?: string } }).payload?.name}</span>
           )}
         />
       </PieChart>

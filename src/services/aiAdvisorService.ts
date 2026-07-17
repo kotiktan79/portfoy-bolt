@@ -51,7 +51,7 @@ export interface PortfolioInsight {
   title: string;
   message: string;
   severity: 'info' | 'warning' | 'critical';
-  data?: any;
+  data?: unknown;
 }
 
 export async function analyzeRiskProfile(holdings: Holding[]): Promise<RiskProfile> {

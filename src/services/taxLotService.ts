@@ -18,6 +18,9 @@ export interface ClosedLot {
   realizedPnlPct: number;
   holdingDays: number;
   isLongTerm: boolean;
+  // Satışın öncesinde eşleşecek buy kaydı yoktu — maliyet bazı holdings
+  // satırındaki ortalama maliyetten YAKLAŞIK alındı. UI bunu ≈ ile işaretler.
+  approxBasis?: boolean;
 }
 
 export interface OpenLot {
@@ -67,7 +70,12 @@ interface BuyEntry {
   feePerUnit: number;
 }
 
-function fifoMatch(transactions: Transaction[]): { closed: ClosedLot[]; open: BuyEntry[] } {
+// fallbackBasis: pozisyon transactions'a buy olarak girilmemişse (doğrudan
+// holdings'e yazılmışsa) satılan miktarın maliyet bazı olarak kullanılır.
+function fifoMatch(
+  transactions: Transaction[],
+  fallbackBasis?: { price: number; date: string }
+): { closed: ClosedLot[]; open: BuyEntry[] } {
   const sorted = [...transactions].sort(
     (a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime()
   );
@@ -130,6 +138,42 @@ function fifoMatch(transactions: Transaction[]): { closed: ClosedLot[]; open: Bu
         remainingToSell -= matched;
         if (head.remaining <= 0.0000001) buyQueue.shift();
       }
+
+      // Buy kuyruğu tükendi ama satılacak miktar kaldı → yaklaşık maliyet bazı.
+      // (Aksi halde bu satış sessizce düşer ve realize kâr 0 görünürdü.)
+      if (remainingToSell > 0.0000001 && fallbackBasis && fallbackBasis.price > 0) {
+        const matched = remainingToSell;
+        const buyCost = matched * fallbackBasis.price;
+        const sellProceeds = matched * sellPricePerUnit;
+        const sellFee = matched * sellFeePerUnit;
+        const realizedPnl = sellProceeds - buyCost - sellFee;
+        const holdingDays = Math.max(
+          0,
+          Math.floor(
+            (new Date(tx.transaction_date).getTime() - new Date(fallbackBasis.date).getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        );
+        closed.push({
+          symbol: '',
+          assetType: '',
+          buyDate: fallbackBasis.date,
+          sellDate: tx.transaction_date,
+          quantity: matched,
+          buyPrice: fallbackBasis.price,
+          sellPrice: sellPricePerUnit,
+          buyCost,
+          sellProceeds,
+          buyFee: 0,
+          sellFee,
+          realizedPnl,
+          realizedPnlPct: buyCost > 0 ? (realizedPnl / buyCost) * 100 : 0,
+          holdingDays,
+          isLongTerm: holdingDays >= LONG_TERM_DAYS,
+          approxBasis: true,
+        });
+        remainingToSell = 0;
+      }
     }
   }
 
@@ -161,7 +205,10 @@ export async function computeRealizedPnL(): Promise<RealizedPnLReport> {
     const txs = txByHolding.get(h.id) || [];
     if (txs.length === 0) continue;
 
-    const { closed, open } = fifoMatch(txs);
+    const { closed, open } = fifoMatch(txs, {
+      price: h.purchase_price || 0,
+      date: h.created_at,
+    });
     closed.forEach(lot => {
       lot.symbol = h.symbol;
       lot.assetType = h.asset_type;

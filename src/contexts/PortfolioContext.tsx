@@ -27,6 +27,7 @@ import { checkAndUnlockAchievements } from '../services/achievementService';
 import { getAllTransactions, getTotalDividends } from '../services/transactionService';
 import { getTotalCashValue } from '../services/cashService';
 import { requestNotificationPermission, notifyAchievementUnlocked, getNotificationPermissionStatus } from '../services/notificationService';
+import { subscribeToPush } from '../services/pushService';
 import { registerServiceWorker, setupInstallPrompt, setupConnectionListener } from '../services/pwaService';
 import { startExchangeRateUpdates, stopExchangeRateUpdates } from '../services/currencyService';
 import { startHealthMonitoring, stopHealthMonitoring } from '../services/priceMonitor';
@@ -491,7 +492,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const granted = await requestNotificationPermission();
     setNotificationsEnabled(granted);
     if (granted) {
-      toast.success('Bildirimler etkinleştirildi! Fiyat alarmları için bildirim alacaksınız.');
+      // Web Push aboneliği: uygulama kapalıyken de cron uyarıları düşsün
+      const pushed = await subscribeToPush();
+      toast.success(
+        pushed
+          ? 'Bildirimler + push aktif! Uygulama kapalıyken de uyarı alacaksınız.'
+          : 'Bildirimler etkinleştirildi! (Push aboneliği kurulamadı — sadece uygulama açıkken uyarı gelir.)'
+      );
     } else {
       toast.error('Bildirim izni reddedildi.');
     }

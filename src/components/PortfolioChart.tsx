@@ -43,10 +43,11 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  interface TooltipItem { dataKey?: string | number; value?: number; payload: { date: string; pnl?: number } }
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: TooltipItem[] }) => {
     if (active && payload && payload.length) {
-      const valueData = payload.find((p: any) => p.dataKey === 'value');
-      const investmentData = payload.find((p: any) => p.dataKey === 'investment');
+      const valueData = payload.find((p) => p.dataKey === 'value');
+      const investmentData = payload.find((p) => p.dataKey === 'investment');
 
       if (!valueData || !investmentData) return null;
 
@@ -60,10 +61,10 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
           <p className="text-sm font-semibold text-slate-700 dark:text-gray-200 mb-2">{payload[0].payload.date}</p>
           <div className="space-y-1">
             <p className="text-sm text-slate-600 dark:text-gray-400">
-              Değer: <span className="font-bold tabular-nums text-slate-900 dark:text-gray-100">{fmtTRY0(valueData.value)}</span>
+              Değer: <span className="font-bold tabular-nums text-slate-900 dark:text-gray-100">{fmtTRY0(valueData.value ?? 0)}</span>
             </p>
             <p className="text-sm text-slate-600 dark:text-gray-400">
-              Yatırım: <span className="font-bold tabular-nums text-slate-900 dark:text-gray-100">{fmtTRY0(investmentData.value)}</span>
+              Yatırım: <span className="font-bold tabular-nums text-slate-900 dark:text-gray-100">{fmtTRY0(investmentData.value ?? 0)}</span>
             </p>
             <p className="text-sm text-slate-600 dark:text-gray-400">
               K/Z: <span className={`font-bold tabular-nums ${pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>

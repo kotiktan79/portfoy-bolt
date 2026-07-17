@@ -1,5 +1,5 @@
-const CACHE_NAME = 'portfolio-tracker-v10';
-const RUNTIME_CACHE = 'runtime-cache-v10';
+const CACHE_NAME = 'portfolio-tracker-v11';
+const RUNTIME_CACHE = 'runtime-cache-v11';
 
 const STATIC_ASSETS = [
   '/',
@@ -162,4 +162,39 @@ self.addEventListener('notificationclick', (event) => {
       clients.openWindow(event.notification.data || '/')
     );
   }
+});
+
+// ── Web Push ───────────────────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'Tandor Finans', body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Tandor Finans', {
+      body: data.body || '',
+      icon: '/logo.svg',
+      badge: '/favicon.svg',
+      tag: data.tag || 'tandor-push',
+      data: { url: data.url || '/' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          c.navigate(url);
+          return c.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });

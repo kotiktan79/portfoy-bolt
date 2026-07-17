@@ -165,10 +165,11 @@ export default function AnnualReportCard() {
                     <td className="py-2 pr-3 font-semibold text-gray-900 dark:text-white">{y.year}</td>
                     <td className="py-2 pr-3 text-right">
                       <span className={`font-semibold ${y.realizedPnlTRY >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {y.approxLotCount > 0 && <span title="Bir kısmı yaklaşık maliyet bazlı">≈ </span>}
                         {fmtSignedTRY0(y.realizedPnlTRY)}
                       </span>
                       <p className="text-[10px] text-slate-500 dark:text-gray-400">
-                        {y.closedLotCount} lot · uzun {fmtSignedTRY0(y.realizedLongTermTRY)} / kısa {fmtSignedTRY0(y.realizedShortTermTRY)}
+                        {y.closedLotCount} lot{y.approxLotCount > 0 ? ` (${y.approxLotCount} yaklaşık)` : ''} · uzun {fmtSignedTRY0(y.realizedLongTermTRY)} / kısa {fmtSignedTRY0(y.realizedShortTermTRY)}
                       </p>
                     </td>
                     <td className="py-2 pr-3 text-right">
@@ -212,7 +213,9 @@ export default function AnnualReportCard() {
             <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-3">
               💡 Realize kâr FIFO lot eşleştirmesiyle satış yılına yazılır; TRY çevrimi satış günü
               kuruyla, nakit hareketleri işlem günü kuruyla yapılır (kur verisi olmayan eski tarihler
-              en yakın mevcut kura düşer). Yatırılan para kâr değildir, karşılaştırma için gösterilir.
+              en yakın mevcut kura düşer). ≈ işaretli tutarlarda satışın buy kaydı yoktur — maliyet
+              bazı holdings'teki ortalama maliyetten yaklaşık alınmıştır. Yatırılan para kâr değildir,
+              karşılaştırma için gösterilir.
             </p>
           </div>
         </>

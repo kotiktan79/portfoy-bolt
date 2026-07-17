@@ -85,6 +85,7 @@ export interface AnnualYearRow {
   realizedLongTermTRY: number;
   realizedShortTermTRY: number;
   closedLotCount: number;
+  approxLotCount: number; // maliyet bazı holdings ort. maliyetinden yaklaşık alınan lotlar
   incomeTRY: number;
   incomeByType: Record<string, number>;
   salaryWithdrawnUSD: number;
@@ -108,6 +109,7 @@ function emptyRow(year: number): AnnualYearRow {
     realizedLongTermTRY: 0,
     realizedShortTermTRY: 0,
     closedLotCount: 0,
+    approxLotCount: 0,
     incomeTRY: 0,
     incomeByType: {},
     salaryWithdrawnUSD: 0,
@@ -172,6 +174,7 @@ export async function computeAnnualReport(): Promise<AnnualReport> {
       if (lot.isLongTerm) row.realizedLongTermTRY += pnlTRY;
       else row.realizedShortTermTRY += pnlTRY;
       row.closedLotCount += 1;
+      if (lot.approxBasis) row.approxLotCount += 1;
     }
   }
 
@@ -217,6 +220,7 @@ export function exportAnnualReportCSV(report: AnnualReport): void {
     'Uzun Vade (TRY)',
     'Kisa Vade (TRY)',
     'Kapanan Lot',
+    'Yaklasik Bazli Lot',
     'Pasif Gelir (TRY)',
     'Maas Cekimi (USD)',
     'Yatirilan (TRY)',
@@ -228,6 +232,7 @@ export function exportAnnualReportCSV(report: AnnualReport): void {
     y.realizedLongTermTRY.toFixed(2),
     y.realizedShortTermTRY.toFixed(2),
     y.closedLotCount,
+    y.approxLotCount,
     y.incomeTRY.toFixed(2),
     y.salaryWithdrawnUSD.toFixed(2),
     y.depositsTRY.toFixed(2),

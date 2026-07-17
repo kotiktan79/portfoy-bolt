@@ -91,7 +91,7 @@ export default function LivePage() {
   const topGainers = useMemo(() => [...allMetrics].filter(h => h.pnlPct > 0).sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5), [allMetrics]);
   const topLosers = useMemo(() => [...allMetrics].filter(h => h.pnlPct < 0).sort((a, b) => a.pnlPct - b.pnlPct).slice(0, 5), [allMetrics]);
 
-  const chartData = (historicalData || []).slice(-30).map((d: any) => ({
+  const chartData = (historicalData || []).slice(-30).map((d: { snapshot_date?: string; date?: string; total_value: number }) => ({
     date: (d.snapshot_date || d.date || '').slice(5),
     value: Number(d.total_value),
   }));

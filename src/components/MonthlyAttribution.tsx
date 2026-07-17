@@ -125,8 +125,9 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         .lte('snapshot_date', lastDayOf(selectedMonth))
         .order('snapshot_date', { ascending: true })
         .order('created_at', { ascending: false });
+      interface SnapRow { snapshot_date: string; total_pnl: number | null; total_value: number; total_investment: number; created_at: string }
       const seen = new Set<string>();
-      const uniq: any[] = [];
+      const uniq: SnapRow[] = [];
       for (const s of snaps || []) {
         if (seen.has(s.snapshot_date)) continue;
         seen.add(s.snapshot_date);
@@ -135,7 +136,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
       uniq.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
       const prevSnap = uniq.filter(s => s.snapshot_date < monthStart).pop();
       const lastSnap = uniq.filter(s => s.snapshot_date >= monthStart).pop();
-      const pnlOf = (s: any) => s.total_pnl != null ? Number(s.total_pnl) : (Number(s.total_value) - Number(s.total_investment));
+      const pnlOf = (s: SnapRow) => s.total_pnl != null ? Number(s.total_pnl) : (Number(s.total_value) - Number(s.total_investment));
       const delta = prevSnap && lastSnap ? pnlOf(lastSnap) - pnlOf(prevSnap) : null;
 
       if (!cancelled) {

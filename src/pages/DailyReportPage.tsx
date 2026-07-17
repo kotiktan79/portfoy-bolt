@@ -4,6 +4,7 @@ import {
   RefreshCw, ChevronLeft, ChevronRight, Wallet, BarChart3, Globe, Newspaper,
   ArrowUpRight, Clock, Zap, Shield, PiggyBank
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { getLatestReport, getReportHistory, getMonthlySalaryHistory, triggerDailyReport, triggerDailySnapshot, salvageBrokenReport, type DailyReport, type MonthlySalary } from '../services/reportService';
 import IncomeRecordModal from '../components/IncomeRecordModal';
 import IncomeCalendar from '../components/IncomeCalendar';
@@ -279,13 +280,13 @@ export default function DailyReportPage() {
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Günlük Aksiyonlar</span>
                 </div>
                 <div className="space-y-2">
-                  {report.actions.map((action: any, i: number) => {
+                  {report.actions.map((action, i) => {
                     const urgencyColors: Record<string, string> = {
                       today: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
                       this_week: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
                       this_month: 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400',
                     };
-                    const typeIcons: Record<string, any> = {
+                    const typeIcons: Record<string, LucideIcon> = {
                       buy: ArrowUpRight,
                       accumulate: TrendingUp,
                       hold: Shield,
@@ -293,7 +294,7 @@ export default function DailyReportPage() {
                       protect: Shield,
                       take_profit: DollarSign,
                     };
-                    const TypeIcon = typeIcons[action.type] || Target;
+                    const TypeIcon = typeIcons[action.type || ''] || Target;
                     const typeColors: Record<string, string> = {
                       buy: 'text-accent-600', accumulate: 'text-accent-500',
                       hold: 'text-brand-500', rebalance: 'text-brand-500',
@@ -303,9 +304,9 @@ export default function DailyReportPage() {
                     return (
                       <div key={i} className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
                         <div className="flex items-center gap-2 mb-1.5">
-                          <TypeIcon className={`w-4 h-4 ${typeColors[action.type] || 'text-gray-500'}`} />
+                          <TypeIcon className={`w-4 h-4 ${typeColors[action.type || ''] || 'text-gray-500'}`} />
                           <span className="text-sm font-semibold text-gray-900 dark:text-white">{action.symbol}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${urgencyColors[action.urgency] || urgencyColors.this_month}`}>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${urgencyColors[action.urgency || ''] || urgencyColors.this_month}`}>
                             {action.urgency === 'today' ? 'BUGÜN' : action.urgency === 'this_week' ? 'BU HAFTA' : 'BU AY'}
                           </span>
                           <span className="text-[10px] text-gray-400 uppercase">{action.platform}</span>
@@ -313,13 +314,13 @@ export default function DailyReportPage() {
                         <p className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-1">{action.instruction}</p>
                         {action.detail && <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">{action.detail}</p>}
                         <div className="flex items-center gap-3 mt-2">
-                          {action.amount_try > 0 && (
-                            <span className="text-[10px] text-gray-500"><DollarSign className="w-3 h-3 inline" /> {formatMoney(action.amount_try)} TL</span>
+                          {(action.amount_try ?? 0) > 0 && (
+                            <span className="text-[10px] text-gray-500"><DollarSign className="w-3 h-3 inline" /> {formatMoney(action.amount_try ?? 0)} TL</span>
                           )}
-                          {action.expected_annual_return > 0 && (
+                          {(action.expected_annual_return ?? 0) > 0 && (
                             <span className="text-[10px] text-accent-500"><TrendingUp className="w-3 h-3 inline" /> %{action.expected_annual_return} yıllık</span>
                           )}
-                          {action.dividend_yield > 0 && (
+                          {(action.dividend_yield ?? 0) > 0 && (
                             <span className="text-[10px] text-brand-500"><PiggyBank className="w-3 h-3 inline" /> %{action.dividend_yield} temettü</span>
                           )}
                         </div>

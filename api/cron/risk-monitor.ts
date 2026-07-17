@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { requireCronAuth } from '../lib/auth.js';
+import { sendPushToAll } from '../lib/push.js';
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -210,6 +211,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         report_date: today,
         news_alerts: alerts.map(a => `[${a.type.toUpperCase()}] ${a.title}: ${a.detail}`),
       }], { onConflict: 'report_date' });
+
+      // Web Push: uygulama kapalıyken de uyarı düşsün (abone yoksa no-op)
+      const critical = alerts.filter(a => a.type === 'critical');
+      const top = critical[0] || alerts[0];
+      await sendPushToAll({
+        title: critical.length > 0
+          ? `🚨 ${critical.length} kritik risk uyarısı`
+          : `⚠️ ${alerts.length} risk uyarısı`,
+        body: `${top.title}: ${top.detail}`.slice(0, 180),
+        url: '/daily-report',
+        tag: 'risk-monitor',
+      }).catch((e) => console.error('[push] gönderim hatası:', e));
     }
 
     return res.status(200).json({

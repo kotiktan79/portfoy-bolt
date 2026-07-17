@@ -27,3 +27,9 @@ export const DEFAULT_USD_TRY_RATE = 46.70;
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 export const ANON_USER_ID = '00000000-0000-0000-0000-000000000001';
+
+// ── Web Push ─────────────────────────────────────────────────────────────
+// VAPID public anahtarı gizli DEĞİLDİR (istemciye gömülür); private karşılığı
+// yalnızca Vercel env'de durur (VAPID_PRIVATE_KEY, bkz. api/lib/push.ts).
+export const VAPID_PUBLIC_KEY =
+  'BIOL94D3Hqy48SUowVUoxLdfIXJaVz2_-6OCsaSAQ08QzIfEQgUHlSIabKNXp5NpYgHXa7hpO5BFa3h1HWlB2JY';

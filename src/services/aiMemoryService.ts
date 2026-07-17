@@ -88,7 +88,7 @@ export function saveRecommendations(actions: Array<{
       id: generateId(),
       date: today,
       symbol: a.symbol,
-      action: a.type as any || 'buy',
+      action: (a.type as 'buy' | 'sell' | 'hold' | 'reduce') || 'buy',
       market: a.market || 'BIST',
       reason: a.instruction,
       priceAtRecommendation: currentPrices[a.symbol] || 0,

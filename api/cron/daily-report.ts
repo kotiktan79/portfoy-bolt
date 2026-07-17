@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { sendEmail, buildDailyEmail } from '../lib/email.js';
 import { sendTelegram, buildDailyTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
+import { sendPushToAll } from '../lib/push.js';
 
 // Kullanıcı maaş hedefi — env ile override edilebilir
 const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
@@ -164,6 +165,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`Rapor kayıt hatası: ${reportError.message}`);
     } else {
       log.push('Rapor veritabanına kaydedildi');
+      // Web Push: günlük rapor hazır bildirimi (abone yoksa no-op)
+      const pnlPct = Number(reportData.portfolio_pnl_pct) || 0;
+      await sendPushToAll({
+        title: '📊 Günlük rapor hazır',
+        body: `Portföy ₺${Math.round(Number(reportData.portfolio_value) || 0).toLocaleString('tr-TR')} · K/Z %${pnlPct.toFixed(1)}`,
+        url: '/daily-report',
+        tag: 'daily-report',
+      }).catch((e) => console.error('[push] gönderim hatası:', e));
     }
 
     // ========================================

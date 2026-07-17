@@ -1,5 +1,19 @@
 import { supabase } from '../lib/supabase';
 
+export interface ReportAction {
+  type?: string;
+  urgency?: string;
+  symbol?: string;
+  market?: string;
+  platform?: string;
+  instruction?: string;
+  detail?: string;
+  amount_try?: number;
+  expected_annual_return?: number;
+  dividend_yield?: number;
+  risk?: string;
+}
+
 export interface DailyReport {
   id: string;
   report_date: string;
@@ -8,7 +22,7 @@ export interface DailyReport {
   portfolio_pnl: number;
   portfolio_pnl_pct: number;
   market_data: any;
-  actions: any[];
+  actions: ReportAction[];
   monthly_income: any;
   market_outlook: string;
   portfolio_diagnosis: string;
