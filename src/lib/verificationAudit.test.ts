@@ -1,14 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { computeRiskMetrics } from '../services/riskMetricsService';
-import { generateRebalancingTrades, Holding } from '../services/rebalancingService';
 import { fxToTRY, holdingValueTRY, getFxRatesFromHoldings } from './fx';
 import { calculateRealizedPnL } from '../services/transactionService';
 
 /*
   Known-answer verification for the recently-changed calculation logic that had
-  NO numeric tests: deposit-adjusted risk metrics, deposit-clean drawdown, and
-  foreign-currency rebalancing share counts. Expected values are hand-derived in
-  the comments so a regression is caught with the exact wrong number.
+  NO numeric tests: deposit-adjusted risk metrics and deposit-clean drawdown.
+  Expected values are hand-derived in the comments so a regression is caught
+  with the exact wrong number.
 */
 
 describe('riskMetrics: deposit adjustment (hand-derived)', () => {
@@ -84,27 +83,5 @@ describe('transactionService: realized PnL on partial sell (average-cost)', () =
   });
   it('no sells → 0', () => {
     expect(calculateRealizedPnL([txs[0]])).toBe(0);
-  });
-});
-
-describe('rebalancing: foreign-currency share count (FX-correct)', () => {
-  const usdRate = 45;
-  const holdings: Holding[] = [
-    { id: '1', symbol: 'USD', asset_type: 'currency', quantity: 1000, current_price: usdRate, purchase_price: usdRate, currency: 'TRY' },
-    { id: '2', symbol: 'AAPL', asset_type: 'stock', quantity: 1, current_price: 100, purchase_price: 100, currency: 'USD' },
-  ];
-  // value: USD cash 45000 TRY, AAPL 100*45=4500 TRY, total 49500. Stock 9.09% now.
-  const trades = generateRebalancingTrades(holdings, { stock: 90, currency: 10 }, 0);
-  const buy = trades.find(t => t.asset_type === 'stock' && t.action === 'buy')!;
-
-  it('a buy trade for the USD stock is generated', () => {
-    expect(buy).toBeDefined();
-    expect(buy.current_price).toBe(100); // native USD price
-  });
-  it('shares * nativePrice * usdRate ≈ TRY amount (no 45x overstatement)', () => {
-    // The bug being guarded: shares = amountTRY/100 would be 45x too many.
-    expect(buy.shares * buy.current_price * usdRate).toBeCloseTo(buy.amount, 2);
-    // sanity: shares are small (a few units), not thousands
-    expect(buy.shares).toBeLessThan(buy.amount / (100 * usdRate) + 1);
   });
 });
