@@ -12,7 +12,7 @@
  */
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, useSpring, useTransform, AnimatePresence } from 'framer-motion';
-import { AreaChart } from '@tremor/react';
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { TrendingUp, TrendingDown, RefreshCw, Wifi, Wallet, Gauge, ArrowUpRight, ArrowDownRight, DollarSign } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
@@ -93,7 +93,7 @@ export default function LivePage() {
 
   const chartData = (historicalData || []).slice(-30).map((d: any) => ({
     date: (d.snapshot_date || d.date || '').slice(5),
-    'Portföy (₺)': Number(d.total_value),
+    value: Number(d.total_value),
   }));
 
   return (
@@ -197,22 +197,40 @@ export default function LivePage() {
             </motion.div>
           </div>
 
-          {/* Mini chart — boyut akıcı */}
+          {/* Mini chart — boyut akıcı (recharts; tremor bağımlılığı kaldırıldı) */}
           {chartData.length > 1 && (
             <div className="mt-3 sm:mt-4 md:mt-6" style={{ height: 'clamp(80px, 12vh, 180px)' }}>
-              <AreaChart
-                className="!h-full"
-                data={chartData}
-                index="date"
-                categories={['Portföy (₺)']}
-                colors={[isPos ? 'emerald' : 'rose']}
-                showLegend={false}
-                showYAxis={false}
-                showGridLines={false}
-                showXAxis={false}
-                curveType="monotone"
-                valueFormatter={(n) => '₺' + fmtTRY(n)}
-              />
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="liveSpark" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={isPos ? '#10b981' : '#f43f5e'} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={isPos ? '#10b981' : '#f43f5e'} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload || payload.length === 0) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-black/90 border border-gold-900/50 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-gold-200/50">{d.date}</p>
+                          <p className="text-sm font-bold text-white tabular-nums">₺{fmtTRY(d.value)}</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={isPos ? '#10b981' : '#f43f5e'}
+                    strokeWidth={2}
+                    fill="url(#liveSpark)"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           )}
         </motion.div>
