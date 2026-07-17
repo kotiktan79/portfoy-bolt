@@ -19,6 +19,7 @@ import { usePortfolio } from '../contexts/PortfolioContext';
 import { DailyGainPanel } from '../components/DailyGainPanel';
 import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import { MonthlyAttribution } from '../components/MonthlyAttribution';
+import { TotalAttribution } from '../components/TotalAttribution';
 import {
   getBenchmarkHistory,
   BENCHMARK_OPTIONS,
@@ -349,6 +350,13 @@ export default function PerformancePage() {
         {holdings.length > 0 && (
           <div className="mt-6">
             <MonthlyAttribution holdings={holdings} />
+          </div>
+        )}
+
+        {/* Kuruluştan bugüne — hangi pozisyon toplam kârın ne kadarını getirdi */}
+        {holdings.length > 0 && (
+          <div className="mt-6">
+            <TotalAttribution holdings={holdings} />
           </div>
         )}
 
