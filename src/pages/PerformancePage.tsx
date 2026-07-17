@@ -20,6 +20,7 @@ import { DailyGainPanel } from '../components/DailyGainPanel';
 import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import { MonthlyAttribution } from '../components/MonthlyAttribution';
 import { TotalAttribution } from '../components/TotalAttribution';
+import { RiskMetricsPanel } from '../components/RiskMetricsPanel';
 import {
   getBenchmarkHistory,
   BENCHMARK_OPTIONS,
@@ -352,6 +353,11 @@ export default function PerformancePage() {
             <MonthlyAttribution holdings={holdings} />
           </div>
         )}
+
+        {/* Deposit-arındırılmış risk metrikleri (tüm geçmiş) */}
+        <div className="mt-6">
+          <RiskMetricsPanel />
+        </div>
 
         {/* Kuruluştan bugüne — hangi pozisyon toplam kârın ne kadarını getirdi */}
         {holdings.length > 0 && (
