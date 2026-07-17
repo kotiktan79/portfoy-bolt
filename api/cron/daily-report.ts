@@ -859,7 +859,9 @@ Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bili
     body: JSON.stringify({
       model: 'claude-sonnet-5',
       thinking: { type: 'disabled' },
-      max_tokens: 4000,
+      // 4000 yetmiyordu: sonnet-5 Türkçe raporu ~7-8K karakter üretiyor, kesilen
+      // çıktı JSON.parse'ı düşürüp tüm raporu ham metin olarak kaydettiriyordu.
+      max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
