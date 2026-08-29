@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, ArrowDownToLine, Calendar } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
-import { getFxRatesFromHoldings } from '../lib/fx';
+import { fxToTRY, getFxRatesFromHoldings } from '../lib/fx';
 import { formatCurrency } from '../services/priceService';
 
 interface PricePoint {
@@ -75,13 +75,8 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   const [loading, setLoading] = useState(true);
 
   const fxRates = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
-  const fxFor = (c?: string | null) => {
-    const x = (c || 'TRY').toUpperCase();
-    if (x === 'USD') return fxRates.usd;
-    if (x === 'EUR') return fxRates.eur;
-    if (x === 'GBP') return fxRates.gbp ?? fxRates.usd * 1.27;
-    return 1;
-  };
+  // Ortak helper: RUB/RON/CHF de doğru çevrilir (eskiden 1:1 TRY sayılıyordu).
+  const fxFor = (c?: string | null) => fxToTRY(1, c, fxRates);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,9 +180,19 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
     return rows.sort((a, b) => b.gainTRY - a.gainTRY);
   }, [prices, holdings, selectedMonth]);
 
+  // Aynı zaman damgasında hem çıkış hem giriş varsa bu bir İÇ TRANSFERdir
+  // (ör. kasadaki ruble → EUR pozisyonu): para portföyden çıkmadı, yer değiştirdi.
+  // Eskiden bunlar "çekilen" olarak sayılıp toplamı kat kat şişiriyordu.
+  const isInternalTransfer = (c: CashTx) => {
+    const kind = (c.transaction_type || c.type) || '';
+    const isDep = kind === 'deposit';
+    return cashTx.some(o => o !== c && o.created_at === c.created_at && (isDep
+      ? String((o.transaction_type || o.type) || '').startsWith('withdraw')
+      : ((o.transaction_type || o.type) === 'deposit')));
+  };
   const deposits = useMemo(() => {
     return cashTx
-      .filter(c => (c.transaction_type || c.type) === 'deposit')
+      .filter(c => (c.transaction_type || c.type) === 'deposit' && !isInternalTransfer(c))
       .map(c => ({
         ...c,
         tryEquiv: Number(c.amount) * fxFor(c.currency),
@@ -195,7 +200,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   }, [cashTx, fxRates]);
   const withdrawals = useMemo(() => {
     return cashTx
-      .filter(c => (c.transaction_type || c.type) === 'withdraw' || (c.transaction_type || c.type) === 'withdrawal')
+      .filter(c => ((c.transaction_type || c.type) === 'withdraw' || (c.transaction_type || c.type) === 'withdrawal') && !isInternalTransfer(c))
       .map(c => ({ ...c, tryEquiv: Number(c.amount) * fxFor(c.currency) }));
   }, [cashTx, fxRates]);
 

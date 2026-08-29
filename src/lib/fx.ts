@@ -25,6 +25,12 @@ export function getFxRatesFromHoldings(holdings: Holding[]): FxRates {
   return { usd, eur, gbp };
 }
 
+// USD üzerinden yaklaşık çapraz kurlar (2026-08 seviyeleri). Bu para birimlerinin
+// currency-cash holding'i yok, o yüzden USD'den türetilir. Eskiden buradaki
+// `return amount` yüzünden RUB/RON gibi birimler 1:1 TRY sayılıyordu — 110.000 ₽
+// ekranda 110.000 TL görünüyordu (gerçeği ~61.700 TL).
+const USD_CROSS: Record<string, number> = { RUB: 86, RON: 4.52, CHF: 0.81 };
+
 // Belirtilen currency'deki tutarı TRY'ye çevirir.
 export function fxToTRY(amount: number, ccy: string | null | undefined, rates: FxRates): number {
   const c = (ccy || 'TRY').toUpperCase();
@@ -32,6 +38,7 @@ export function fxToTRY(amount: number, ccy: string | null | undefined, rates: F
   if (c === 'USD') return amount * rates.usd;
   if (c === 'EUR') return amount * rates.eur;
   if (c === 'GBP') return amount * (rates.gbp ?? rates.usd * 1.27);
+  if (USD_CROSS[c]) return amount * (rates.usd / USD_CROSS[c]);
   return amount;
 }
 
