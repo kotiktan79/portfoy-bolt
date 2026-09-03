@@ -737,19 +737,20 @@ GÖREVIN:
 3. Haberlerin portföye etkisini yorumla
 4. Somut aksiyon planı: total return'e hizmet eden alımlar (kalite temettü hisseleri, dengeli ETF'ler, kontrollü kripto)
 5. Maaş hesapla: mevcut pasif + kâr trim'i + buffer (sermayeyi eritmeden)
-6. Rebalance hedefi: stock 35 / eurobond 20 / fund 12 / commodity 10 / currency 10 / crypto 13
+6. Rebalance hedefi (SABİT POLİTİKA, DENGELİ): global hisse 50 (V3YL + kaliteli US/EU + BIST ihracatçı çekirdek + TEFAS) / USD kısa hazine+eurobond 30 / altın 10 (FİZİKİ, satılamaz, dokunma) / kripto 3-5 / nakit ≤5
 
 ÖNERİ ÖNCELİKLERİ — KESIN SIRA (üstten alta uygula):
 - ✅ ÖNCELİK 1 (ZORUNLU, HER RAPORDA OLMALI): **Eurobond/Treasury alımı** — kullanıcının portföyünde %20 hedefe karşılık %1.2 mevcut. Bu en büyük yapısal eksiklik ve pasif gelir motorunun kalbi.
   Seçenekler:
-    - Revolut'tan **SGOV** ($100 fiyat, %5 yıllık, sıfır volatilite) — başlangıç için ideal
-    - Revolut'tan **TLT** (uzun vade, ~%4-5 + risk-off hedge)
-    - Revolut'tan **IBTL/IB01** (UCITS Avrupa versiyonları)
+    - Revolut'tan **IB01** (iShares $ Treasury 0-1yr UCITS, acc, TER %0,07, ~%3,9 YTM, sıfıra yakın volatilite) — BAŞLANGIÇ VE ANA ARAÇ. Kullanıcı zaten tutuyor, ekle.
+    - Revolut'tan **DTLA/IDTL** (iShares $ Treasury 20+yr UCITS) — SADECE küçük dilim, faiz artış baskısı varken uzun vade riskli
+    - EUR harcama kovası için **XEON** (Xtrackers EUR Overnight, acc) — Revolut'ta varsa
+    ⛔ SGOV/TLT/GOVT/BIL/SHV = ABD-domicile → AB'de perakende ALINAMAZ (PRIIPs). ASLA YAZMA.
     - BIST broker'dan Türkiye Hazine eurobondu
   TEK seferde değil, 3-5 dilimde ladder olarak öner.
   Her raporda EN AZ 1 eurobond/Treasury aksiyonu OLMALI.
 
-- ✅ ÖNCELİK 2: Cash fazlasını YENI temettü hisselerine: SCHD (US dividend ETF), JNJ (ek alım), KO, PG, NESN (EUR cinsi defensif). Saf REIT yerine kalite tercih et.
+- ✅ ÖNCELİK 2: Cash fazlasını global hisseye: V3YL (Amundi S&P 500 UCITS, kullanıcının haftalık DCA aracı), VWCE/IWDA (global), JNJ (ek alım), KO, PG, NESN. Temettü ETF istersen UCITS: VHYL/TDIV — SCHD/VYM ABD-domicile, ALINAMAZ. Saf REIT yerine kalite tercih et.
 
 - ✅ ÖNCELİK 3: +%60 üstü kazançtaki BIST hisselerinden TRIM (sat) — %20-30 dilim. ASELS/TUPRS/AKSEN/ENKAI/BIMAS arası en kârlısını seç.
 
@@ -758,21 +759,21 @@ GÖREVIN:
   Sebep: bu pozisyonlar zaten 2 katı kâra geçmiş — concentration riski büyür, kullanıcı portföyü daha BIST'e bağımlı yapar.
   İSTİSNA: <+%20 kârda olan BIST hissesi (GARAN, JNJ gibi) ek alım yapılabilir.
 
-- ⚠️ Top pick: HER ZAMAN gelir üreten araç (SGOV/TLT/eurobond/SCHD) olmalı. BIST hissesi top pick olamaz.
+- ⚠️ Top pick: HER ZAMAN gelir üreten araç (IB01/DTLA/eurobond/VHYL) olmalı. BIST hissesi top pick olamaz.
 
 TEMPO VE MİKTAR KURALLARI (ZORUNLU):
 - ⛔ Tek seferde 1M TL üzeri alım ÖNERME. Maksimum 750K TL parça başına, sonra DCA ile büyüt.
 - ⛔ "today" urgency'sini SADECE risk/protect aksiyonları için kullan. Cash redeploy/buy için "this_week" veya "this_month" kullan.
-- ⛔ SCHD ve VYM'i AYNI ANDA önerme — birbirinin tekrarı (overlap %80). Sadece SCHD yeter.
-- ⛔ "Revolut'tan TreasuryDirect" YAZMA — TreasuryDirect ABD vatandaşları için, Revolut'tan erişim yok. Revolut'tan US Treasury için TLT veya GOVT ETF (Treasury'ye yatırım yapan ETF) yaz.
+- ⛔ ABD-domicile ETF (SGOV, TLT, GOVT, SCHD, VYM, VOO, QQQ, BIL, SHV) ÖNERME — AB perakende yatırımcı PRIIPs nedeniyle ALAMAZ. Daima UCITS karşılığını yaz: IB01, DTLA, VHYL, VUAA/CSPX, EQQQ.
+- ⛔ "Revolut'tan TreasuryDirect" YAZMA — TreasuryDirect ABD vatandaşları için, Revolut'tan erişim yok. Revolut'tan US Treasury için IB01 (kısa) veya DTLA (uzun) UCITS ETF yaz.
 - ⛔ Türkiye eurobondu Revolut'ta YOK. Bunun için "Türkiye broker (İş Yatırım/Garanti BBVA)" platform yaz.
 - ⛔ Mevcut +%50 kârdaki BIST pozisyonunu artırma ÖNERME (concentration riski). SISE/ENKAI/TUPRS/AKSEN/ASELS/BIMAS/TOASO/CCOLA/EKGYO için sadece TRIM önerilebilir, "accumulate" YASAK.
 - ✅ Toplam aksiyon sayısı 4-6 arasında olsun, fazlası kullanıcıyı boğar.
-- ✅ İlk aksiyon DAİMA eurobond/Treasury (SGOV ya da TLT ya da Hazine bonosu) olmalı.
+- ✅ İlk aksiyon DAİMA eurobond/Treasury (IB01 ya da DTLA ya da Türkiye Hazine eurobondu) olmalı.
 - ✅ Toplam önerilen cash redeploy miktarı portföyün %10-15'ini (yaklaşık 700K-1M TL) geçmesin, yoksa kullanıcı korkar/erteler.
 
 PLATFORM REALİTESİ (yanlış yazma):
-- **Revolut**: US/EU hisse, US ETF (SCHD/VOO/TLT/GOVT/QQQ/JNJ/KO), crypto (BTC/ETH). YOK: Türkiye eurobondu, fiziki tahvil, TreasuryDirect.
+- **Revolut (AB)**: US/EU hisse (JNJ/KO/ASML), SADECE UCITS ETF (IB01/DTLA/V3YL/VUAA/CSPX/VWCE/VHYL/EQQQ), crypto (BTC/ETH). YOK: ABD-domicile ETF (SGOV/TLT/GOVT/SCHD/VOO/QQQ — PRIIPs), Türkiye eurobondu, fiziki tahvil, TreasuryDirect.
 - **Binance**: Crypto. YOK: hisse, tahvil, ETF.
 - **BIST (Türkiye broker)**: BIST hisseleri, TR fonlar (TEFAS), Türkiye eurobondu (USD), VIOP. Broker örnekleri: İş Yatırım, Garanti BBVA Yatırım, Ziraat Yatırım.
 - **Mevcut**: pozisyon var, dokunma demek.
@@ -848,13 +849,13 @@ Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin
 
 ZORUNLU KISITLAR:
 - Tek aksiyonda 1M TL üzeri alım önerme. Maks 750K TL parça başına.
-- SCHD ve VYM aynı raporda olmasın (overlap). Sadece SCHD.
-- "Revolut'tan TreasuryDirect" yazma — TLT/GOVT/SGOV ETF yaz.
+- ABD-domicile ETF (SGOV/TLT/GOVT/SCHD/VYM/VOO/QQQ) YAZMA — AB'de alınamaz. UCITS karşılığı: IB01/DTLA/VHYL/VUAA/EQQQ.
+- "Revolut'tan TreasuryDirect" yazma — IB01/DTLA UCITS ETF yaz.
 - Türkiye eurobondu için platform "BIST broker (İş Yatırım/Garanti)" yaz, Revolut değil.
 - "today" urgency'sini sadece risk azaltma için kullan, alım için "this_week" veya "this_month".
 - 4-6 aksiyon ver, fazlası kullanıcıyı boğar.
 - ⛔ KESIN YASAK: SISE, ENKAI, TUPRS, AKSEN, ASELS, BIMAS, TOASO, CCOLA, EKGYO için "accumulate" / "yeni alım" / "pozisyonu artır" türü öneri vermeyin. Bu hisseler zaten +%50-130 kârda — artırmak portföyü daha riskli yapar. Bu hisseler için SADECE TRIM (kâr alma) önerilebilir.
-- ⛔ İLK AKSIYON eurobond/Treasury (SGOV/TLT/Hazine bonosu) olmak ZORUNDA. Top pick gelir üreten araç olmak ZORUNDA. BIST hissesi top pick olamaz.
+- ⛔ İLK AKSIYON eurobond/Treasury (IB01/DTLA/Hazine eurobondu) olmak ZORUNDA. Top pick gelir üreten araç olmak ZORUNDA. BIST hissesi top pick olamaz.
 
 Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bilinçli öneriler ver. Top pick: gelir üreten bir varlık (temettü ETF, eurobond, REIT, temettü hissesi).`;
 
