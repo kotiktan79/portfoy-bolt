@@ -486,6 +486,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   async function checkNotificationPermission() {
     const status = getNotificationPermissionStatus();
     setNotificationsEnabled(status === 'granted');
+    // İzin zaten verilmişse "Bildirimleri Aç" butonu gizlenir ve subscribeToPush
+    // hiç çağrılmaz → push_subscriptions boş kalır, cron uyarıları gidemez.
+    // Upsert idempotent (endpoint unique) → her açılışta sessizce tazele.
+    if (status === 'granted') void subscribeToPush();
   }
 
   async function enableNotifications() {
