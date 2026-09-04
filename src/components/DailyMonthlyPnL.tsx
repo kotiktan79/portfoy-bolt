@@ -17,10 +17,12 @@ interface DayRecord {
 interface PeriodRecord {
   key: string;
   label: string;
-  start_value: number;
-  end_value: number;
-  change: number;
+  start_pnl: number;      // dönem başı kümülatif kâr (değer − maliyet)
+  end_pnl: number;        // dönem sonu kümülatif kâr
+  change: number;         // dönem kârı = Δkâr + o dönemde realize edilen kâr
   change_pct: number;
+  realized: number;       // dönemde satıştan gerçekleşen kâr (TRY)
+  gap_days: number;       // önceki ölçüm noktasıyla arasındaki boşluk (kayıt yoksa büyür)
 }
 
 type Tab = 'daily' | 'weekly' | 'monthly';
@@ -104,6 +106,48 @@ export function DailyMonthlyPnL() {
       (a, b) => a.snapshot_date.localeCompare(b.snapshot_date)
     );
 
+    // ---- REALİZE KÂR (2026-09-04 düzeltmesi) ----
+    // Kâr = değer − maliyet. Satış yapılınca kâğıt üstündeki kâr snapshot'tan SİLİNİR,
+    // dolayısıyla Δkâr o ayı olduğundan kötü gösteriyordu (ör. Temmuz'daki EURO satışı
+    // 41.782 ₺ kâr getirdi ama ay +75.322 görünüyordu; doğrusu +117.104).
+    // İki kaynak: cash_transactions notundaki "(Kar/Zarar: X ₺)" ve transactions.realized_profit.
+    // Aynı satış iki yerde olabilir (EKGYO) → tarih+tutar anahtarıyla mükerrer elenir.
+    const realizedByDate = new Map<string, number>();
+    const seenRz = new Set<string>();
+    const [cashSellRes, rzTxRes, holdRes, eurRes] = await Promise.all([
+      supabase.from('cash_transactions').select('created_at, currency, notes').eq('transaction_type', 'sell'),
+      supabase.from('transactions').select('transaction_date, realized_profit, holding_id'),
+      supabase.from('holdings').select('id, currency'),
+      supabase.from('exchange_rates').select('rate, recorded_at').eq('from_currency', 'EUR').eq('to_currency', 'TRY').order('recorded_at', { ascending: false }).limit(1),
+    ]);
+    const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
+    const eurNow = Number(eurRes.data?.[0]?.rate) || usdNow * 1.16;
+    const ccyById = new Map<string, string>(
+      (holdRes.data || []).map((h) => [String(h.id), String(h.currency || 'TRY').toUpperCase()])
+    );
+    const toTRY = (amt: number, ccy: string) =>
+      amt * (ccy === 'TRY' ? 1 : ccy === 'USD' ? usdNow : ccy === 'EUR' ? eurNow : 0);
+    const addRz = (d: string, tl: number) => {
+      if (!Number.isFinite(tl) || tl === 0) return;
+      realizedByDate.set(d, (realizedByDate.get(d) || 0) + tl);
+    };
+    for (const c of cashSellRes.data || []) {
+      const m = String(c.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/);
+      if (!m) continue;
+      const d = String(c.created_at).slice(0, 10);
+      const tl = toTRY(Number(m[1]), String(c.currency || 'TRY').toUpperCase());
+      addRz(d, tl);
+      seenRz.add(`${d}|${Math.round(tl)}`);
+    }
+    for (const t of rzTxRes.data || []) {
+      const rp = Number(t.realized_profit) || 0;
+      if (!rp) continue;
+      const d = String(t.transaction_date).slice(0, 10);
+      const tl = toTRY(rp, ccyById.get(String(t.holding_id)) || 'TRY');
+      if (seenRz.has(`${d}|${Math.round(tl)}`)) continue;
+      addRz(d, tl);
+    }
+
     const daily: DayRecord[] = data.map((row, i) => {
       const prev = i > 0 ? data[i - 1] : null;
       const period = i === 0
@@ -140,21 +184,32 @@ export function DailyMonthlyPnL() {
       const out: PeriodRecord[] = [];
       const keys = Array.from(map.keys()).sort();
       let prevLastRow: SnapRow | null = null;
+      const pnlOf = (r: SnapRow) => (Number(r.total_value) || 0) - (Number(r.total_investment) || 0);
       for (const k of keys) {
         const { label, rows } = map.get(k)!;
         const lastRow = rows[rows.length - 1];
-        const endValue = Number(lastRow.total_value) || 0;
-        const startValue = prevLastRow ? Number(prevLastRow.total_value) || 0 : Number(rows[0].total_value) || 0;
+        const startRow = prevLastRow ?? rows[0];
+        // dönemde realize edilen kâr: (dönem başı, dönem sonu] aralığındaki satışlar
+        let realized = 0;
+        for (const [d, tl] of realizedByDate) {
+          if (d > startRow.date && d <= lastRow.date) realized += tl;
+        }
         const period = prevLastRow
           ? computePeriodChange(lastRow, prevLastRow, 100)
           : { changeTRY: 0, changePct: 0 };
+        const change = period.changeTRY + (prevLastRow ? realized : 0);
+        const base = Number(startRow.total_value) || 0;
         out.push({
           key: k,
           label,
-          start_value: startValue,
-          end_value: endValue,
-          change: period.changeTRY,
-          change_pct: period.changePct,
+          start_pnl: pnlOf(startRow),
+          end_pnl: pnlOf(lastRow),
+          change,
+          change_pct: base > 0 ? (change / base) * 100 : 0,
+          realized: prevLastRow ? realized : 0,
+          gap_days: Math.round(
+            (new Date(lastRow.date + 'T00:00:00').getTime() - new Date(startRow.date + 'T00:00:00').getTime()) / 86400000
+          ),
         });
         prevLastRow = lastRow;
       }
@@ -457,7 +512,17 @@ export function DailyMonthlyPnL() {
                             <div>
                               <p className="text-sm font-bold text-gray-900 dark:text-white">{rec.label}</p>
                               <p className="text-xs text-slate-500 dark:text-gray-400">
-                                {formatCurrency(rec.start_value)} ₺ → {formatCurrency(rec.end_value)} ₺
+                                kâr {formatCurrency(rec.start_pnl)} ₺ → {formatCurrency(rec.end_pnl)} ₺
+                                {rec.realized !== 0 && (
+                                  <span className="ml-1 text-slate-400 dark:text-gray-500">
+                                    (satış kârı {rec.realized > 0 ? '+' : ''}{formatCurrency(rec.realized)} ₺ dahil)
+                                  </span>
+                                )}
+                                {rec.gap_days > 45 && (
+                                  <span className="ml-1 text-amber-600 dark:text-amber-500">
+                                    ⚠ {rec.gap_days} günlük dönem — arada kayıt yok
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </div>
@@ -522,9 +587,6 @@ export function DailyMonthlyPnL() {
                   monthlyRecords.map((rec) => {
                     const pos = rec.change >= 0;
                     const barWidth = Math.min(Math.abs(rec.change_pct) * 3, 100);
-                    const SAFETY = 0.85;
-                    const gainUsd = rec.change / usdRate;
-                    const safeUsd = gainUsd > 0 ? gainUsd * SAFETY : 0;
                     return (
                       <div
                         key={rec.key}
@@ -538,26 +600,23 @@ export function DailyMonthlyPnL() {
                             <div>
                               <p className="text-sm font-bold text-gray-900 dark:text-white">{rec.label}</p>
                               <p className="text-xs text-slate-500 dark:text-gray-400">
-                                {formatCurrency(rec.start_value)} ₺ → {formatCurrency(rec.end_value)} ₺
+                                kâr {formatCurrency(rec.start_pnl)} ₺ → {formatCurrency(rec.end_pnl)} ₺
+                                {rec.realized !== 0 && (
+                                  <span className="ml-1 text-slate-400 dark:text-gray-500">
+                                    (satış kârı {rec.realized > 0 ? '+' : ''}{formatCurrency(rec.realized)} ₺ dahil)
+                                  </span>
+                                )}
+                                {rec.gap_days > 45 && (
+                                  <span className="ml-1 text-amber-600 dark:text-amber-500">
+                                    ⚠ {rec.gap_days} günlük dönem — arada kayıt yok
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
                             <PnLBadge value={rec.change} pct={rec.change_pct} />
                             <UsdSubLine value={rec.change} usdRate={usdRate} />
-                          </div>
-                        </div>
-                        <div className={`flex items-center justify-between px-3 py-2 mt-2 rounded-lg border ${safeUsd > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900' : 'bg-slate-50 dark:bg-gray-900/40 border-slate-200 dark:border-gray-700'}`}>
-                          <span className="text-xs font-semibold text-slate-700 dark:text-gray-300">
-                            💼 Bu ay güvenli maaş
-                          </span>
-                          <div className="text-right">
-                            <span className={`text-base font-bold ${safeUsd > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-gray-500'}`}>
-                              {safeUsd > 0 ? `+$${safeUsd.toFixed(0)}` : '$0'}
-                            </span>
-                            <p className="text-[10px] text-slate-500 dark:text-gray-400">
-                              {safeUsd > 0 ? `kâr × ${SAFETY}` : 'kâr yok → maaş yok'}
-                            </p>
                           </div>
                         </div>
                         <div className="w-full bg-slate-100 dark:bg-gray-700 rounded-full h-1.5 mt-2">
@@ -603,30 +662,32 @@ export function DailyMonthlyPnL() {
                     </div>
                   </div>
                   {(() => {
-                    const SAFETY = 0.85;
-                    const totalSafeUsd = monthlyRecords.reduce((sum, m) => {
-                      const g = m.change / usdRate;
-                      return sum + (g > 0 ? g * SAFETY : 0);
-                    }, 0);
-                    const posMonths = monthlyRecords.filter(m => m.change > 0).length;
-                    const avgSafeUsd = monthlyRecords.length > 0 ? totalSafeUsd / monthlyRecords.length : 0;
+                    // 2026-09-04: "güvenli maaş = aylık kâr × 0,85" KALDIRILDI.
+                    // Tek bir iyi ayı kalıcı maaş saymak sürdürülemez (Şubat'ta $10.622
+                    // gösteriyordu); ayrıca TL kârını bugünkü kurla dolara çevirmek
+                    // kur kaybını yok sayıyordu. Maaş tek yerden hesaplanır: Kâr Cüzdanı
+                    // (computeSafeSalaryFromProfit — biriken kâra + %4 tavana bağlı).
+                    const totalTry = monthlyRecords.reduce((sum, m) => sum + m.change, 0);
+                    const posMonths = monthlyRecords.filter((m) => m.change > 0).length;
                     return (
                       <div className="mt-4 pt-4 border-t border-slate-200 dark:border-gray-700">
-                        <p className="text-xs text-slate-500 dark:text-gray-400 mb-2">💼 Toplam Güvenli Maaş ({monthlyRecords.length} ay)</p>
+                        <p className="text-xs text-slate-500 dark:text-gray-400 mb-2">📈 Toplam kâr ({monthlyRecords.length} ay)</p>
                         <div className="flex items-baseline gap-4">
                           <div>
-                            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">+${totalSafeUsd.toFixed(0)}</p>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">toplu çekilebilirdi</p>
-                          </div>
-                          <div className="border-l border-slate-300 dark:border-gray-700 pl-4">
-                            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">~${avgSafeUsd.toFixed(0)}/ay</p>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">aylık ortalama</p>
+                            <p className={`text-2xl font-bold ${totalTry >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {totalTry >= 0 ? '+' : ''}{formatCurrency(totalTry)} ₺
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-gray-400">yatırımların kazancı (TL)</p>
                           </div>
                           <div className="border-l border-slate-300 dark:border-gray-700 pl-4">
                             <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posMonths}/{monthlyRecords.length} ay</p>
                             <p className="text-xs text-slate-500 dark:text-gray-400">kâr getirdi</p>
                           </div>
                         </div>
+                        <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-3 leading-relaxed">
+                          Bu rakam <b>TL</b> kârıdır; euro/dolar cinsinden karşılığı kur hareketine göre değişir.
+                          Aylık çekebileceğin tutar buradan hesaplanmaz — <b>Kâr Cüzdanı</b> paneline bak.
+                        </p>
                       </div>
                     );
                   })()}
