@@ -27,7 +27,7 @@ import { checkAndUnlockAchievements } from '../services/achievementService';
 import { getAllTransactions, getTotalDividends } from '../services/transactionService';
 import { getTotalCashValue } from '../services/cashService';
 import { requestNotificationPermission, notifyAchievementUnlocked, getNotificationPermissionStatus } from '../services/notificationService';
-import { subscribeToPush } from '../services/pushService';
+import { subscribeToPush, lastPushError } from '../services/pushService';
 import { registerServiceWorker, setupInstallPrompt, setupConnectionListener } from '../services/pwaService';
 import { startExchangeRateUpdates, stopExchangeRateUpdates } from '../services/currencyService';
 import { startHealthMonitoring, stopHealthMonitoring } from '../services/priceMonitor';
@@ -498,11 +498,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     if (granted) {
       // Web Push aboneliği: uygulama kapalıyken de cron uyarıları düşsün
       const pushed = await subscribeToPush();
-      toast.success(
-        pushed
-          ? 'Bildirimler + push aktif! Uygulama kapalıyken de uyarı alacaksınız.'
-          : 'Bildirimler etkinleştirildi! (Push aboneliği kurulamadı — sadece uygulama açıkken uyarı gelir.)'
-      );
+      if (pushed) {
+        toast.success('Bildirimler + push aktif! Uygulama kapalıyken de uyarı alacaksınız.');
+      } else {
+        // Sebep görünür olsun — iOS'ta "Ana Ekrana Ekle" şart, kullanıcı aksi halde
+        // izni verip de neden abonelik olmadığını anlayamıyor.
+        toast.error('Push kurulamadı: ' + (lastPushError || 'bilinmeyen sebep'), 9000);
+      }
     } else {
       toast.error('Bildirim izni reddedildi.');
     }

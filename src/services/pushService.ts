@@ -14,10 +14,28 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
+// Son başarısızlığın sebebi — UI toast'ta gösterilir. iOS'ta en sık sebep:
+// uygulama Safari sekmesinde açık (push için Ana Ekran'a eklenmiş olmalı, iOS 16.4+).
+export let lastPushError = '';
+
+function isIOS(): boolean {
+  return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandalone(): boolean {
+  return window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true;
+}
+
 export async function subscribeToPush(): Promise<boolean> {
+  lastPushError = '';
   try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
-    if (Notification.permission !== 'granted') return false;
+    if (!('serviceWorker' in navigator)) { lastPushError = 'Tarayıcı service worker desteklemiyor'; return false; }
+    if (!('PushManager' in window)) {
+      lastPushError = isIOS() && !isStandalone()
+        ? 'iPhone: push için uygulamayı Safari → Paylaş → "Ana Ekrana Ekle" ile kur ve ORADAN aç'
+        : 'Tarayıcı Web Push desteklemiyor';
+      return false;
+    }
+    if (Notification.permission !== 'granted') { lastPushError = 'Bildirim izni verilmemiş (' + Notification.permission + ')'; return false; }
 
     const registration = await navigator.serviceWorker.ready;
     let sub = await registration.pushManager.getSubscription();
@@ -29,7 +47,7 @@ export async function subscribeToPush(): Promise<boolean> {
     }
 
     const json = sub.toJSON();
-    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) { lastPushError = 'Abonelik anahtarları eksik'; return false; }
 
     const { error } = await supabase.from('push_subscriptions').upsert(
       {
@@ -41,11 +59,13 @@ export async function subscribeToPush(): Promise<boolean> {
       { onConflict: 'endpoint' }
     );
     if (error) {
+      lastPushError = 'Sunucuya kaydedilemedi: ' + error.message;
       console.error('Push aboneliği kaydedilemedi:', error.message);
       return false;
     }
     return true;
   } catch (e) {
+    lastPushError = e instanceof Error ? e.message : String(e);
     console.error('Push aboneliği başarısız:', e);
     return false;
   }
