@@ -34,6 +34,7 @@ async function load() {
   }
   const snaps = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
 
+
   // gün → en son kur (Nisan-2026 öncesi kur yok → seri ilk değere düşer; panelle aynı varsayım)
   const rateByDay = new Map<string, number>();
   for (const r of fxRes.data || []) rateByDay.set(String(r.recorded_at).slice(0, 10), Number(r.rate));

@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 import { getUsdPeriods } from './usdPnlService';
 
 export const SALARY_SAFETY = 0.85;
-export const ACCRUAL_START_MONTH = '2026-03';   // günlük kayıt 10 Şubat'ta başlıyor; Şubat kurulum gürültüsü
+export const ACCRUAL_START_MONTH = '2026-04';   // Mart doğrulanamıyor (pozisyon fiyat kaydı 6 Nisan'da başlıyor); Nisan'dan itibaren
 
 const MONTHS_TR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 const label = (ym: string) => `${MONTHS_TR[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
