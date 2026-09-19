@@ -231,7 +231,7 @@ export default function HeroDashboard({
             label: 'Kuruluştan Bugüne Kâr', icon: Coins, accent: gainEUR >= 0 ? 'emerald' : 'rose',
             valueRaw: gainEUR,
             valueFmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
+            subtitle: `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
             symbol: '✦',
           },
           {
