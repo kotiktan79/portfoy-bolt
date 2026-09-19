@@ -53,3 +53,45 @@ describe('eurPnl', () => {
     expect(aug.salaryEUR).toBeCloseTo(0.85 * Math.max(0, aug.carryInEUR + aug.realGainEUR), 6);
   });
 });
+
+import { buildEurModel, summarizeEur } from './eurPnl';
+
+describe('buildEurModel + summarizeEur (ham satır → model, uygulama = cron)', () => {
+  const snaps = [
+    // €100 EUR pozisyon (q=100, pp=1): snapshot total_investment her gün O GÜNÜN kuruyla TL'ye çevrilir (daily-snapshot.ts) → drift
+    { snapshot_date: '2026-08-30', total_value: 100 * 55, total_investment: 100 * 55 },
+    { snapshot_date: '2026-08-31', total_value: 100 * 55.5, total_investment: 100 * 55.5 },   // kur 55→55.5: değer VE maliyet büyüdü → kâr 0
+    { snapshot_date: '2026-09-01', total_value: 100 * 56 + 560, total_investment: 100 * 56 }, // +€10 gerçek kâr (560 TL / 56)
+    { snapshot_date: '2026-09-02', total_value: 100 * 56 + 560 + 5600, total_investment: 100 * 56 + 5600 }, // €100 yeni para (TL pozisyon) → kâr 0
+  ];
+  const rates = (r: number[]) => ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02'].map((d, i) => ({ recorded_at: d, rate: r[i] }));
+  const model = buildEurModel({
+    snapshots: snaps, eurRates: rates([55, 55.5, 56, 56]), usdRates: rates([47, 47.2, 47.5, 47.5]),
+    transactions: [], cashSells: [], holdings: [{ id: 1, currency: 'EUR', quantity: 100, purchase_price: 1, created_at: '2026-08-01' }],
+    usdNow: 47.5, reliableFrom: '2026-08-30', annualInflation: 0.02,
+  });
+  it('kur oynaması kâr değil; gerçek kâr ve yeni para doğru ayrışır', () => {
+    const g = model.daily.map(d => Math.round(d.gainEUR * 100) / 100);
+    expect(g[0]).toBe(0);
+    expect(g[1]).toBeCloseTo(0, 6);        // EUR/TRY 55→55.5, maliyet drift'i düşülür → 0
+    expect(g[2]).toBeCloseTo(10, 6);       // +560 TL / 56 = €10
+    expect(g[3]).toBeCloseTo(0, 6);        // 5600 TL yeni para = €100 → akış, kâr değil
+  });
+  it('aylık satırlar ve özet (MTD / geçen ay) tutarlı', () => {
+    expect(model.months.map(m => m.month)).toEqual(['2026-08', '2026-09']);
+    expect(model.months[1].gainEUR).toBeCloseTo(10, 6);
+    const s = summarizeEur(model, '2026-09');
+    expect(s.asOf).toBe('2026-09-02');
+    expect(s.wealthEUR).toBeCloseTo(210, 6);          // 100 + 10 + 100
+    expect(s.dayGainEUR).toBeCloseTo(0, 6);
+    expect(s.weekGainEUR).toBeCloseTo(10, 6);
+    expect(s.mtd?.month).toBe('2026-09');
+    expect(s.lastFull?.month).toBe('2026-08');
+    expect(s.health.ok).toBe(true);
+  });
+  it('kur serisi snapshot’tan geride kalırsa sağlık bozuk', () => {
+    const m2 = buildEurModel({ snapshots: snaps, eurRates: rates([55, 55.5, 56, 56]).slice(0, 2), usdRates: rates([47, 47.2, 47.5, 47.5]), transactions: [], cashSells: [], holdings: [], usdNow: 47.5, reliableFrom: '2026-08-30', annualInflation: 0.02 });
+    expect(m2.health.ok).toBe(false);
+    expect(m2.health.lastEurRateDay).toBe('2026-08-31');
+  });
+});

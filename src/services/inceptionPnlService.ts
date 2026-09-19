@@ -21,16 +21,17 @@ export async function getInceptionPnl(): Promise<InceptionSummary | null> {
   if (_cache && Date.now() - _cache.ts < 5 * 60 * 1000) return _cache.value;
   const [holdRes, eurRes, usdRes, txRes, cashRes] = await Promise.all([
     supabase.from('holdings').select('symbol,asset_type,currency,quantity,purchase_price,current_price,created_at'),
-    supabase.from('exchange_rates').select('recorded_at,rate,source').eq('from_currency', 'EUR').eq('to_currency', 'TRY').in('source', ['api', 'ecb']).order('recorded_at', { ascending: true }).range(0, 9999),
-    supabase.from('exchange_rates').select('recorded_at,rate,source').eq('from_currency', 'USD').eq('to_currency', 'TRY').in('source', ['api', 'ecb']).order('recorded_at', { ascending: true }).range(0, 9999),
+    // exchange_rates_daily: gün başına son kur — ham tablo PostgREST max_rows=1000'de kesiliyordu, bugünkü kur 3 Haz'da donuyordu (2026-09-19)
+    supabase.from('exchange_rates_daily').select('day,rate,source').eq('from_currency', 'EUR').eq('to_currency', 'TRY').in('source', ['api', 'ecb']).order('day', { ascending: true }),
+    supabase.from('exchange_rates_daily').select('day,rate,source').eq('from_currency', 'USD').eq('to_currency', 'TRY').in('source', ['api', 'ecb']).order('day', { ascending: true }),
     supabase.from('transactions').select('transaction_date,realized_profit,holding_id'),
     supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell'),
   ]);
   const holds = holdRes.data || [];
   if (!holds.length) { _cache = { ts: Date.now(), value: null }; return null; }
-  const series = (rows: Array<{ recorded_at: string; rate: number; source: string }> | null): RateSeries => {
+  const series = (rows: Array<{ day: string; rate: number; source: string }> | null): RateSeries => {
     const m = new Map<string, number>();
-    for (const r of rows || []) { const d = String(r.recorded_at).slice(0, 10); if (r.source === 'api' || !m.has(d)) m.set(d, Number(r.rate)); }  // api > ecb
+    for (const r of rows || []) { const d = String(r.day).slice(0, 10); if (r.source === 'api' || !m.has(d)) m.set(d, Number(r.rate)); }  // api > ecb
     return makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), 50);
   };
   const eur = series(eurRes.data), usd = series(usdRes.data);

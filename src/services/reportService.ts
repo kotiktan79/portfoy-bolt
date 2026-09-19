@@ -8,7 +8,8 @@ export interface ReportAction {
   platform?: string;
   instruction?: string;
   detail?: string;
-  amount_try?: number;
+  amount_try?: number;   // eski raporlar (TL)
+  amount_eur?: number;   // 2026-09-19 sonrası (tek ölçü EUR)
   expected_annual_return?: number;
   dividend_yield?: number;
   risk?: string;
@@ -29,8 +30,16 @@ export interface DailyReport {
   top_pick: string;
   news_alerts: string[];
   wealth_building_tip: string;
-  safe_monthly_income: number;
-  moderate_monthly_income: number;
+  safe_monthly_income: number;      // eski; 2026-09-19'dan sonra yazılmıyor
+  moderate_monthly_income: number;  // eski
+  // EUR — tek ölçü (cron, uygulamayla aynı motor). Eski raporlarda null.
+  wealth_eur?: number | null;
+  pnl_eur_day?: number | null;
+  pnl_eur_mtd?: number | null;
+  salary_eur?: number | null;
+  projected_salary_eur?: number | null;
+  eur_rate?: number | null;
+  eur_health_ok?: boolean | null;
   ai_model: string;
   generation_time_ms: number;
   created_at: string;

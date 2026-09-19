@@ -2,6 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
+import { loadEurModel, fmtEUR, fmtSignedEUR } from '../lib/eurEngine.js';
+
+// RİSK MONİTÖRÜ — eşikler EUR (2026-09-19): portföy düşüşü = motorun akış düzeltilmiş EUR kârı (TL nominal değil;
+// TL'de kur artışı 'yükseliş', düşüşü 'çöküş' gibi görünüyordu). Pozisyon tutarları bugünkü kurla EUR.
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -49,54 +53,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const totalValue = holdings.reduce((s, h) => s + valTRY(h), 0);
 
-    // 2. Dünkü snapshot ile karşılaştır → portföy düşüşü
+    // 2. Portföy düşüşü — EUR motoru (son snapshot günü ve son 7 gün, akış düzeltilmiş)
     const today = new Date().toISOString().split('T')[0];
-    const { data: snapshots } = await supabase
-      .from('portfolio_snapshots')
-      .select('*')
-      .order('snapshot_date', { ascending: false })
-      .limit(7);
-
-    if (snapshots && snapshots.length >= 2) {
-      const latest = snapshots[0];
-      const previous = snapshots.find(s => s.snapshot_date !== today) || snapshots[1];
-      const dailyChange = Number(latest.total_value) - Number(previous.total_value);
-      const dailyChangePct = Number(previous.total_value) > 0
-        ? (dailyChange / Number(previous.total_value)) * 100 : 0;
-
-      if (dailyChangePct <= -5) {
-        alerts.push({
-          type: 'critical',
-          title: 'PORTFÖY KRİTİK DÜŞÜŞ',
-          detail: `Portföy %${dailyChangePct.toFixed(1)} düştü (${dailyChange.toFixed(0)} TL). Dün: ${Number(previous.total_value).toFixed(0)} TL → Bugün: ${Number(latest.total_value).toFixed(0)} TL`,
-          action: 'Acil değerlendirme yap. Panik satışı yapma ama stop-loss seviyelerini kontrol et.',
-        });
-      } else if (dailyChangePct <= -3) {
-        alerts.push({
-          type: 'warning',
-          title: 'Portföy önemli düşüş',
-          detail: `Portföy %${dailyChangePct.toFixed(1)} düştü (${dailyChange.toFixed(0)} TL)`,
-          action: 'Düşüşün sebebini araştır. Temel değişiklik yoksa pozisyonları koru.',
-        });
-      }
-
-      // Haftalık drawdown
-      if (snapshots.length >= 5) {
-        const weekAgo = snapshots[snapshots.length - 1];
-        const weeklyChange = Number(latest.total_value) - Number(weekAgo.total_value);
-        const weeklyPct = Number(weekAgo.total_value) > 0
-          ? (weeklyChange / Number(weekAgo.total_value)) * 100 : 0;
-
-        if (weeklyPct <= -10) {
+    let eurRateNow = eurRate;
+    try {
+      const model = await loadEurModel(supabase);
+      const d = model.daily; const n = d.length;
+      if (n >= 2) {
+        const last = d[n - 1], prev = d[n - 2];
+        eurRateNow = last.eurRate || eurRate;
+        const dailyChangePct = prev.wealthEUR > 0 ? (last.gainEUR / prev.wealthEUR) * 100 : 0;
+        if (dailyChangePct <= -5) {
           alerts.push({
             type: 'critical',
-            title: 'HAFTALIK DRAWDOWN KRİTİK',
-            detail: `Son 7 günde %${weeklyPct.toFixed(1)} kayıp (${weeklyChange.toFixed(0)} TL)`,
-            action: 'Savunma moduna geç. Riskli pozisyonları azalt.',
+            title: 'PORTFÖY KRİTİK DÜŞÜŞ',
+            detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (%${dailyChangePct.toFixed(1)}). Servet ${fmtEUR(prev.wealthEUR)} → ${fmtEUR(last.wealthEUR)}`,
+            action: 'Acil değerlendirme yap. Panik satışı yapma ama stop-loss seviyelerini kontrol et.',
+          });
+        } else if (dailyChangePct <= -3) {
+          alerts.push({
+            type: 'warning',
+            title: 'Portföy önemli düşüş',
+            detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (%${dailyChangePct.toFixed(1)})`,
+            action: 'Düşüşün sebebini araştır. Temel değişiklik yoksa pozisyonları koru.',
           });
         }
+        // Haftalık drawdown (son 7 takvim günü)
+        const from = new Date(last.date + 'T00:00:00Z'); from.setUTCDate(from.getUTCDate() - 7);
+        const fromStr = from.toISOString().slice(0, 10);
+        const idx = d.findIndex(x => x.date > fromStr);
+        if (idx >= 0) {
+          const start = Math.max(idx, 1);
+          const base = d[start - 1].wealthEUR;
+          let wk = 0; for (let i = start; i < n; i++) wk += d[i].gainEUR;
+          const weeklyPct = base > 0 ? (wk / base) * 100 : 0;
+          if (weeklyPct <= -10) {
+            alerts.push({
+              type: 'critical',
+              title: 'HAFTALIK DRAWDOWN KRİTİK',
+              detail: `Son 7 günde ${fmtSignedEUR(wk)} (%${weeklyPct.toFixed(1)})`,
+              action: 'Savunma moduna geç. Riskli pozisyonları azalt.',
+            });
+          }
+        }
       }
+      if (!model.health.ok) {
+        alerts.push({ type: 'warning', title: 'Kur serisi güncel değil', detail: `EUR/USD kur serisi ${model.health.lastEurRateDay}'de bitiyor, snapshot ${model.health.lastSnapDay}. EUR kâr/maaş rakamları güvenilmez.`, action: 'daily-snapshot cron\'unun exchange_rates yazdığını kontrol et.' });
+      }
+    } catch (e: any) {
+      alerts.push({ type: 'warning', title: 'EUR motoru çalışmadı', detail: String(e?.message || e), action: 'Cron loglarına bak.' });
     }
+    const toEUR = (tl: number) => (eurRateNow > 0 ? tl / eurRateNow : 0);
 
     // 3. Tek pozisyon %20+ kayıp
     for (const h of holdings) {
@@ -104,11 +111,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const cost = valTRY(h, 'purchase_price');
       const pnlPct = cost > 0 ? ((value - cost) / cost) * 100 : 0;
 
-      if (pnlPct <= -20 && value > 10000) {
+      // % yerel para nominal (TL pozisyonda kur/enflasyon düşülmemiş — EUR bazlı pozisyon K/Z ayrı iş); tutarlar bugünkü kurla EUR
+      if (pnlPct <= -20 && toEUR(value) > 200) {
         alerts.push({
           type: 'warning',
           title: `${h.symbol} ağır kayıpta`,
-          detail: `%${pnlPct.toFixed(1)} kayıp (${(value - cost).toFixed(0)} TL). Maliyet: ${cost.toFixed(0)} TL → Değer: ${value.toFixed(0)} TL`,
+          detail: `%${pnlPct.toFixed(1)} nominal kayıp (${fmtSignedEUR(toEUR(value - cost))}). Maliyet ${fmtEUR(toEUR(cost))} → Değer ${fmtEUR(toEUR(value))}`,
           action: `${h.symbol} pozisyonunu değerlendir: zararı kes veya ortalama düşür.`,
         });
       }
@@ -123,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         alerts.push({
           type: 'warning',
           title: `${h.symbol} aşırı konsantrasyon`,
-          detail: `Portföyün %${weight.toFixed(1)}'i tek varlıkta (${value.toFixed(0)} TL)`,
+          detail: `Portföyün %${weight.toFixed(1)}'i tek varlıkta (${fmtEUR(toEUR(value))})`,
           action: `Çeşitlendirme için ${h.symbol}'den kısmi satış düşün.`,
         });
       }
@@ -227,7 +235,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       success: true,
-      portfolio_value: totalValue,
+      portfolio_value_eur: toEUR(totalValue),
+      portfolio_value_try: totalValue,
       total_alerts: alerts.length,
       critical: alerts.filter(a => a.type === 'critical').length,
       warnings: alerts.filter(a => a.type === 'warning').length,

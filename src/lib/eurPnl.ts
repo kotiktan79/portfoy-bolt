@@ -112,3 +112,126 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, safety 
   }
   return rows;
 }
+
+// ------------------------------------------------------------------------------------
+// HAM SATIRLARDAN MODEL — uygulama (eurPnlService) ve sunucu cron'ları (api/lib/eurEngine)
+// AYNI fonksiyonu çağırır; iki tarafın farklı rakam üretmesi imkânsız olsun (2026-09-19).
+// ------------------------------------------------------------------------------------
+export interface EurDaily extends DailyGain { totalValueTRY: number; eurRate: number; usdRate: number }
+export interface EurHealth { ok: boolean; lastEurRateDay: string; lastSnapDay: string }
+export interface EurModel { daily: EurDaily[]; months: MonthRow[]; health: EurHealth }
+
+export interface EurModelInput {
+  /** snapshot_date ASC, created_at DESC sıralı (gün içi son kayıt önce) — sadece reliableFrom ve sonrası */
+  snapshots: Array<{ snapshot_date: string; total_value: number | string | null; total_investment: number | string | null }>;
+  eurRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
+  usdRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
+  transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null }>;
+  cashSells: Array<{ created_at: string; currency: string | null; notes: string | null }>;
+  holdings: Array<{ id: string | number; currency: string | null; quantity: number | string | null; purchase_price: number | string | null; created_at: string | null }>;
+  usdNow: number;            // seri boşsa yedek
+  reliableFrom: string;
+  annualInflation: number;
+}
+
+export function buildEurModel(inp: EurModelInput): EurModel {
+  const { reliableFrom } = inp;
+  // gün → en son snapshot
+  const byDay = new Map<string, SnapPoint>();
+  for (const s of inp.snapshots) if (!byDay.has(s.snapshot_date) && Number(s.total_value) > 0)
+    byDay.set(s.snapshot_date, { date: s.snapshot_date, totalValue: Number(s.total_value), totalInvestment: Number(s.total_investment) || 0 });
+  const snaps = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const snapDays = snaps.map(s => s.date);
+
+  // kur serileri (gün → son kayıt)
+  const toSeries = (rows: Array<{ recorded_at: string; rate: number | string }>, fb: number) => {
+    const m = new Map<string, number>(); for (const r of rows) m.set(String(r.recorded_at).slice(0, 10), Number(r.rate));
+    return { series: makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), fb), lastDay: Array.from(m.keys()).sort().pop() || '' };
+  };
+  const E = toSeries(inp.eurRates, inp.usdNow * 1.15), U = toSeries(inp.usdRates, inp.usdNow);
+  const eur = E.series, usd = U.series;
+
+  // realize (TL, holding para birimine göre çevrilmiş), mükerrer elenir, snapshot gününe hizalanır
+  const holds = inp.holdings;
+  const ccyById = new Map<string, string>(holds.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
+  const toTRY = (amt: number, ccy: string, d: string) => amt * (ccy === 'TRY' ? 1 : ccy === 'USD' ? usd.rateAt(d) : ccy === 'EUR' ? eur.rateAt(d) : 0);
+  const align = (d: string) => snapDays.find(x => x >= d) || snapDays[snapDays.length - 1];
+  const realizedByDay = new Map<string, number>(); const seen = new Set<string>();
+  for (const c of inp.cashSells) {
+    // iki not formatı: "(Kar/Zarar: 11161.92 ₺)" ve "(K/Z +272.95)"
+    const m = String(c.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/) || String(c.notes || '').match(/K\/Z\s*\+?(-?[\d.]+)/); if (!m) continue;
+    const d = String(c.created_at).slice(0, 10); const tl = toTRY(Number(m[1]), String(c.currency || 'TRY').toUpperCase(), d);
+    if (!Number.isFinite(tl) || tl === 0 || d < reliableFrom) continue;
+    const k = align(d); realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl); seen.add(`${d}|${Math.round(tl)}`);
+  }
+  for (const t of inp.transactions) {
+    const rp = Number(t.realized_profit) || 0; if (!rp) continue;
+    const d = String(t.transaction_date).slice(0, 10); const tl = toTRY(rp, ccyById.get(String(t.holding_id)) || 'TRY', d);
+    if (!Number.isFinite(tl) || tl === 0 || d < reliableFrom || seen.has(`${d}|${Math.round(tl)}`)) continue;
+    const k = align(d); realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl);
+  }
+
+  // DÖVİZ MALİYET TAKVİMİ: her snapshot günü için USD/EUR cinsi pozisyonların native maliyeti.
+  // Drift tabanı = quantity × purchase_price (snapshot total_investment bu tabanla kurulur; cost_basis bayat olabilir).
+  const foreign = holds.filter(h => ['USD', 'EUR'].includes(String(h.currency || '').toUpperCase()));
+  const txByHolding = new Map<string, Array<{ d: string; dCost: number }>>();
+  for (const t of inp.transactions) {
+    const h = foreign.find(x => String(x.id) === String(t.holding_id)); if (!h) continue;
+    const d = String(t.transaction_date).slice(0, 10);
+    const q = Number(t.quantity) || 0, amt = Number(t.total_amount) || 0;
+    const dCost = t.transaction_type === 'buy' ? amt : -(q * (Number(h.purchase_price) || 0));
+    if (!txByHolding.has(String(h.id))) txByHolding.set(String(h.id), []);
+    txByHolding.get(String(h.id))!.push({ d, dCost });
+  }
+  const costsOn = (date: string): ForeignCost[] => foreign.map(h => {
+    let c = (Number(h.quantity) || 0) * (Number(h.purchase_price) || 0);
+    for (const t of txByHolding.get(String(h.id)) || []) if (t.d > date) c -= t.dCost;
+    if (String(h.created_at || '').slice(0, 10) > date) c = 0;
+    return { currency: String(h.currency).toUpperCase() as 'USD' | 'EUR', costNative: Math.max(0, c) };
+  });
+  const driftByDay = new Map<string, number>();
+  for (let i = 1; i < snaps.length; i++) {
+    const prev = snaps[i - 1].date, cur = snaps[i].date;
+    driftByDay.set(cur, fxDriftTRY(costsOn(prev), prev, cur, usd, eur));
+  }
+
+  const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay);
+  const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
+  const months = monthlyRows(daily, inp.annualInflation);
+  const lastSnapDay = snapDays[snapDays.length - 1] || '';
+  const health: EurHealth = { ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay, lastEurRateDay: E.lastDay, lastSnapDay };
+  return { daily, months, health };
+}
+
+/** Rapor/cron özeti: son gün, son 7 gün, bu ay (MTD), geçen tam ay (= bu ayın maaşı). Saf; tarih dışarıdan verilir. */
+export interface EurSummary {
+  asOf: string;                       // son snapshot günü
+  wealthEUR: number; wealthTRY: number; eurRate: number; usdRate: number;
+  dayGainEUR: number; dayGainPct: number;          // son snapshot günü, önceki servete göre
+  weekGainEUR: number; weekGainPct: number;        // son 7 takvim günü (akış düzeltilmiş)
+  mtd: MonthRow | null;                            // içinde bulunulan ay
+  lastFull: MonthRow | null;                       // bir önceki ay → salaryEUR = bu ayın maaşı
+  health: EurHealth;
+}
+export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
+  const d = model.daily; const n = d.length;
+  const last = n ? d[n - 1] : null; const prev = n > 1 ? d[n - 2] : null;
+  const dayGainEUR = last ? last.gainEUR : 0;
+  const dayGainPct = prev && prev.wealthEUR > 0 ? (dayGainEUR / prev.wealthEUR) * 100 : 0;
+  let weekGainEUR = 0, weekBase = 0;
+  if (last) {
+    const from = new Date(last.date + 'T00:00:00Z'); from.setUTCDate(from.getUTCDate() - 7);
+    const fromStr = from.toISOString().slice(0, 10);
+    const idx = d.findIndex(x => x.date > fromStr);
+    // seri 7 günden kısaysa (idx=0) ilk gün taban olur; ilk günün kârı tanım gereği 0
+    if (idx >= 0) { const start = Math.max(idx, 1); weekBase = d[start - 1].wealthEUR; for (let i = start; i < n; i++) weekGainEUR += d[i].gainEUR; }
+  }
+  const prevYM = (() => { const y = Number(todayYM.slice(0, 4)), m = Number(todayYM.slice(5, 7)); const p = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; return p; })();
+  return {
+    asOf: last?.date || '', wealthEUR: last?.wealthEUR || 0, wealthTRY: last?.totalValueTRY || 0, eurRate: last?.eurRate || 0, usdRate: last?.usdRate || 0,
+    dayGainEUR, dayGainPct, weekGainEUR, weekGainPct: weekBase > 0 ? (weekGainEUR / weekBase) * 100 : 0,
+    mtd: model.months.find(m => m.month === todayYM) || null,
+    lastFull: model.months.find(m => m.month === prevYM) || null,
+    health: model.health,
+  };
+}

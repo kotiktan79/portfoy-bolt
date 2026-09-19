@@ -78,6 +78,7 @@ interface AIAction {
   instruction: string;
   detail: string;
   amount_try: number;
+  amount_eur?: number;
   risk: string;
   timeframe: string;
 }
@@ -511,7 +512,11 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
                       <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1">{action.instruction}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{action.detail}</p>
                     </div>
-                    {action.amount_try > 0 && (
+                    {(action.amount_eur ?? 0) > 0 ? (
+                      <span className="flex-shrink-0 text-xs font-bold text-gray-900 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
+                        €{formatCurrency(action.amount_eur ?? 0)}
+                      </span>
+                    ) : action.amount_try > 0 && (
                       <span className="flex-shrink-0 text-xs font-bold text-gray-900 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg">
                         {formatCurrency(action.amount_try)} ₺
                       </span>

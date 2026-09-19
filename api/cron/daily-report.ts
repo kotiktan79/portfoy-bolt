@@ -4,9 +4,11 @@ import { sendEmail, buildDailyEmail } from '../lib/email.js';
 import { sendTelegram, buildDailyTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
+import { loadEurSummary, monthLabelTR, fmtEUR, fmtSignedEUR, type EurSummary } from '../lib/eurEngine.js';
 
-// Kullanıcı maaş hedefi — env ile override edilebilir
-const SALARY_TARGET_USD = Number(process.env.SALARY_TARGET_USD || 1000);
+// TEK ÖLÇÜ EUR (2026-09-19): maaş = geçen ayın reel EUR kârı × 0,85 (api/lib/eurEngine → src/lib/eurPnl.ts).
+// AI maaş HESAPLAMAZ; sabit USD hedefi yok. Geçim planı bilgi amaçlı üst sınır: €1.000/ay.
+const LIVING_CAP_EUR = Number(process.env.LIVING_CAP_EUR || 1000);
 // "Total Return" hedef allokasyon: gelir + büyüme + denge.
 // Maaş = mevcut temettü/kupon + kâra geçmiş hisseden trim. Sermaye uzun vadede büyür.
 const TARGET_ALLOCATION = {
@@ -60,6 +62,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const incomeRecords = incomeRes.data || [];
 
     log.push(`Veri: ${holdings.length} holding, ${snapshots.length} snapshot, ${cashBalances.length} cüzdan`);
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // EUR kâr motoru — uygulamayla AYNI fonksiyon (buildEurModel). Servet, gün/hafta/ay kârı, bu ayın maaşı.
+    let eur: EurSummary | null = null;
+    try {
+      eur = await loadEurSummary(supabase, todayStr);
+      log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)}, gün ${fmtSignedEUR(eur.dayGainEUR)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.lastFull?.salaryEUR || 0)}, kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
+    } catch (e: any) {
+      log.push(`EUR motoru HATA: ${e.message}`);
+    }
+    const salaryEUR = eur?.lastFull?.salaryEUR || 0;
+    const projectedSalaryEUR = eur?.mtd?.salaryEUR || 0;
 
     // FX kurları — holdings'teki USD/EUR pozisyonlarından; yoksa live API.
     // Eski hardcode || 45 / || 51, USD holding silindiğinde snapshot poisoning'e yol açıyordu.
@@ -100,12 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .reduce((sum: number, h: any) => sum + tryValue(h, 'current_price'), 0);
     const totalCash = cashBalancesValue + currencyHoldingsValue;
 
-    // Sürdürülebilir aylık çekim (deterministik, AI'dan bağımsız)
-    const safeMonthly = totalValue * 0.003;     // %0.3/ay = ~%3.6/yıl
-    const moderateMonthly = totalValue * 0.005; // %0.5/ay = ~%6/yıl
-
-    // Dünkü snapshot ile karşılaştır
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Dünkü snapshot ile karşılaştır (TL, yalnız AI bağlamı için ikincil bilgi)
     const yesterdaySnapshot = snapshots.find(s => s.snapshot_date !== todayStr);
     const dailyChange = yesterdaySnapshot ? totalValue - yesterdaySnapshot.total_value : 0;
     const dailyChangePct = yesterdaySnapshot && yesterdaySnapshot.total_value > 0
@@ -128,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========================================
     log.push('AI analizi başlatılıyor...');
 
-    const portfolioContext = buildPortfolioContext(holdings, totalValue, totalInvestment, totalPnlPct, totalCash, snapshots, dividends, incomeRecords, dailyChange, dailyChangePct, fxRate);
+    const portfolioContext = buildPortfolioContext(holdings, totalValue, totalInvestment, totalPnlPct, totalCash, snapshots, dividends, incomeRecords, dailyChange, dailyChangePct, fxRate, eur, eurRate);
     const marketContext = buildMarketContext(marketData, newsData);
 
     const aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
@@ -145,14 +154,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       portfolio_pnl_pct: totalPnlPct,
       market_data: marketData,
       actions: aiResponse.actions || [],
-      monthly_income: aiResponse.monthly_income || {},
       market_outlook: aiResponse.market_outlook || '',
       portfolio_diagnosis: aiResponse.portfolio_diagnosis || '',
       top_pick: aiResponse.top_pick || '',
       news_alerts: aiResponse.news_alerts || [],
       wealth_building_tip: aiResponse.wealth_building_tip || '',
-      safe_monthly_income: safeMonthly,
-      moderate_monthly_income: moderateMonthly,
+      // EUR — tek ölçü (uygulama kartlarıyla aynı motor)
+      wealth_eur: eur ? Math.round(eur.wealthEUR * 100) / 100 : null,
+      pnl_eur_day: eur ? Math.round(eur.dayGainEUR * 100) / 100 : null,
+      pnl_eur_mtd: eur?.mtd ? Math.round(eur.mtd.gainEUR * 100) / 100 : null,
+      salary_eur: eur ? Math.round(salaryEUR * 100) / 100 : null,
+      projected_salary_eur: eur?.mtd ? Math.round(projectedSalaryEUR * 100) / 100 : null,
+      eur_rate: eur?.eurRate || null,
+      eur_health_ok: eur ? eur.health.ok : null,
       ai_model: 'claude-sonnet-5',
       generation_time_ms: Date.now() - startTime,
     };
@@ -166,96 +180,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       log.push('Rapor veritabanına kaydedildi');
       // Web Push: günlük rapor hazır bildirimi (abone yoksa no-op)
-      const pnlPct = Number(reportData.portfolio_pnl_pct) || 0;
       await sendPushToAll({
         title: '📊 Günlük rapor hazır',
-        body: `Portföy ₺${Math.round(Number(reportData.portfolio_value) || 0).toLocaleString('tr-TR')} · K/Z %${pnlPct.toFixed(1)}`,
+        body: eur
+          ? `Servet ${fmtEUR(eur.wealthEUR)} · Gün ${fmtSignedEUR(eur.dayGainEUR)} · Bu ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)} · Maaş ${fmtEUR(salaryEUR)}`
+          : `Portföy ₺${Math.round(totalValue).toLocaleString('tr-TR')} (EUR motoru yok)`,
         url: '/daily-report',
         tag: 'daily-report',
       }).catch((e) => console.error('[push] gönderim hatası:', e));
     }
 
-    // ========================================
-    // 6. Aylık maaş hesaplamasını güncelle
-    // ========================================
-    const monthStart = `${todayStr.substring(0, 7)}-01`;
-
-    // Bu ayki toplam geliri hesapla
-    const thisMonthIncome = (incomeRecords || [])
-      .filter(r => r.income_date >= monthStart && !r.is_projected)
-      .reduce((sum, r) => sum + (r.amount_try || 0), 0);
-
-    const { error: salaryError } = await supabase
-      .from('monthly_salary')
-      .upsert([{
-        salary_month: monthStart,
-        portfolio_value: totalValue,
-        safe_amount: safeMonthly,
-        moderate_amount: moderateMonthly,
-        actual_income: thisMonthIncome,
-        ai_recommendation: aiResponse.monthly_income?.description || '',
-      }], { onConflict: 'salary_month' });
-
-    if (salaryError) {
-      log.push(`Maaş hesap hatası: ${salaryError.message}`);
-    } else {
-      log.push(`Aylık maaş: güvenli=${safeMonthly.toFixed(0)} TL, dengeli=${moderateMonthly.toFixed(0)} TL`);
-    }
+    // (6. 'monthly_salary' güvenli/dengeli upsert KALDIRILDI 2026-09-19 — tek ölçü EUR dinamik maaş, motor hesaplar)
 
     // ========================================
     // 7. Email gönder (RESEND_API_KEY varsa)
     // ========================================
     try {
-      const usdRateForEmail = (() => {
-        const u = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
-        return u?.current_price || marketData.usd_try || 45;
-      })();
-      // 7 gün ve 30 gün öncesi snapshot
-      const sortedSnapshots = [...snapshots].sort(
-        (a: any, b: any) => new Date(b.snapshot_date).getTime() - new Date(a.snapshot_date).getTime()
-      );
-      const findDaysAgo = (days: number) => {
-        const target = new Date();
-        target.setDate(target.getDate() - days);
-        const targetStr = target.toISOString().split('T')[0];
-        return sortedSnapshots.find((s: any) => s.snapshot_date <= targetStr) || null;
-      };
-      const weekAgo = findDaysAgo(7);
-      const monthAgo = findDaysAgo(30);
-      const weeklyChange = weekAgo ? totalValue - Number(weekAgo.total_value) : 0;
-      const weeklyChangePct = weekAgo && Number(weekAgo.total_value) > 0
-        ? (weeklyChange / Number(weekAgo.total_value)) * 100 : 0;
-      const monthlyChange = monthAgo ? totalValue - Number(monthAgo.total_value) : 0;
-      const monthlyChangePct = monthAgo && Number(monthAgo.total_value) > 0
-        ? (monthlyChange / Number(monthAgo.total_value)) * 100 : 0;
-
-      const yieldByType: Record<string, number> = {
-        stock: 0.03, fund: 0.02, eurobond: 0.05, crypto: 0.02, commodity: 0, currency: 0.01,
-      };
-      const passiveYearly = holdings.reduce((s: number, h: any) => {
-        const v = tryValue(h, 'current_price'); // FX-aware (USD/EUR pozisyonlar TRY'ye)
-        return s + v * (yieldByType[h.asset_type] || 0);
-      }, 0);
-      const passiveMonthlyUsd = (passiveYearly / 12) / usdRateForEmail;
-
+      const nextYM = (() => { const y = Number(todayStr.slice(0, 4)), m = Number(todayStr.slice(5, 7)); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; })();
       const snapshot = {
         date: todayStr,
-        totalValueTry: totalValue,
-        totalValueUsd: totalValue / usdRateForEmail,
-        dailyChangeTry: dailyChange,
-        dailyChangePct: dailyChangePct,
-        weeklyChangeTry: weeklyChange,
-        weeklyChangePct: weeklyChangePct,
-        monthlyChangeTry: monthlyChange,
-        monthlyChangePct: monthlyChangePct,
+        wealthEUR: eur?.wealthEUR || 0,
+        wealthTRY: eur?.wealthTRY || totalValue,
+        eurRate: eur?.eurRate || eurRate,
+        dayGainEUR: eur?.dayGainEUR || 0, dayGainPct: eur?.dayGainPct || 0,
+        weekGainEUR: eur?.weekGainEUR || 0, weekGainPct: eur?.weekGainPct || 0,
+        mtdGainEUR: eur?.mtd?.gainEUR || 0, mtdInflationEUR: eur?.mtd?.inflationEUR || 0, mtdRealEUR: eur?.mtd?.realGainEUR || 0,
+        carryInEUR: eur?.mtd?.carryInEUR || 0,
+        salaryEUR, salaryMonthLabel: monthLabelTR(todayStr.slice(0, 7)), salaryBasisLabel: eur?.lastFull ? monthLabelTR(eur.lastFull.month) : '—',
+        projectedSalaryEUR, nextMonthLabel: monthLabelTR(nextYM),
+        healthOk: eur ? eur.health.ok : false,
         topPick: aiResponse.top_pick || '',
         portfolioDiagnosis: aiResponse.portfolio_diagnosis || '',
         marketOutlook: aiResponse.market_outlook || '',
         actions: aiResponse.actions || [],
-        safeMonthly,
-        moderateMonthly,
-        passiveMonthlyUsd,
-        salaryTargetUsd: SALARY_TARGET_USD,
       };
       const { subject, html } = buildDailyEmail(snapshot);
       const emailRes = await sendEmail(subject, html);
@@ -281,11 +238,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           daily_change: dailyChange,
           daily_change_pct: dailyChangePct,
         },
-        monthly_salary: {
-          safe: safeMonthly,
-          moderate: moderateMonthly,
-          actual_income: thisMonthIncome,
-        },
+        eur: eur ? {
+          wealth: eur.wealthEUR, day: eur.dayGainEUR, week: eur.weekGainEUR, mtd: eur.mtd?.gainEUR ?? null,
+          salary: salaryEUR, projected_salary: projectedSalaryEUR, carry_in: eur.mtd?.carryInEUR ?? null, health_ok: eur.health.ok,
+        } : null,
         ai_analysis: aiResponse,
         market_summary: {
           usd_try: marketData.usd_try,
@@ -581,11 +537,15 @@ function buildPortfolioContext(
   dividends: any[], incomeRecords: any[],
   dailyChange: number, dailyChangePct: number,
   fxRate: (ccy: string) => number,
+  eur: EurSummary | null, eurRateNow: number,
 ): string {
   const typeNames: Record<string, string> = {
     stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
     fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia',
   };
+  const eurNow = eur?.eurRate || eurRateNow;
+  const E = (tl: number) => tl / eurNow;           // bugünkü kurla TL → EUR
+  const e0 = (n: number) => `${n < 0 ? '−' : ''}€${Math.abs(n).toFixed(0)}`;
   // FX-aware TRY value (holdings can be USD/EUR/GBP/RON/RUB)
   const tryV = (h: any, field: 'current_price' | 'purchase_price' = 'current_price') => {
     const p = Number(h[field]) || (field === 'current_price' ? Number(h.purchase_price) : 0) || 0;
@@ -593,7 +553,7 @@ function buildPortfolioContext(
     return p * q * fxRate(h.currency || 'TRY'); // fx-ok: tryV helper kapsüllüyor
   };
 
-  // Tip dağılımı
+  // Tip dağılımı (değer EUR; K/Z yerel para nominal — TL pozisyonlarda kur/enflasyon DÜŞÜLMEMİŞ)
   const byType: Record<string, { value: number; count: number; pnl: number }> = {};
   for (const h of holdings) {
     const type = h.asset_type || 'other';
@@ -607,10 +567,10 @@ function buildPortfolioContext(
 
   const dist = Object.entries(byType)
     .sort(([, a], [, b]) => b.value - a.value)
-    .map(([type, d]) => `${typeNames[type] || type}: %${(d.value / totalValue * 100).toFixed(1)} (${d.count} adet, KZ: ${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(0)} TL)`)
+    .map(([type, d]) => `${typeNames[type] || type}: %${(d.value / totalValue * 100).toFixed(1)} (${d.count} adet, ${e0(E(d.value))})`)
     .join('\n');
 
-  // Top 20 pozisyon (TRY karşılığıyla sıralı)
+  // Top 20 pozisyon (EUR değerle sıralı)
   const topHoldings = [...holdings]
     .sort((a, b) => tryV(b) - tryV(a))
     .slice(0, 20)
@@ -619,36 +579,22 @@ function buildPortfolioContext(
       const cost = tryV(h, 'purchase_price');
       const pnlPct = cost > 0 ? ((value - cost) / cost * 100) : 0;
       const weight = totalValue > 0 ? (value / totalValue * 100) : 0;
-      return `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}): ${value.toFixed(0)} TL, KZ: %${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}, ağırlık: %${weight.toFixed(1)}`;
+      const ccy = String(h.currency || 'TRY').toUpperCase();
+      return `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}, ${ccy}): ${e0(E(value))}, ağırlık %${weight.toFixed(1)}, nominal K/Z %${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}${ccy === 'TRY' ? ' (TL nominal — kur/enflasyon düşülmemiş, EUR bazında çok daha düşük)' : ''}`;
     })
     .join('\n');
 
-  // Performans trendi (son 7 gün)
-  const recentSnapshots = snapshots.slice(0, 7);
-  const perfTrend = recentSnapshots
-    .map(s => `${s.snapshot_date}: ${Number(s.total_value).toFixed(0)} TL`)
-    .join(', ');
+  // EUR servet trendi (motor, son 7 snapshot günü)
+  const perfTrend = eur
+    ? `motor son 7 gün: ${fmtSignedEUR(eur.weekGainEUR)} (${eur.weekGainPct >= 0 ? '+' : ''}${eur.weekGainPct.toFixed(2)}%)`
+    : snapshots.slice(0, 7).map(s => `${s.snapshot_date}: ${e0(E(Number(s.total_value)))}`).join(', ');
 
-  // Temettü özeti
+  // Temettü / gelir özeti (EUR, bugünkü kurla)
   const totalDividends = dividends.reduce((sum, d) => sum + (d.amount || 0), 0);
-  const recentDivs = dividends.slice(0, 5).map(d =>
-    `${d.payment_date}: ${d.amount} TL`
-  ).join(', ');
+  const recentDivs = dividends.slice(0, 5).map(d => `${d.payment_date}: ${e0(E(Number(d.amount) || 0))}`).join(', ');
+  const monthlyIncomeTotal = incomeRecords.filter(r => !r.is_projected).reduce((sum, r) => sum + (r.amount_try || 0), 0);
 
-  // Gelir özeti
-  const monthlyIncomeTotal = incomeRecords
-    .filter(r => !r.is_projected)
-    .reduce((sum, r) => sum + (r.amount_try || 0), 0);
-
-  // Allokasyon sapması (hedef = Gelir preset)
-  const usdRate = (() => {
-    const u = holdings.find(h => h.symbol === 'USD' && h.asset_type === 'currency');
-    return u?.current_price || 45;
-  })();
-  const salaryTargetTry = SALARY_TARGET_USD * usdRate;
-  const yearlyWithdrawTry = salaryTargetTry * 12;
-  const withdrawalRatePctYearly = totalValue > 0 ? (yearlyWithdrawTry / totalValue) * 100 : 0;
-
+  // Allokasyon sapması (SABİT POLİTİKA)
   const allocationGap = Object.entries(TARGET_ALLOCATION).map(([type, target]) => {
     const current = byType[type] ? (byType[type].value / totalValue * 100) : 0;
     const diff = current - target;
@@ -656,50 +602,53 @@ function buildPortfolioContext(
     return `${typeNames[type] || type}: %${current.toFixed(1)} → hedef %${target} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}, ${status})`;
   }).join('\n');
 
-  // Pasif gelir tahmini (yieldlere göre)
-  const yieldByType: Record<string, number> = {
-    stock: 0.03, fund: 0.02, eurobond: 0.05,
-    crypto: 0.02, commodity: 0, currency: 0.01,
-  };
-  const passiveYearly = Object.entries(byType).reduce((sum, [type, d]) => {
-    return sum + d.value * (yieldByType[type] || 0);
-  }, 0);
-  const passiveMonthlyUsd = (passiveYearly / 12) / usdRate;
+  // Pasif gelir tahmini (yieldlere göre, EUR/ay)
+  const yieldByType: Record<string, number> = { stock: 0.03, fund: 0.02, eurobond: 0.05, crypto: 0.02, commodity: 0, currency: 0.01 };
+  const passiveYearlyTRY = Object.entries(byType).reduce((sum, [type, d]) => sum + d.value * (yieldByType[type] || 0), 0);
+  const passiveMonthlyEUR = E(passiveYearlyTRY) / 12;
 
-  return `PORTFÖY DURUMU (${new Date().toISOString().split('T')[0]}):
-Toplam Değer: ${totalValue.toFixed(0)} TL (${(totalValue / usdRate).toFixed(0)} USD)
-Toplam Yatırım: ${totalInvestment.toFixed(0)} TL
-Toplam K/Z: %${totalPnlPct.toFixed(1)} (${(totalValue - totalInvestment).toFixed(0)} TL)
-Nakit: ${totalCash.toFixed(0)} TL
-Günlük Değişim: ${dailyChange >= 0 ? '+' : ''}${dailyChange.toFixed(0)} TL (%${dailyChangePct.toFixed(1)})
+  const salaryEUR = eur?.lastFull?.salaryEUR || 0;
+  const withdrawalRatePctYearly = eur && eur.wealthEUR > 0 ? (salaryEUR * 12 / eur.wealthEUR) * 100 : 0;
+  const eurBlock = eur ? `
+EUR KÂR MOTORU (tek ölçü; servet farkı − dış akış; kur farkı kâr DEĞİL):
+Servet: ${fmtEUR(eur.wealthEUR)} (≈ ₺${Math.round(eur.wealthTRY).toLocaleString('tr-TR')}, EUR/TRY ${eur.eurRate.toFixed(2)})${eur.health.ok ? '' : ' — DİKKAT: kur serisi eski (' + eur.health.lastEurRateDay + ')'}
+Son gün: ${fmtSignedEUR(eur.dayGainEUR)} (${eur.dayGainPct >= 0 ? '+' : ''}${eur.dayGainPct.toFixed(2)}%)
+Son 7 gün: ${fmtSignedEUR(eur.weekGainEUR)} (${eur.weekGainPct >= 0 ? '+' : ''}${eur.weekGainPct.toFixed(2)}%)
+Bu ay (MTD): nominal ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, enflasyon payı −${fmtEUR(eur.mtd?.inflationEUR || 0)}, reel ${fmtSignedEUR(eur.mtd?.realGainEUR || 0)}, devreden açık ${fmtSignedEUR(eur.mtd?.carryInEUR || 0)} → gelecek ay maaş ön izleme ${fmtEUR(eur.mtd?.salaryEUR || 0)}
+Geçen ay (${eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—'}): nominal ${fmtSignedEUR(eur.lastFull?.gainEUR || 0)}, reel ${fmtSignedEUR(eur.lastFull?.realGainEUR || 0)}, çekilebilir ${fmtEUR(eur.lastFull?.withdrawableEUR || 0)} → BU AYIN MAAŞI ${fmtEUR(salaryEUR)} (= çekilebilir × 0,85)
+Yıllık çekim oranı (maaş×12 / servet): %${withdrawalRatePctYearly.toFixed(1)} (sürdürülebilir ≤%6)` : `
+EUR KÂR MOTORU: veri alınamadı — kâr/maaş yorumu YAPMA.`;
+
+  return `PORTFÖY DURUMU (${new Date().toISOString().split('T')[0]}) — PARA BİRİMİ: EUR (kullanıcı EUR harcıyor; TL/USD nominal rakamlar yanıltıcıdır):
+${eurBlock}
+
+İKİNCİL (nominal, yalnız bağlam): toplam ₺${totalValue.toFixed(0)}, maliyet ₺${totalInvestment.toFixed(0)}, nominal TL K/Z %${totalPnlPct.toFixed(1)}, günlük TL değişim ${dailyChange >= 0 ? '+' : ''}₺${dailyChange.toFixed(0)} (%${dailyChangePct.toFixed(1)}), likit nakit ${e0(E(totalCash))}
 Pozisyon Sayısı: ${holdings.length}
 
 KULLANICININ HEDEFİ — TOTAL RETURN (Maaş + Büyüme):
-Aylık çekim hedefi: $${SALARY_TARGET_USD} (${salaryTargetTry.toFixed(0)} TL)
-Yıllık çekim oranı: %${withdrawalRatePctYearly.toFixed(1)} (sürdürülebilir bant: ≤%6/yıl, sınır: %6-8, riskli: >%8)
+Maaş kuralı: geçen ayın reel EUR kârı × 0,85; zarar aylarında maaş 0, açık devreder (ana paraya dokunulmaz). Geçim üst sınırı ~€${LIVING_CAP_EUR}/ay.
 Strateji: Total Return — gelir + sermaye büyümesi + denge (saf gelir DEĞİL)
-Tahmini mevcut pasif gelir: ~$${passiveMonthlyUsd.toFixed(0)}/ay (${(passiveYearly).toFixed(0)} TL/yıl) — temettü+kupon+staking
-Maaş açığı: ${SALARY_TARGET_USD - passiveMonthlyUsd > 0 ? '$' + (SALARY_TARGET_USD - passiveMonthlyUsd).toFixed(0) + '/ay (trim ve buffer ile karşılanır)' : 'pasif gelir maaşı karşılıyor ✓'}
-Beklenen yıllık toplam getiri (total return): hisse+ETF %8-12, eurobond %5, kripto %15+, altın %5 — denge bunları harmanlar
+Tahmini pasif gelir: ~${e0(passiveMonthlyEUR)}/ay — temettü+kupon+staking (yield varsayımıyla)
+Beklenen yıllık toplam getiri (EUR): global hisse %6-9, kısa USD hazine %3,5-4, altın %3-5, kripto oynak
 
-DAĞILIM:
+DAĞILIM (EUR):
 ${dist}
 
-HEDEF VS MEVCUT ALLOKASYON (Gelir Odaklı strateji — Maaş Simülatörü ile uyumlu):
+HEDEF VS MEVCUT ALLOKASYON (SABİT POLİTİKA):
 ${allocationGap}
 
-POZİSYONLAR (Top 20):
+POZİSYONLAR (Top 20, EUR):
 ${topHoldings}
 
-SON 7 GÜN PERFORMANSI:
+PERFORMANS:
 ${perfTrend}
 
 TEMETTÜ GEÇMİŞİ:
-Toplam: ${totalDividends.toFixed(0)} TL
+Toplam: ${e0(E(totalDividends))}
 Son: ${recentDivs || 'Henüz temettü yok'}
 
 GELİR ÖZETİ:
-Son kaydedilen gelir toplamı: ${monthlyIncomeTotal.toFixed(0)} TL`;
+Son kaydedilen gelir toplamı: ${e0(E(monthlyIncomeTotal))}`;
 }
 
 function buildMarketContext(marketData: MarketData, news: string[]): string {
@@ -721,8 +670,13 @@ ${news.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
 async function callClaudeForDailyReport(apiKey: string, portfolioContext: string, marketContext: string): Promise<any> {
   const systemPrompt = `Sen profesyonel bir portföy yöneticisisin. Her sabah müşterine kapsamlı günlük brifing hazırlıyorsun.
 
+PARA BİRİMİ — TEK ÖLÇÜ EUR (ZORUNLU):
+Müşteri Romanya'da yaşıyor ve EUR harcıyor. Tüm tutarları EUR yaz. TL nominal kâr/kur farkını KÂR OLARAK YORUMLAMA
+(TL hiperenflasyonist; kur artışı EUR bazında kâr değildir). Kâr/maaş rakamlarını yalnız sana verilen "EUR KÂR MOTORU" bloğundan al,
+kendin hesaplama, başka rakam üretme. Maaş kuralı deterministiktir: geçen ayın reel EUR kârı × 0,85; zarar aylarında 0.
+
 KULLANICININ ÖNCELİKLİ HEDEFİ — TOTAL RETURN (Maaş + Büyüme + Denge):
-Müşteri portföyden aylık $${SALARY_TARGET_USD} maaş çekmek istiyor — AMA aynı zamanda sermayenin uzun vadede büyümesini istiyor.
+Müşteri portföyden ayda ~€${LIVING_CAP_EUR}'ya kadar maaş çekmek istiyor — AMA aynı zamanda sermayenin uzun vadede büyümesini istiyor.
 Bu yüzden strateji SAF GELİR DEĞİL — "TOTAL RETURN" yaklaşımı: temettü + sermaye değer artışı + denge.
 
 FELSEFE (anla ve uygula):
@@ -736,7 +690,7 @@ GÖREVIN:
 2. Piyasa verilerini değerlendir (SADECE sana verilen CANLI verileri kullan)
 3. Haberlerin portföye etkisini yorumla
 4. Somut aksiyon planı: total return'e hizmet eden alımlar (kalite temettü hisseleri, dengeli ETF'ler, kontrollü kripto)
-5. Maaş hesapla: mevcut pasif + kâr trim'i + buffer (sermayeyi eritmeden)
+5. Maaş HESAPLAMA — motor verdi; sadece bu ayın maaşını ve gelecek ay ön izlemesini tekrar et, istikrarlı reel EUR kârı için ne gerektiğini söyle
 6. Rebalance hedefi (SABİT POLİTİKA, DENGELİ): global hisse 50 (V3YL + kaliteli US/EU + BIST ihracatçı çekirdek + TEFAS) / USD kısa hazine+eurobond 30 / altın 10 (FİZİKİ, satılamaz, dokunma) / kripto 3-5 / nakit ≤5
 
 ÖNERİ ÖNCELİKLERİ — KESIN SIRA (üstten alta uygula):
@@ -762,7 +716,7 @@ GÖREVIN:
 - ⚠️ Top pick: HER ZAMAN gelir üreten araç (IB01/DTLA/eurobond/VHYL) olmalı. BIST hissesi top pick olamaz.
 
 TEMPO VE MİKTAR KURALLARI (ZORUNLU):
-- ⛔ Tek seferde 1M TL üzeri alım ÖNERME. Maksimum 750K TL parça başına, sonra DCA ile büyüt.
+- ⛔ Tek seferde €18.000 üzeri alım ÖNERME. Maksimum €13.000 parça başına, sonra DCA ile büyüt.
 - ⛔ "today" urgency'sini SADECE risk/protect aksiyonları için kullan. Cash redeploy/buy için "this_week" veya "this_month" kullan.
 - ⛔ ABD-domicile ETF (SGOV, TLT, GOVT, SCHD, VYM, VOO, QQQ, BIL, SHV) ÖNERME — AB perakende yatırımcı PRIIPs nedeniyle ALAMAZ. Daima UCITS karşılığını yaz: IB01, DTLA, VHYL, VUAA/CSPX, EQQQ.
 - ⛔ "Revolut'tan TreasuryDirect" YAZMA — TreasuryDirect ABD vatandaşları için, Revolut'tan erişim yok. Revolut'tan US Treasury için IB01 (kısa) veya DTLA (uzun) UCITS ETF yaz.
@@ -770,7 +724,7 @@ TEMPO VE MİKTAR KURALLARI (ZORUNLU):
 - ⛔ Mevcut +%50 kârdaki BIST pozisyonunu artırma ÖNERME (concentration riski). SISE/ENKAI/TUPRS/AKSEN/ASELS/BIMAS/TOASO/CCOLA/EKGYO için sadece TRIM önerilebilir, "accumulate" YASAK.
 - ✅ Toplam aksiyon sayısı 4-6 arasında olsun, fazlası kullanıcıyı boğar.
 - ✅ İlk aksiyon DAİMA eurobond/Treasury (IB01 ya da DTLA ya da Türkiye Hazine eurobondu) olmalı.
-- ✅ Toplam önerilen cash redeploy miktarı portföyün %10-15'ini (yaklaşık 700K-1M TL) geçmesin, yoksa kullanıcı korkar/erteler.
+- ✅ Toplam önerilen cash redeploy miktarı portföyün %10-15'ini (servetin EUR değerinden hesapla) geçmesin, yoksa kullanıcı korkar/erteler.
 
 PLATFORM REALİTESİ (yanlış yazma):
 - **Revolut (AB)**: US/EU hisse (JNJ/KO/ASML), SADECE UCITS ETF (IB01/DTLA/V3YL/VUAA/CSPX/VWCE/VHYL/EQQQ), crypto (BTC/ETH). YOK: ABD-domicile ETF (SGOV/TLT/GOVT/SCHD/VOO/QQQ — PRIIPs), Türkiye eurobondu, fiziki tahvil, TreasuryDirect.
@@ -783,7 +737,7 @@ KURALLAR:
 - Uydurma yapma. Veri olmayan hakkında yorum yapma.
 - Müşteri Romanya'da yaşıyor (Türk vatandaşı). BIST + Revolut (USD/EUR) + Binance kullanıyor.
 - Her öneri: NEDEN, NE KADAR, HANGİ PLATFORM, CANLI FİYAT, BEKLENEN TEMETTÜ/KUPON içermeli.
-- Portföy maaşı hesaplarken: temettü + faiz + staking + kupon gelirlerini ayrı ayrı belirt.
+- Pasif gelir kaynaklarını (temettü + faiz + staking + kupon) ayrı ayrı belirt; ama maaş rakamı motorunkidir.
 - Mevcut allokasyon farkını "Gelir hedef allokasyonuna" göre değerlendir (context'te verildi).
 - Çekim oranı ≤%6/yıl sürdürülebilir, %6-8 sınırda, >%8 riskli — bunu hesaba kat.
 - ⛔ ÖNEMLİ KISIT: ALTIN pozisyonu PHYSICAL (fiziki külçe/gram) — parça parça SATILAMAZ. Altın azaltma önerisi VERME. Allokasyonu düşürmek için sadece "yeni alımları başka kategorilere yönlendir" de.
@@ -807,21 +761,13 @@ JSON FORMATI (başka metin ekleme):
       "market": "BIST|US|EU|CRYPTO",
       "instruction": "Somut komut",
       "detail": "Neden, risk, beklenti. Canlı fiyat referansı. 3-4 cümle.",
-      "amount_try": 0,
+      "amount_eur": 0,
       "risk": "low|medium|high",
       "expected_annual_return": 0,
       "dividend_yield": 0,
       "platform": "Revolut|Binance|BIST|Mevcut"
     }
   ],
-  "monthly_income": {
-    "safe": 0,
-    "moderate": 0,
-    "dividend_estimate": 0,
-    "interest_estimate": 0,
-    "staking_estimate": 0,
-    "description": "Detaylı aylık gelir hesaplaması"
-  },
   "portfolio_diagnosis": "Güçlü/zayıf yönler, en büyük risk, fırsat — 4-5 cümle",
   "market_outlook": "Bugünkü canlı verilere dayalı piyasa değerlendirmesi — 3-4 cümle",
   "market_research": {
@@ -845,10 +791,10 @@ JSON FORMATI (başka metin ekleme):
 
 ${marketContext}
 
-Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin öncelikli hedefi $${SALARY_TARGET_USD}/ay sürdürülebilir maaş çekmek — sermayeyi eritmeden. Tüm öneriler bu hedefe hizmet etmeli: cash fazlasını temettü/eurobond'a dönüştürme, kâra geçmiş hisselerden trim, gelir maximizasyonu. Spekülatif büyüme tavsiyesi (BTC accumulate, NVDA momentum) verme — bu kullanıcının hedefi DEĞİL.
+Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin öncelikli hedefi ayda ~€${LIVING_CAP_EUR}'ya kadar sürdürülebilir EUR maaş — sermayeyi eritmeden; maaş = geçen ayın reel EUR kârı × 0,85 (motor hesapladı, sen tekrar et). Tüm öneriler bu hedefe hizmet etmeli: cash fazlasını temettü/eurobond'a dönüştürme, kâra geçmiş hisselerden trim, gelir maximizasyonu. Spekülatif büyüme tavsiyesi (BTC accumulate, NVDA momentum) verme — bu kullanıcının hedefi DEĞİL.
 
 ZORUNLU KISITLAR:
-- Tek aksiyonda 1M TL üzeri alım önerme. Maks 750K TL parça başına.
+- Tüm tutarlar EUR (amount_eur). Tek aksiyonda €18.000 üzeri alım önerme. Maks €13.000 parça başına.
 - ABD-domicile ETF (SGOV/TLT/GOVT/SCHD/VYM/VOO/QQQ) YAZMA — AB'de alınamaz. UCITS karşılığı: IB01/DTLA/VHYL/VUAA/EQQQ.
 - "Revolut'tan TreasuryDirect" yazma — IB01/DTLA UCITS ETF yaz.
 - Türkiye eurobondu için platform "BIST broker (İş Yatırım/Garanti)" yaz, Revolut değil.
@@ -890,7 +836,7 @@ Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bili
     if (jsonMatch) return JSON.parse(jsonMatch[0]);
   } catch { /* fallback */ }
 
-  return { raw: text, actions: [], monthly_income: {}, market_outlook: text };
+  return { raw: text, actions: [], market_outlook: text };
 }
 
 // Live FX fallback — USD/EUR holding yoksa kullanılır. 60s cache.

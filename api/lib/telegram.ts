@@ -42,23 +42,27 @@ export async function sendTelegram(text: string): Promise<TelegramResult> {
 }
 
 const fmt = (n: number) =>
-  (n || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+  (Math.abs(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
 
-const sign = (n: number) => (n >= 0 ? '+' : '');
-const arrow = (n: number) => (n >= 0 ? '🟢' : '🔴');
+const eur = (n: number) => `€${fmt(n)}`;
+const seur = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${eur(n)}`;
+const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;
+const arrow = (n: number) => (n > 0 ? '🟢' : n < 0 ? '🔴' : '⚪');
 
+// TEK ÖLÇÜ EUR (2026-09-19): kâr = servet farkı − dış akış; maaş = geçen ayın reel kârı × 0,85
 export function buildDailyTelegram(d: DailySnapshot): string {
   const lines = [
     `📊 <b>Günlük · ${escapeHtml(d.date)}</b>`,
-    `₺${fmt(d.totalValueTry)} (≈$${fmt(d.totalValueUsd)})`,
+    `Servet ${eur(d.wealthEUR)} (≈ ₺${fmt(d.wealthTRY)} · ${d.eurRate.toFixed(2)})`,
     ``,
-    `${arrow(d.dailyChangeTry)} Gün: ${sign(d.dailyChangeTry)}₺${fmt(d.dailyChangeTry)} (${sign(d.dailyChangePct)}${d.dailyChangePct.toFixed(2)}%)`,
-    `${arrow(d.weeklyChangeTry)} Hafta: ${sign(d.weeklyChangeTry)}₺${fmt(d.weeklyChangeTry)} (${sign(d.weeklyChangePct)}${d.weeklyChangePct.toFixed(2)}%)`,
-    `${arrow(d.monthlyChangeTry)} Ay: ${sign(d.monthlyChangeTry)}₺${fmt(d.monthlyChangeTry)} (${sign(d.monthlyChangePct)}${d.monthlyChangePct.toFixed(2)}%)`,
+    `${arrow(d.dayGainEUR)} Gün: ${seur(d.dayGainEUR)} (${spct(d.dayGainPct)})`,
+    `${arrow(d.weekGainEUR)} 7 gün: ${seur(d.weekGainEUR)} (${spct(d.weekGainPct)})`,
+    `${arrow(d.mtdGainEUR)} Bu ay: ${seur(d.mtdGainEUR)} nominal · reel ${seur(d.mtdRealEUR)}`,
     ``,
-    `🎯 Maaş hedef: $${d.salaryTargetUsd}/ay`,
-    `Pasif: $${d.passiveMonthlyUsd.toFixed(0)}/ay · Güvenli: ₺${fmt(d.safeMonthly)}/ay`,
+    `💸 ${escapeHtml(d.salaryMonthLabel)} maaşı: <b>${eur(d.salaryEUR)}</b> (${escapeHtml(d.salaryBasisLabel)} çekilebilir × 0,85)`,
+    d.carryInEUR < 0 ? `⛔ Devreden açık ${seur(d.carryInEUR)} → ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}` : `➡️ ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}`,
   ];
+  if (!d.healthOk) lines.push('', '⚠️ Kur serisi güncel değil — rakamlar güvenilmez olabilir.');
   if (d.topPick) {
     lines.push('', `🥇 ${escapeHtml(d.topPick.slice(0, 200))}`);
   }
@@ -68,16 +72,17 @@ export function buildDailyTelegram(d: DailySnapshot): string {
 export function buildWeeklyTelegram(w: WeeklySnapshot): string {
   const lines = [
     `📈 <b>Hafta · ${escapeHtml(w.weekStart)} → ${escapeHtml(w.weekEnd)}</b>`,
-    `${sign(w.weekChangeTry)}₺${fmt(w.weekChangeTry)} (${sign(w.weekChangePct)}${w.weekChangePct.toFixed(2)}%)`,
-    `Portföy: ₺${fmt(w.totalValueTry)}`,
+    `${arrow(w.weekGainEUR)} Kâr: ${seur(w.weekGainEUR)} (${spct(w.weekGainPct)}) · akış düzeltilmiş`,
+    `Servet: ${eur(w.wealthEUR)}`,
   ];
   if (w.bestPerformer) {
-    lines.push('', `🟢 En iyi: <b>${escapeHtml(w.bestPerformer.symbol)}</b> +${w.bestPerformer.pnlPct.toFixed(1)}%`);
+    lines.push('', `🟢 En iyi (nominal): <b>${escapeHtml(w.bestPerformer.symbol)}</b> +${w.bestPerformer.pnlPct.toFixed(1)}%`);
   }
   if (w.worstPerformer) {
-    lines.push(`🔴 En kötü: <b>${escapeHtml(w.worstPerformer.symbol)}</b> ${w.worstPerformer.pnlPct.toFixed(1)}%`);
+    lines.push(`🔴 En kötü (nominal): <b>${escapeHtml(w.worstPerformer.symbol)}</b> ${w.worstPerformer.pnlPct.toFixed(1)}%`);
   }
-  lines.push('', `💰 Bu hafta gelir: +₺${fmt(w.weekIncomeTry)}`);
+  lines.push('', `💰 Bu hafta kaydedilen gelir: +${eur(w.weekIncomeEUR)}`);
+  if (!w.healthOk) lines.push('', '⚠️ Kur serisi güncel değil.');
   if (w.thisWeekTodos.length > 0) {
     lines.push('', `📋 Yapılacak (${w.thisWeekTodos.length}):`);
     w.thisWeekTodos.slice(0, 3).forEach((t, i) => {
@@ -89,20 +94,19 @@ export function buildWeeklyTelegram(w: WeeklySnapshot): string {
 
 export function buildMonthlyTelegram(m: MonthlySnapshot): string {
   const lines = [
-    `🗓️ <b>Aylık · ${escapeHtml(m.monthLabel)}</b>`,
-    `${sign(m.monthChangeTry)}₺${fmt(m.monthChangeTry)} (${sign(m.monthChangePct)}${m.monthChangePct.toFixed(2)}%)`,
-    `Portföy: ₺${fmt(m.totalValueTry)}`,
+    `🗓️ <b>${escapeHtml(m.monthLabel)} kapanışı</b>`,
+    `${arrow(m.gainEUR)} Nominal kâr: ${seur(m.gainEUR)} · servet ${eur(m.startWealthEUR)} → ${eur(m.endWealthEUR)}`,
+    `Enflasyon payı −${eur(m.inflationEUR)} → reel ${seur(m.realGainEUR)}`,
+    `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
     ``,
-    `💸 Maaş: $${m.salaryActualUsd.toFixed(0)} / $${m.salaryTargetUsd} (${m.salaryFulfilledPct.toFixed(0)}%)`,
-    `YTD çekim oranı: %${m.withdrawalRatePctYTD.toFixed(1)}/yıl`,
-    ``,
-    `💰 Gerçekleşen gelir: +₺${fmt(m.realizedIncomeTry)}`,
+    `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (çekilebilir ${eur(m.withdrawableEUR)} × 0,85)`,
   ];
-  if (m.topGainersThisMonth.length > 0) {
-    lines.push('', `🏆 Top yükselen:`);
-    m.topGainersThisMonth.slice(0, 3).forEach(g => {
-      lines.push(`• ${escapeHtml(g.symbol)} +${g.pnlPct.toFixed(1)}%`);
-    });
+  if (m.salaryEUR === 0) lines.push(`⛔ Maaş yok — açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.`);
+  lines.push('', `💰 Kaydedilen gelir: +${eur(m.realizedIncomeEUR)}`);
+  if (m.yearRows.length) {
+    lines.push('', `📆 Ay ay:`);
+    m.yearRows.forEach(r => lines.push(`• ${escapeHtml(r.month)}: ${seur(r.gainEUR)} · maaş ${eur(r.salaryEUR)}`));
   }
+  if (!m.healthOk) lines.push('', '⚠️ Kur serisi güncel değil.');
   return lines.join('\n');
 }

@@ -166,19 +166,36 @@ export default function DailyReportPage() {
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Portföy Durumu</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Toplam Değer</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{formatMoney(report.portfolio_value)} <span className="text-xs text-gray-400">TL</span></p>
-                </div>
-                <div className={`rounded-xl p-3 ${report.portfolio_pnl >= 0 ? 'bg-accent-50 dark:bg-accent-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">K/Z</p>
-                  <p className={`text-lg font-bold ${report.portfolio_pnl >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
-                    {report.portfolio_pnl >= 0 ? '+' : ''}{formatMoney(report.portfolio_pnl)} <span className="text-xs">TL</span>
-                  </p>
-                  <p className={`text-[10px] ${report.portfolio_pnl_pct >= 0 ? 'text-accent-500' : 'text-red-500'}`}>
-                    %{report.portfolio_pnl_pct?.toFixed(1)}
-                  </p>
-                </div>
+                {report.wealth_eur != null ? (
+                  <>
+                    <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400">Servet</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">€{formatMoney(report.wealth_eur)}</p>
+                      <p className="text-[10px] text-gray-400">≈ ₺{formatMoney(report.portfolio_value)}{report.eur_health_ok === false ? ' · ⚠️ kur eski' : ''}</p>
+                    </div>
+                    <div className={`rounded-xl p-3 ${(report.pnl_eur_day ?? 0) >= 0 ? 'bg-accent-50 dark:bg-accent-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400">Gün / Bu Ay</p>
+                      <p className={`text-lg font-bold ${(report.pnl_eur_day ?? 0) >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
+                        {(report.pnl_eur_day ?? 0) < 0 ? '−' : '+'}€{formatMoney(Math.abs(report.pnl_eur_day ?? 0))}
+                      </p>
+                      <p className={`text-[10px] ${(report.pnl_eur_mtd ?? 0) >= 0 ? 'text-accent-500' : 'text-red-500'}`}>
+                        ay {(report.pnl_eur_mtd ?? 0) < 0 ? '−' : '+'}€{formatMoney(Math.abs(report.pnl_eur_mtd ?? 0))}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Eski rapor (2026-09-19 öncesi): yalnız nominal TL var */}
+                    <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400">Toplam Değer (nominal)</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">₺{formatMoney(report.portfolio_value)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400">EUR kâr</p>
+                      <p className="text-sm text-gray-400">eski rapor — yok</p>
+                    </div>
+                  </>
+                )}
                 {/* 2026-09-19: AI'nın 'Güvenli/Dengeli maaş' tahminleri KALDIRILDI — tek ölçü: geçen ayın kârı × 0,85 */}
                 <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3 col-span-2">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Bu Ayın Dinamik Maaşı</p>
@@ -316,8 +333,10 @@ export default function DailyReportPage() {
                         <p className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-1">{action.instruction}</p>
                         {action.detail && <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">{action.detail}</p>}
                         <div className="flex items-center gap-3 mt-2">
-                          {(action.amount_try ?? 0) > 0 && (
-                            <span className="text-[10px] text-gray-500"><DollarSign className="w-3 h-3 inline" /> {formatMoney(action.amount_try ?? 0)} TL</span>
+                          {(action.amount_eur ?? 0) > 0 ? (
+                            <span className="text-[10px] text-gray-500"><DollarSign className="w-3 h-3 inline" /> €{formatMoney(action.amount_eur ?? 0)}</span>
+                          ) : (action.amount_try ?? 0) > 0 && (
+                            <span className="text-[10px] text-gray-500"><DollarSign className="w-3 h-3 inline" /> ₺{formatMoney(action.amount_try ?? 0)} (eski)</span>
                           )}
                           {(action.expected_annual_return ?? 0) > 0 && (
                             <span className="text-[10px] text-accent-500"><TrendingUp className="w-3 h-3 inline" /> %{action.expected_annual_return} yıllık</span>
@@ -455,16 +474,22 @@ export default function DailyReportPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{formatDate(r.report_date)}</p>
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        {r.actions?.length || 0} aksiyon | {formatMoney(r.portfolio_value)} TL
+                        {r.actions?.length || 0} aksiyon | {r.wealth_eur != null ? `€${formatMoney(r.wealth_eur)}` : `₺${formatMoney(r.portfolio_value)} (nominal)`}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-sm font-bold ${r.portfolio_pnl >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
-                        {r.portfolio_pnl >= 0 ? '+' : ''}{formatMoney(r.portfolio_pnl)} TL
-                      </p>
-                      <p className={`text-[10px] ${r.portfolio_pnl_pct >= 0 ? 'text-accent-500' : 'text-red-500'}`}>
-                        %{r.portfolio_pnl_pct?.toFixed(1)}
-                      </p>
+                      {r.wealth_eur != null ? (
+                        <>
+                          <p className={`text-sm font-bold ${(r.pnl_eur_day ?? 0) >= 0 ? 'text-accent-600' : 'text-red-600'}`}>
+                            {(r.pnl_eur_day ?? 0) < 0 ? '−' : '+'}€{formatMoney(Math.abs(r.pnl_eur_day ?? 0))}
+                          </p>
+                          <p className={`text-[10px] ${(r.pnl_eur_mtd ?? 0) >= 0 ? 'text-accent-500' : 'text-red-500'}`}>
+                            ay {(r.pnl_eur_mtd ?? 0) < 0 ? '−' : '+'}€{formatMoney(Math.abs(r.pnl_eur_mtd ?? 0))}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[10px] text-gray-400">eski rapor</p>
+                      )}
                     </div>
                   </button>
                 ))}
