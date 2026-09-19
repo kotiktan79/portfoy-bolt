@@ -51,7 +51,7 @@ export async function getInceptionPnl(): Promise<InceptionSummary | null> {
   const idRes = await supabase.from('holdings').select('id,currency'); for (const h of idRes.data || []) ccyById.set(String(h.id), String(h.currency || 'TRY').toUpperCase());
   let realizedEUR = 0, realizedTRY = 0; const seen = new Set<string>();
   for (const cst of cashRes.data || []) {
-    const m = String(cst.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/); if (!m) continue;
+    const m = String(cst.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/) || String(cst.notes || '').match(/K\/Z\s*\+?(-?[\d.]+)/); if (!m) continue;
     const d = String(cst.created_at).slice(0, 10); const v = Number(m[1]); const c = String(cst.currency || 'TRY').toUpperCase();
     const tl = toTryToday(v, c); if (!tl) continue;
     realizedTRY += tl; realizedEUR += toEurAt(v, c, d); seen.add(`${d}|${Math.round(tl)}`);

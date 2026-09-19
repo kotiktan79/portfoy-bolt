@@ -49,7 +49,8 @@ async function load() {
   const align = (d: string) => snapDays.find(x => x >= d) || snapDays[snapDays.length - 1];
   const realizedByDay = new Map<string, number>(); const seen = new Set<string>();
   for (const c of rzCashRes.data || []) {
-    const m = String(c.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/); if (!m) continue;
+    // iki not formatı: "(Kar/Zarar: 11161.92 ₺)" ve "(K/Z +272.95)"
+    const m = String(c.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/) || String(c.notes || '').match(/K\/Z\s*\+?(-?[\d.]+)/); if (!m) continue;
     const d = String(c.created_at).slice(0, 10); const tl = toTRY(Number(m[1]), String(c.currency || 'TRY').toUpperCase(), d);
     if (!Number.isFinite(tl) || tl === 0 || d < RELIABLE_FROM) continue;
     const k = align(d); realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl); seen.add(`${d}|${Math.round(tl)}`);
@@ -75,8 +76,11 @@ async function load() {
     if (!txByHolding.has(String(h.id))) txByHolding.set(String(h.id), []);
     txByHolding.get(String(h.id))!.push({ d, dCost });
   }
+  // Drift tabanı = quantity × purchase_price: snapshot total_investment BU tabanla kurulur
+  // (daily-snapshot.ts tryValueOf(h,'purchase_price')). cost_basis bazı pozisyonlarda bayat
+  // (JNJ 1.097 vs q×pp 2.897 USD) → drift eksik kalıyordu (hakem bulgusu 2026-09-19).
   const costsOn = (date: string): ForeignCost[] => foreign.map(h => {
-    let c = Number(h.cost_basis) || 0;
+    let c = (Number(h.quantity) || 0) * (Number(h.purchase_price) || 0);
     for (const t of txByHolding.get(String(h.id)) || []) if (t.d > date) c -= t.dCost;
     if (String(h.created_at).slice(0, 10) > date) c = 0;
     return { currency: String(h.currency).toUpperCase() as 'USD' | 'EUR', costNative: Math.max(0, c) };

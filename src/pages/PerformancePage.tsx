@@ -79,7 +79,10 @@ export default function PerformancePage() {
   const snapshots = useMemo(() => {
     if (!allDaily.length) return [] as EurDaily[];
     if (period === 9999) return allDaily;
-    const cutoff = new Date(allDaily[allDaily.length - 1].date + 'T00:00:00'); cutoff.setDate(cutoff.getDate() - period);
+    // Saat diliminden bağımsız: tarih aritmetiğini UTC'de yap (toISOString UTC'ye çevirdiği için
+    // yerel Date kullanılınca Bükreş'te cutoff 1 gün kayıyordu — hakem bulgusu 2026-09-19).
+    const [y, m, d0] = allDaily[allDaily.length - 1].date.split('-').map(Number);
+    const cutoff = new Date(Date.UTC(y, m - 1, d0 - period));
     const iso = cutoff.toISOString().slice(0, 10);
     return allDaily.filter(d => d.date >= iso);
   }, [allDaily, period]);
