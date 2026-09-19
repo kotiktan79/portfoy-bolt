@@ -28,8 +28,8 @@ import { RebalancePlan } from '../components/RebalancePlan';
 import KarCuzdani from '../components/KarCuzdani';
 import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
 import HeroDashboard from '../components/HeroDashboard';
-import { getDynamicWithdrawal } from '../services/analyticsService';
-import { DynamicWithdrawal } from '../lib/portfolioMetrics';
+import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
+
 
 // Lazy loaded components (charts, modals - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
@@ -83,10 +83,10 @@ export default function HomePage() {
     return (localStorage.getItem('tandor_holdings_view') as 'table' | 'grid') || 'table';
   });
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
-  const [dynamic, setDynamic] = useState<DynamicWithdrawal | null>(null);
+  const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
 
   useEffect(() => {
-    getDynamicWithdrawal().then(setDynamic).catch(() => {});
+    getDynamicSalary().then(setDynamic).catch(() => {});
   }, []);
 
   const {
@@ -148,7 +148,8 @@ export default function HomePage() {
                 dailyChange={livePnlData?.daily.change}
                 dailyChangePct={livePnlData?.daily.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
-                dynamicSafeMaxUSD={dynamic?.safeMonthlyUSD}
+                dynamicSafeMaxUSD={dynamic?.salaryUSD}
+                dynamicSalaryLabel={dynamic ? `${dynamic.monthLabel} kârı × 0,85` : undefined}
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}
               />

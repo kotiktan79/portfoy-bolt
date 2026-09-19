@@ -662,11 +662,9 @@ export function DailyMonthlyPnL() {
                     </div>
                   </div>
                   {(() => {
-                    // 2026-09-04: "güvenli maaş = aylık kâr × 0,85" KALDIRILDI.
-                    // Tek bir iyi ayı kalıcı maaş saymak sürdürülemez (Şubat'ta $10.622
-                    // gösteriyordu); ayrıca TL kârını bugünkü kurla dolara çevirmek
-                    // kur kaybını yok sayıyordu. Maaş tek yerden hesaplanır: Kâr Cüzdanı
-                    // (computeSafeSalaryFromProfit — biriken kâra + %4 tavana bağlı).
+                    // 2026-09-19: maaş = geçen ayın kârı × 0,85 (kullanıcı kararı, tek ölçü).
+                    // Bu tablodaki aylık kâr rakamı o hesabın kaynağıdır; maaş rakamının
+                    // kendisi Kâr Cüzdanı / rapor sayfasında (salaryService) gösterilir.
                     const totalTry = monthlyRecords.reduce((sum, m) => sum + m.change, 0);
                     const posMonths = monthlyRecords.filter((m) => m.change > 0).length;
                     return (
@@ -685,8 +683,7 @@ export function DailyMonthlyPnL() {
                           </div>
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-3 leading-relaxed">
-                          Bu rakam <b>TL</b> kârıdır; euro/dolar cinsinden karşılığı kur hareketine göre değişir.
-                          Aylık çekebileceğin tutar buradan hesaplanmaz — <b>Kâr Cüzdanı</b> paneline bak.
+                          Dinamik maaş = geçen ayın kârı × 0,85. Bu tablodaki aylık kâr o hesabın kaynağıdır; bu ayın maaşını <b>Kâr Cüzdanı</b> gösterir.
                         </p>
                       </div>
                     );

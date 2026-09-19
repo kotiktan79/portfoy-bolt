@@ -2,16 +2,19 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PiggyBank, ArrowRight, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 
 export default function IncomeWidget() {
   const navigate = useNavigate();
+  // 2026-09-19: 'Güvenli/Dengeli' (AI raporunun monthly_salary tahmini) KALDIRILDI —
+  // tek ölçü: geçen ayın kârı × 0,85 (salaryService). Rapor tahmini farklı rakam
+  // gösterip kullanıcıyı yanıltıyordu.
+  const [salary, setSalary] = useState<DynamicSalary | null>(null);
   const [data, setData] = useState<{
     monthlyIncome: number;
-    safeSalary: number;
-    moderateSalary: number;
     latestReportDate: string | null;
     hasReport: boolean;
-  }>({ monthlyIncome: 0, safeSalary: 0, moderateSalary: 0, latestReportDate: null, hasReport: false });
+  }>({ monthlyIncome: 0, latestReportDate: null, hasReport: false });
 
   useEffect(() => {
     loadData();
@@ -25,8 +28,7 @@ export default function IncomeWidget() {
     const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const nextMonthStart = nextMonth.toISOString().substring(0, 10);
 
-    const [salaryRes, incomeRes, reportRes] = await Promise.all([
-      supabase.from('monthly_salary').select('*').eq('salary_month', monthStart).maybeSingle(),
+    const [incomeRes, reportRes] = await Promise.all([
       supabase.from('income_records').select('amount_try').gte('income_date', monthStart).lt('income_date', nextMonthStart).eq('is_projected', false),
       supabase.from('daily_reports').select('report_date').order('report_date', { ascending: false }).limit(1).maybeSingle(),
     ]);
@@ -35,11 +37,10 @@ export default function IncomeWidget() {
 
     setData({
       monthlyIncome,
-      safeSalary: salaryRes.data?.safe_amount || 0,
-      moderateSalary: salaryRes.data?.moderate_amount || 0,
       latestReportDate: reportRes.data?.report_date || null,
       hasReport: !!reportRes.data,
     });
+    getDynamicSalary().then(setSalary).catch(() => {});
   };
 
   const formatMoney = (n: number) => {
@@ -66,12 +67,8 @@ export default function IncomeWidget() {
       <div className="flex items-end justify-between">
         <div className="flex gap-4">
           <div>
-            <p className="text-[10px] text-gray-400">Güvenli</p>
-            <p className="text-sm font-bold text-accent-600">{formatMoney(data.safeSalary)} <span className="text-[10px] font-normal text-gray-400">TL/ay</span></p>
-          </div>
-          <div>
-            <p className="text-[10px] text-gray-400">Dengeli</p>
-            <p className="text-sm font-bold text-brand-600">{formatMoney(data.moderateSalary)} <span className="text-[10px] font-normal text-gray-400">TL/ay</span></p>
+            <p className="text-[10px] text-gray-400">{salary ? `${salary.monthLabel} kârı × 0,85` : 'Bu ay'}</p>
+            <p className="text-sm font-bold text-accent-600">${formatMoney(salary?.salaryUSD ?? 0)} <span className="text-[10px] font-normal text-gray-400">/ay · {formatMoney(salary?.salaryTRY ?? 0)} TL</span></p>
           </div>
           {data.monthlyIncome > 0 && (
             <div>

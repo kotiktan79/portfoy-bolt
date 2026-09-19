@@ -11,6 +11,7 @@ interface HeroDashboardProps {
   dailyChangePct?: number;
   historicalData?: { date: string; value: number }[];
   dynamicSafeMaxUSD?: number;
+  dynamicSalaryLabel?: string;
   // Total profit incl. realized (from portfolioMetrics) so the hero KPI matches
   // the rest of the page; falls back to the unrealized-only local computation.
   totalPnLTRY?: number;
@@ -78,6 +79,7 @@ export default function HeroDashboard({
   dailyChangePct,
   historicalData,
   dynamicSafeMaxUSD,
+  dynamicSalaryLabel,
   totalPnLTRY,
   totalPnLPct,
 }: HeroDashboardProps) {
@@ -232,11 +234,11 @@ export default function HeroDashboard({
             symbol: '◈',
           },
           {
-            label: 'Güvenli Max', icon: Gauge, accent: 'terra',
+            label: 'Dinamik Maaş', icon: Gauge, accent: 'terra',
             valueRaw: dynamicSafeMaxUSD ?? 0,
             valueFmt: (n: number) => `$${fmtUSD(n)}`,
             valueSuffix: '/ay',
-            subtitle: 'Dinamik çekim',
+            subtitle: dynamicSalaryLabel ?? 'geçen ayın kârı × 0,85',
             symbol: '✧',
           },
         ].map((card) => {

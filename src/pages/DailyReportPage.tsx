@@ -5,7 +5,8 @@ import {
   ArrowUpRight, Clock, Zap, Shield, PiggyBank
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { getLatestReport, getReportHistory, getMonthlySalaryHistory, triggerDailyReport, triggerDailySnapshot, salvageBrokenReport, type DailyReport, type MonthlySalary } from '../services/reportService';
+import { getLatestReport, getReportHistory, triggerDailyReport, triggerDailySnapshot, salvageBrokenReport, type DailyReport } from '../services/reportService';
+import { getDynamicSalary, getMonthlySalarySeries, type DynamicSalary, type MonthlySalaryRow } from '../services/salaryService';
 import IncomeRecordModal from '../components/IncomeRecordModal';
 import IncomeCalendar from '../components/IncomeCalendar';
 import ForwardDividendCalendar from '../components/ForwardDividendCalendar';
@@ -14,7 +15,8 @@ import { supabase } from '../lib/supabase';
 export default function DailyReportPage() {
   const [report, setReport] = useState<DailyReport | null>(null);
   const [reports, setReports] = useState<DailyReport[]>([]);
-  const [salaryHistory, setSalaryHistory] = useState<MonthlySalary[]>([]);
+  const [salaryHistory, setSalaryHistory] = useState<MonthlySalaryRow[]>([]);
+  const [dynSalary, setDynSalary] = useState<DynamicSalary | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -25,14 +27,16 @@ export default function DailyReportPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [reportData, historyData, salaryData] = await Promise.all([
+    const [reportData, historyData, salaryData, dyn] = await Promise.all([
       getLatestReport(),
       getReportHistory(30),
-      getMonthlySalaryHistory(12),
+      getMonthlySalarySeries(12),
+      getDynamicSalary(),
     ]);
     if (reportData) setReport(salvageBrokenReport(reportData));
     setReports(historyData.map(salvageBrokenReport));
     setSalaryHistory(salaryData);
+    setDynSalary(dyn);
     setSelectedIndex(0);
     setLoading(false);
   }, []);
@@ -175,13 +179,11 @@ export default function DailyReportPage() {
                     %{report.portfolio_pnl_pct?.toFixed(1)}
                   </p>
                 </div>
-                <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Güvenli Maaş</p>
-                  <p className="text-lg font-bold text-brand-600">{formatMoney(report.safe_monthly_income)} <span className="text-xs">TL/ay</span></p>
-                </div>
-                <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Dengeli Maaş</p>
-                  <p className="text-lg font-bold text-brand-600">{formatMoney(report.moderate_monthly_income)} <span className="text-xs">TL/ay</span></p>
+                {/* 2026-09-19: AI'nın 'Güvenli/Dengeli maaş' tahminleri KALDIRILDI — tek ölçü: geçen ayın kârı × 0,85 */}
+                <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3 col-span-2">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Bu Ayın Dinamik Maaşı</p>
+                  <p className="text-lg font-bold text-brand-600">${formatMoney(dynSalary?.salaryUSD ?? 0)} <span className="text-xs">/ay ≈ {formatMoney(dynSalary?.salaryTRY ?? 0)} TL</span></p>
+                  <p className="text-[10px] text-gray-400">{dynSalary ? `${dynSalary.monthLabel} kârı × 0,85` : 'geçen ayın kârı × 0,85'}</p>
                 </div>
               </div>
             </div>
@@ -385,41 +387,31 @@ export default function DailyReportPage() {
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Aylık Dinamik Maaş</span>
                 </div>
                 <div className="space-y-2">
-                  {salaryHistory.map((salary) => {
-                    const month = new Date(salary.salary_month).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
-                    return (
-                      <div key={salary.id} className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{month}</span>
-                          <span className="text-xs text-gray-400">Portföy: {formatMoney(salary.portfolio_value)} TL</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <p className="text-[10px] uppercase text-gray-400">Güvenli</p>
-                            <p className="text-sm font-bold text-accent-600">{formatMoney(salary.safe_amount)} TL</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase text-gray-400">Dengeli</p>
-                            <p className="text-sm font-bold text-brand-600">{formatMoney(salary.moderate_amount)} TL</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase text-gray-400">Gerçekleşen</p>
-                            <p className="text-sm font-bold text-brand-600">{formatMoney(salary.actual_income)} TL</p>
-                          </div>
-                        </div>
-                        {/* Gelir kaynakları */}
-                        <div className="flex gap-2 mt-2 flex-wrap">
-                          {salary.dividend_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Temettü: {formatMoney(salary.dividend_income)}</span>}
-                          {salary.interest_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">Faiz: {formatMoney(salary.interest_income)}</span>}
-                          {salary.staking_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">Staking: {formatMoney(salary.staking_income)}</span>}
-                          {salary.coupon_income > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Kupon: {formatMoney(salary.coupon_income)}</span>}
-                        </div>
-                        {salary.ai_recommendation && (
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 italic">{salary.ai_recommendation}</p>
-                        )}
+                  {salaryHistory.map((row) => (
+                    <div key={row.month} className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{row.monthLabel}</span>
+                        {row.gapDays > 45 && <span className="text-[10px] text-amber-600">⚠ {row.gapDays} günlük dönem</span>}
                       </div>
-                    );
-                  })}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <p className="text-[10px] uppercase text-gray-400">Ay kârı</p>
+                          <p className={`text-sm font-bold ${row.profitTRY >= 0 ? 'text-accent-600' : 'text-red-600'}`}>{row.profitTRY >= 0 ? '+' : ''}{formatMoney(row.profitTRY)} TL</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-gray-400">Kâr $</p>
+                          <p className={`text-sm font-bold ${row.profitUSD >= 0 ? 'text-accent-600' : 'text-red-600'}`}>{row.profitUSD >= 0 ? '+' : ''}${formatMoney(row.profitUSD)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-gray-400">Maaş (×0,85)</p>
+                          <p className="text-sm font-bold text-brand-600">{row.salaryUSD > 0 ? `$${formatMoney(row.salaryUSD)}` : '$0'}</p>
+                        </div>
+                      </div>
+                      {row.realizedTRY !== 0 && (
+                        <p className="text-[10px] text-gray-400 mt-1">satış kârı {row.realizedTRY > 0 ? '+' : ''}{formatMoney(row.realizedTRY)} TL dahil</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -427,8 +419,8 @@ export default function DailyReportPage() {
             {salaryHistory.length === 0 && (
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 text-center">
                 <PiggyBank className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">Henüz maaş hesaplaması yok</p>
-                <p className="text-xs text-gray-400 mt-1">İlk günlük rapor üretildiğinde maaş otomatik hesaplanacak</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Henüz aylık kâr kaydı yok</p>
+                <p className="text-xs text-gray-400 mt-1">İki ay sonu kaydı oluşunca maaş hesaplanır</p>
               </div>
             )}
 

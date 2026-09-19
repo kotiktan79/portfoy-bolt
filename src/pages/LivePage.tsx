@@ -16,8 +16,8 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import { TrendingUp, TrendingDown, RefreshCw, Wifi, Wallet, Gauge, ArrowUpRight, ArrowDownRight, DollarSign } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
-import { getDynamicWithdrawal } from '../services/analyticsService';
-import { DynamicWithdrawal } from '../lib/portfolioMetrics';
+import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
+
 
 // Egress quota: 30s → 60s. Kiosk modda 24 saat açık kalırsa 30s'lik çevrim
 // price_history tablosunu sürekli çekip 5+ GB/ay egress yapıyor.
@@ -49,7 +49,7 @@ export default function LivePage() {
   const { holdings, livePnlData, historicalData, totalCashValue, handleRefresh, refreshing } = usePortfolio();
   const [now, setNow] = useState(new Date());
   const [countdown, setCountdown] = useState(REFRESH_SEC);
-  const [dynamic, setDynamic] = useState<DynamicWithdrawal | null>(null);
+  const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
   const lastRefreshRef = useRef<Date>(new Date());
 
   // Saat tikleyici
@@ -65,7 +65,7 @@ export default function LivePage() {
         if (c <= 1) {
           handleRefresh();
           lastRefreshRef.current = new Date();
-          getDynamicWithdrawal().then(setDynamic).catch(() => {});
+          getDynamicSalary().then(setDynamic).catch(() => {});
           return REFRESH_SEC;
         }
         return c - 1;
@@ -75,7 +75,7 @@ export default function LivePage() {
   }, [handleRefresh]);
 
   // İlk yükleme dinamik veriler
-  useEffect(() => { getDynamicWithdrawal().then(setDynamic).catch(() => {}); }, []);
+  useEffect(() => { getDynamicSalary().then(setDynamic).catch(() => {}); }, []);
 
   const m = useMemo(() => computePortfolioMetrics(holdings), [holdings]);
   const grandTotal = m.totalValueTRY + totalCashValue;
@@ -247,8 +247,8 @@ export default function LivePage() {
               value: dailyChange, fmt: (n: number) => `${n >= 0 ? '+' : ''}₺${fmtTRY(n)}`, sub: `${(dailyPct).toFixed(2)}%` },
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },
-            { label: 'Güvenli Max', icon: Gauge, color: 'gold',
-              value: dynamic?.safeMonthlyUSD ?? 0, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay dinamik' },
+            { label: 'Dinamik Maaş', icon: Gauge, color: 'gold',
+              value: dynamic?.salaryUSD ?? 0, fmt: (n: number) => `$${fmtUSD(n)}`, sub: dynamic ? `${dynamic.monthLabel} kârı × 0,85` : '/ay' },
           ].map((card) => {
             const Icon = card.icon;
             const colors: Record<string, { text: string; border: string; bg: string; ic: string }> = {
