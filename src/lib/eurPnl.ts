@@ -19,6 +19,10 @@
 //   Reel kâr G^r = G − M ; zarar devri: C_m = min(0, C_{m−1} + G^r) ;
 //   çekilebilir D_m = max(0, C_{m−1} + G^r) ; maaş = 0,85 × D_m
 
+export const RELIABLE_FROM = '2026-04-06';   // EUR/USD 'api' kur serisinin başladığı gün — uygulama ve cron TEK kaynak
+export const INFLATION_EUR = 0.02;           // Euro Bölgesi HICP, yıllık, sabit (kullanıcı kararı 2026-09-19)
+export const ROW_CAP = 1000;                  // PostgREST max_rows — bir sorgu bu kadar satır dönerse kesilmiş demektir
+
 export interface SnapPoint { date: string; totalValue: number; totalInvestment: number }
 export interface RateSeries { rateAt(date: string): number }
 
@@ -206,6 +210,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
 /** Rapor/cron özeti: son gün, son 7 gün, bu ay (MTD), geçen tam ay (= bu ayın maaşı). Saf; tarih dışarıdan verilir. */
 export interface EurSummary {
   asOf: string;                       // son snapshot günü
+  prevWealthEUR: number;              // önceki snapshot günü serveti (günlük % tabanı — uygulama ve cron aynı tabanı kullanır)
   wealthEUR: number; wealthTRY: number; eurRate: number; usdRate: number;
   dayGainEUR: number; dayGainPct: number;          // son snapshot günü, önceki servete göre
   weekGainEUR: number; weekGainPct: number;        // son 7 takvim günü (akış düzeltilmiş)
@@ -228,7 +233,7 @@ export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
   }
   const prevYM = (() => { const y = Number(todayYM.slice(0, 4)), m = Number(todayYM.slice(5, 7)); const p = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; return p; })();
   return {
-    asOf: last?.date || '', wealthEUR: last?.wealthEUR || 0, wealthTRY: last?.totalValueTRY || 0, eurRate: last?.eurRate || 0, usdRate: last?.usdRate || 0,
+    asOf: last?.date || '', prevWealthEUR: prev?.wealthEUR || 0, wealthEUR: last?.wealthEUR || 0, wealthTRY: last?.totalValueTRY || 0, eurRate: last?.eurRate || 0, usdRate: last?.usdRate || 0,
     dayGainEUR, dayGainPct, weekGainEUR, weekGainPct: weekBase > 0 ? (weekGainEUR / weekBase) * 100 : 0,
     mtd: model.months.find(m => m.month === todayYM) || null,
     lastFull: model.months.find(m => m.month === prevYM) || null,

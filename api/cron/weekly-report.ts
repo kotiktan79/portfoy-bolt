@@ -27,7 +27,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const weekStart = new Date(today);
     weekStart.setDate(weekStart.getDate() - 7);
     const weekStartStr = weekStart.toISOString().split('T')[0];
-    const weekEndStr = today.toISOString().split('T')[0];
 
     // EUR motoru: son 7 takvim günü (weekStartStr sonrası snapshot günleri)
     const model = await loadEurModel(supabase);
@@ -36,11 +35,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push('EUR motorunda gün yok, email atlandı.');
       return res.status(200).json({ success: false, log });
     }
-    const idx = daily.findIndex(d => d.date > weekStartStr);
+    // >= : Pazartesi snapshot günü haftaya DAHİL (taban = önceki Pazar). '>' Pazartesi kârını hiçbir haftaya saymıyordu (hakem 2026-09-19)
+    const idx = daily.findIndex(d => d.date >= weekStartStr);
     const base = idx > 0 ? daily[idx - 1].wealthEUR : daily[0].wealthEUR;
     const weekGainEUR = idx >= 0 ? daily.slice(Math.max(idx, 1)).reduce((s, d) => s + d.gainEUR, 0) : 0;
     const weekGainPct = base > 0 ? (weekGainEUR / base) * 100 : 0;
     const wealthEUR = daily[daily.length - 1].wealthEUR;
+    const weekEndLabel = daily[daily.length - 1].date;   // veri son snapshot gününde (Pazar) biter; cron Pazartesi çalışır
     const eurRateNow = daily[daily.length - 1].eurRate || 0;
     const toEUR = (tl: number) => (eurRateNow > 0 ? tl / eurRateNow : 0);
 
@@ -82,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const snapshot = {
       weekStart: weekStartStr,
-      weekEnd: weekEndStr,
+      weekEnd: weekEndLabel,
       wealthEUR,
       weekGainEUR,
       weekGainPct,

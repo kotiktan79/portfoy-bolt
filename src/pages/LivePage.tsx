@@ -54,7 +54,8 @@ export default function LivePage() {
   const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
   const [inception, setInception] = useState<InceptionSummary | null>(null);
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
-  const loadEur = () => { getInceptionPnl().then(setInception).catch(() => {}); getEurDaily().then(d => setLastDay(d.length ? d[d.length - 1] : null)).catch(() => {}); };
+  const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
+  const loadEur = () => { getInceptionPnl().then(setInception).catch(() => {}); getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {}); };
   const lastRefreshRef = useRef<Date>(new Date());
 
   // Saat tikleyici
@@ -90,7 +91,8 @@ export default function LivePage() {
   // 2026-09-19: 'Bugün' ve 'Toplam Kâr' EURO cetveli (motor). TL günlük değişim kur şişmesi taşıyordu.
   void livePnlData;
   const dailyChange = lastDay?.gainEUR ?? 0;
-  const dailyPct = lastDay && lastDay.wealthEUR - dailyChange > 0 ? (100 * dailyChange) / (lastDay.wealthEUR - dailyChange) : 0;
+  // Taban = önceki snapshot günü serveti (cron summarizeEur / risk-monitor ile aynı; akış günlerinde 'servet − kâr' farklı çıkıyordu)
+  const dailyPct = prevDay && prevDay.wealthEUR > 0 ? (100 * dailyChange) / prevDay.wealthEUR : 0;
   const isPos = dailyChange >= 0;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);

@@ -171,7 +171,8 @@ export default function DailyReportPage() {
                     <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
                       <p className="text-[10px] uppercase tracking-wider text-gray-400">Servet</p>
                       <p className="text-lg font-bold text-gray-900 dark:text-white">€{formatMoney(report.wealth_eur)}</p>
-                      <p className="text-[10px] text-gray-400">≈ ₺{formatMoney(report.portfolio_value)}{report.eur_health_ok === false ? ' · ⚠️ kur eski' : ''}</p>
+                      {/* ₺ karşılığı motorun kendi kuruyla (wealth_eur × eur_rate); portfolio_value 18:30'daki canlı toplam, farklı kaynak */}
+                      <p className="text-[10px] text-gray-400">≈ ₺{formatMoney((report.wealth_eur ?? 0) * (report.eur_rate ?? 0))}{report.eur_health_ok === false ? ' · ⚠️ kur eski' : ''}</p>
                     </div>
                     <div className={`rounded-xl p-3 ${(report.pnl_eur_day ?? 0) >= 0 ? 'bg-accent-50 dark:bg-accent-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
                       <p className="text-[10px] uppercase tracking-wider text-gray-400">Gün / Bu Ay</p>
@@ -200,7 +201,11 @@ export default function DailyReportPage() {
                 <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3 col-span-2">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Bu Ayın Dinamik Maaşı</p>
                   <p className="text-lg font-bold text-brand-600">€{formatMoney(dynSalary?.salaryEUR ?? 0)} <span className="text-xs">/ay</span></p>
-                  <p className="text-[10px] text-gray-400">{dynSalary ? `${dynSalary.monthLabel} kârı × 0,85` : 'geçen ayın kârı × 0,85'}</p>
+                  <p className="text-[10px] text-gray-400">{dynSalary
+                    ? (dynSalary.withdrawableEUR > 0
+                      ? `${dynSalary.monthLabel} çekilebilir reel kârı €${formatMoney(dynSalary.withdrawableEUR)} × 0,85`
+                      : `${dynSalary.monthLabel}: nominal ${dynSalary.profitEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.profitEUR))}, reel ${dynSalary.realGainEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.realGainEUR))}, devreden açık −€${formatMoney(Math.abs(dynSalary.carryInEUR + dynSalary.realGainEUR))} → çekilebilir €0`)
+                    : 'geçen ayın çekilebilir reel kârı × 0,85'}</p>
                 </div>
               </div>
             </div>

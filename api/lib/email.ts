@@ -60,6 +60,7 @@ const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).to
 
 export interface DailySnapshot {
   date: string;
+  asOf: string;                 // rakamların snapshot günü
   wealthEUR: number; wealthTRY: number; eurRate: number;
   dayGainEUR: number; dayGainPct: number;
   weekGainEUR: number; weekGainPct: number;
@@ -97,9 +98,10 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
       <h1 style="font-size:18px;margin:0 0 4px;color:#312e81;">Günaydın, Tandor Finans</h1>
       <p style="font-size:13px;color:#64748b;margin:0 0 16px;">${d.date} · Günlük brifing · tek ölçü EUR</p>
       ${d.healthOk ? '' : `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">⚠️ Kur serisi güncel değil — EUR rakamları güvenilmez olabilir.</div>`}
+      ${d.asOf === d.date ? '' : `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#78350f;">⚠️ Rakamlar ${d.asOf} snapshot'ına ait — bugünün snapshot'ı alınmamış.</div>`}
 
       ${card(`
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Servet</div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Servet · ${d.asOf}</div>
         <div style="font-size:28px;font-weight:800;color:#0f172a;margin:4px 0;">${eur(d.wealthEUR)}</div>
         <div style="font-size:13px;color:#64748b;">≈ ₺${fmt(d.wealthTRY)} · EUR/TRY ${d.eurRate.toFixed(2)}</div>
         <div style="display:flex;gap:18px;margin-top:14px;">
@@ -215,18 +217,18 @@ export function buildWeeklyEmail(w: WeeklySnapshot): { subject: string; html: st
         ${w.bestPerformer ? `<div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:14px;">
           <div style="font-size:10px;color:#065f46;text-transform:uppercase;font-weight:700;">En İyi (nominal, yerel para)</div>
           <div style="font-size:16px;font-weight:800;color:#0f172a;">${w.bestPerformer.symbol}</div>
-          <div style="font-size:13px;color:#059669;">+${w.bestPerformer.pnlPct.toFixed(1)}%</div>
+          <div style="font-size:13px;color:${greenIfPos(w.bestPerformer.pnlPct)};">${spct(w.bestPerformer.pnlPct)}</div>
         </div>` : ''}
         ${w.worstPerformer ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;">
           <div style="font-size:10px;color:#7f1d1d;text-transform:uppercase;font-weight:700;">En Kötü (nominal, yerel para)</div>
           <div style="font-size:16px;font-weight:800;color:#0f172a;">${w.worstPerformer.symbol}</div>
-          <div style="font-size:13px;color:#dc2626;">${w.worstPerformer.pnlPct.toFixed(1)}%</div>
+          <div style="font-size:13px;color:${greenIfPos(w.worstPerformer.pnlPct)};">${spct(w.worstPerformer.pnlPct)}</div>
         </div>` : ''}
       </div>
 
       ${card(`
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;">Bu Haftanın Geliri</div>
-        <div style="font-size:20px;font-weight:800;color:#059669;margin-bottom:8px;">+${eur(w.weekIncomeEUR)}</div>
+        <div style="font-size:20px;font-weight:800;color:#059669;margin-bottom:8px;">${w.weekIncomeEUR > 0 ? '+' : ''}${eur(w.weekIncomeEUR)}</div>
         ${incomeRows}
       `)}
 
@@ -278,7 +280,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
     ? m.topGainersThisMonth.slice(0, 5).map(g => `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
           <span style="font-size:13px;font-weight:600;color:#0f172a;">${g.symbol}</span>
-          <span style="font-size:13px;font-weight:700;color:#059669;">+${g.pnlPct.toFixed(1)}%</span>
+          <span style="font-size:13px;font-weight:700;color:${greenIfPos(g.pnlPct)};">${spct(g.pnlPct)}</span>
         </div>
       `).join('')
     : '';
@@ -332,7 +334,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
 
       ${card(`
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;">Bu Ayın Kaydedilen Geliri</div>
-        <div style="font-size:20px;font-weight:800;color:#059669;margin-bottom:8px;">+${eur(m.realizedIncomeEUR)}</div>
+        <div style="font-size:20px;font-weight:800;color:#059669;margin-bottom:8px;">${m.realizedIncomeEUR > 0 ? '+' : ''}${eur(m.realizedIncomeEUR)}</div>
         ${incomeRows}
       `)}
 

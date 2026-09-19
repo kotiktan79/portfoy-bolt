@@ -102,9 +102,11 @@ export interface MonthlySalary {
 }
 
 export async function getLatestReport(): Promise<DailyReport | null> {
+  // risk-monitor 08:00 UTC'de aynı güne yalnız news_alerts içeren KISMİ satır yazar (ai_model null) — onu rapor sayma
   const { data, error } = await supabase
     .from('daily_reports')
     .select('*')
+    .not('ai_model', 'is', null)
     .order('report_date', { ascending: false })
     .limit(1)
     .single();
@@ -128,6 +130,7 @@ export async function getReportHistory(days: number = 30): Promise<DailyReport[]
   const { data, error } = await supabase
     .from('daily_reports')
     .select('*')
+    .not('ai_model', 'is', null)
     .order('report_date', { ascending: false })
     .limit(days);
 

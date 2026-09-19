@@ -52,7 +52,7 @@ const arrow = (n: number) => (n > 0 ? '🟢' : n < 0 ? '🔴' : '⚪');
 // TEK ÖLÇÜ EUR (2026-09-19): kâr = servet farkı − dış akış; maaş = geçen ayın reel kârı × 0,85
 export function buildDailyTelegram(d: DailySnapshot): string {
   const lines = [
-    `📊 <b>Günlük · ${escapeHtml(d.date)}</b>`,
+    `📊 <b>Günlük · ${escapeHtml(d.date)}</b>${d.asOf === d.date ? '' : ` · ⚠️ rakamlar ${escapeHtml(d.asOf)} snapshot'ı`}`,
     `Servet ${eur(d.wealthEUR)} (≈ ₺${fmt(d.wealthTRY)} · ${d.eurRate.toFixed(2)})`,
     ``,
     `${arrow(d.dayGainEUR)} Gün: ${seur(d.dayGainEUR)} (${spct(d.dayGainPct)})`,
@@ -76,12 +76,12 @@ export function buildWeeklyTelegram(w: WeeklySnapshot): string {
     `Servet: ${eur(w.wealthEUR)}`,
   ];
   if (w.bestPerformer) {
-    lines.push('', `🟢 En iyi (nominal): <b>${escapeHtml(w.bestPerformer.symbol)}</b> +${w.bestPerformer.pnlPct.toFixed(1)}%`);
+    lines.push('', `${arrow(w.bestPerformer.pnlPct)} En iyi (nominal): <b>${escapeHtml(w.bestPerformer.symbol)}</b> ${spct(w.bestPerformer.pnlPct)}`);
   }
   if (w.worstPerformer) {
-    lines.push(`🔴 En kötü (nominal): <b>${escapeHtml(w.worstPerformer.symbol)}</b> ${w.worstPerformer.pnlPct.toFixed(1)}%`);
+    lines.push(`${arrow(w.worstPerformer.pnlPct)} En kötü (nominal): <b>${escapeHtml(w.worstPerformer.symbol)}</b> ${spct(w.worstPerformer.pnlPct)}`);
   }
-  lines.push('', `💰 Bu hafta kaydedilen gelir: +${eur(w.weekIncomeEUR)}`);
+  lines.push('', `💰 Bu hafta kaydedilen gelir: ${w.weekIncomeEUR > 0 ? '+' : ''}${eur(w.weekIncomeEUR)}`);
   if (!w.healthOk) lines.push('', '⚠️ Kur serisi güncel değil.');
   if (w.thisWeekTodos.length > 0) {
     lines.push('', `📋 Yapılacak (${w.thisWeekTodos.length}):`);
@@ -102,7 +102,7 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
     `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (çekilebilir ${eur(m.withdrawableEUR)} × 0,85)`,
   ];
   if (m.salaryEUR === 0) lines.push(`⛔ Maaş yok — açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.`);
-  lines.push('', `💰 Kaydedilen gelir: +${eur(m.realizedIncomeEUR)}`);
+  lines.push('', `💰 Kaydedilen gelir: ${m.realizedIncomeEUR > 0 ? '+' : ''}${eur(m.realizedIncomeEUR)}`);
   if (m.yearRows.length) {
     lines.push('', `📆 Ay ay:`);
     m.yearRows.forEach(r => lines.push(`• ${escapeHtml(r.month)}: ${seur(r.gainEUR)} · maaş ${eur(r.salaryEUR)}`));

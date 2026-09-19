@@ -3,11 +3,9 @@
 import { supabase } from '../lib/supabase';
 import { getCachedUSDRate } from './priceService';
 import { DEFAULT_USD_TRY_RATE } from '../config';
-import { buildEurModel, type MonthRow, type EurModel, type EurDaily } from '../lib/eurPnl';
+import { buildEurModel, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type MonthRow, type EurModel, type EurDaily } from '../lib/eurPnl';
 export type { EurDaily };
-
-export const RELIABLE_FROM = '2026-04-06';       // EUR/USD kur serisinin başladığı gün
-export const INFLATION_EUR = 0.02;               // Euro Bölgesi HICP, yıllık, sabit; yılda bir güncelle (kullanıcı kararı 2026-09-19)
+export { RELIABLE_FROM, INFLATION_EUR };
 
 let _cache: { ts: number; value: EurModel } | null = null;
 const TTL = 5 * 60 * 1000;
@@ -20,12 +18,17 @@ async function load(): Promise<EurModel> {
     supabase.from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
       .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).range(0, 4999),
     // exchange_rates_daily: gün başına son kur (~170 satır) — ham tablo 2.800+ satır, PostgREST max_rows=1000 kesiyordu (2026-09-19)
-    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').order('day', { ascending: true }),
-    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').order('day', { ascending: true }),
+    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true }),
+    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true }),
     supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').range(0, 4999),
     supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').range(0, 4999),
     supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at'),
   ]);
+  // Sorgu hatası veya 1000-satır tavanı → sessizce sabit/yarım kurla hesaplamak yerine HATA (çağıranlar catch eder, kart boş kalır)
+  for (const [name, r] of [['snapshots', snapRes], ['eur', eurRes], ['usd', usdRes], ['tx', txRes], ['cashSells', rzCashRes], ['holdings', holdRes]] as const) {
+    if (r.error) throw new Error(`eurPnl ${name}: ${r.error.message}`);
+    if ((r.data || []).length >= ROW_CAP) throw new Error(`eurPnl ${name}: ${ROW_CAP} satır tavanına takıldı — sayfalama gerekir`);
+  }
   const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
   const value = buildEurModel({
     snapshots: snapRes.data || [], eurRates: dailyRows(eurRes.data), usdRates: dailyRows(usdRes.data),
@@ -48,12 +51,13 @@ export const monthLabel = (ym: string) => `${MONTHS_TR[Number(ym.slice(5, 7)) - 
 /** Haftalık periyot (Pazartesi başlangıç) — bilgi amaçlı, maaşa girmez */
 export async function getEurWeeks(): Promise<Array<{ key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string }>> {
   const daily = await getEurDaily();
-  const keyOf = (d: string) => { const dt = new Date(d + 'T00:00:00'); dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); return dt.toISOString().slice(0, 10); };
+  // UTC anahtar: yerel gece yarısı → toISOString Bükreş'te bir gün geri kayıyordu (hakem bulgusu 2026-09-19)
+  const keyOf = (d: string) => { const dt = new Date(d + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7)); return dt.toISOString().slice(0, 10); };
   const m = new Map<string, { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string }>();
   let prev = daily.length ? daily[0].wealthEUR : 0;
   daily.forEach((d, i) => {
     const k = keyOf(d.date);
-    if (!m.has(k)) m.set(k, { key: k, label: `${new Date(k + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })} haftası`, gainEUR: 0, startWealthEUR: prev, endWealthEUR: d.wealthEUR, firstDate: d.date, lastDate: d.date });
+    if (!m.has(k)) m.set(k, { key: k, label: `${new Date(k + 'T00:00:00Z').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', timeZone: 'UTC' })} haftası`, gainEUR: 0, startWealthEUR: prev, endWealthEUR: d.wealthEUR, firstDate: d.date, lastDate: d.date });
     const r = m.get(k)!; if (i > 0) r.gainEUR += d.gainEUR; r.endWealthEUR = d.wealthEUR; r.lastDate = d.date; prev = d.wealthEUR;
   });
   return Array.from(m.values()).sort((a, b) => a.key.localeCompare(b.key));

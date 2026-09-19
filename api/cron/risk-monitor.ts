@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
-import { loadEurModel, fmtEUR, fmtSignedEUR } from '../lib/eurEngine.js';
+import { loadEurModel, fmtEUR, fmtSignedEUR, fmtSignedPct } from '../lib/eurEngine.js';
 
 // RİSK MONİTÖRÜ — eşikler EUR (2026-09-19): portföy düşüşü = motorun akış düzeltilmiş EUR kârı (TL nominal değil;
 // TL'de kur artışı 'yükseliş', düşüşü 'çöküş' gibi görünüyordu). Pozisyon tutarları bugünkü kurla EUR.
@@ -67,14 +67,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           alerts.push({
             type: 'critical',
             title: 'PORTFÖY KRİTİK DÜŞÜŞ',
-            detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (%${dailyChangePct.toFixed(1)}). Servet ${fmtEUR(prev.wealthEUR)} → ${fmtEUR(last.wealthEUR)}`,
+            detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (${fmtSignedPct(dailyChangePct)}). Servet ${fmtEUR(prev.wealthEUR)} → ${fmtEUR(last.wealthEUR)}`,
             action: 'Acil değerlendirme yap. Panik satışı yapma ama stop-loss seviyelerini kontrol et.',
           });
         } else if (dailyChangePct <= -3) {
           alerts.push({
             type: 'warning',
             title: 'Portföy önemli düşüş',
-            detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (%${dailyChangePct.toFixed(1)})`,
+            detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (${fmtSignedPct(dailyChangePct)})`,
             action: 'Düşüşün sebebini araştır. Temel değişiklik yoksa pozisyonları koru.',
           });
         }
@@ -91,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             alerts.push({
               type: 'critical',
               title: 'HAFTALIK DRAWDOWN KRİTİK',
-              detail: `Son 7 günde ${fmtSignedEUR(wk)} (%${weeklyPct.toFixed(1)})`,
+              detail: `Son 7 günde ${fmtSignedEUR(wk)} (${fmtSignedPct(weeklyPct)})`,
               action: 'Savunma moduna geç. Riskli pozisyonları azalt.',
             });
           }
@@ -116,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         alerts.push({
           type: 'warning',
           title: `${h.symbol} ağır kayıpta`,
-          detail: `%${pnlPct.toFixed(1)} nominal kayıp (${fmtSignedEUR(toEUR(value - cost))}). Maliyet ${fmtEUR(toEUR(cost))} → Değer ${fmtEUR(toEUR(value))}`,
+          detail: `${fmtSignedPct(pnlPct)} nominal (${fmtSignedEUR(toEUR(value - cost))}). Maliyet ${fmtEUR(toEUR(cost))} → Değer ${fmtEUR(toEUR(value))}`,
           action: `${h.symbol} pozisyonunu değerlendir: zararı kes veya ortalama düşür.`,
         });
       }

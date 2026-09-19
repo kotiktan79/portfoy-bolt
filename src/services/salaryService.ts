@@ -48,8 +48,11 @@ export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalary
 }
 
 export async function getDynamicSalary(): Promise<DynamicSalary | null> {
-  const rows = await getMonthlySalarySeries(1);
-  return rows[0] || null;
+  // KESİN önceki takvim ayı (cron summarizeEur.lastFull ile aynı kural); o ayda snapshot yoksa maaş yok
+  const rows = await getEurMonths();
+  const now = new Date(); const prevYM = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+  const r = rows.find(x => x.month === prevYM);
+  return r ? toRow(r) : null;
 }
 
 export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {

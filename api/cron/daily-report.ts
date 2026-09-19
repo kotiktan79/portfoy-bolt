@@ -196,19 +196,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 7. Email gönder (RESEND_API_KEY varsa)
     // ========================================
     try {
+      if (!eur) {
+        // Motor yoksa sahte '€0' yayınlamak yerine yalnız kısa uyarı (rakam yok)
+        const warn = `⚠️ <b>Günlük · ${todayStr}</b>\nEUR kâr motoru çalışmadı — rapor e-postası/Telegram özeti atlandı. Log: ${log.filter(l => l.startsWith('EUR motoru')).join(' | ') || 'bilinmiyor'}`;
+        const tgRes = await sendTelegram(warn);
+        log.push(tgRes.sent ? 'Telegram: yalnız motor uyarısı gönderildi' : `Telegram atlandı: ${tgRes.reason}`);
+        throw new Error('EUR motoru yok — e-posta atlandı');
+      }
       const nextYM = (() => { const y = Number(todayStr.slice(0, 4)), m = Number(todayStr.slice(5, 7)); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; })();
       const snapshot = {
         date: todayStr,
-        wealthEUR: eur?.wealthEUR || 0,
-        wealthTRY: eur?.wealthTRY || totalValue,
-        eurRate: eur?.eurRate || eurRate,
-        dayGainEUR: eur?.dayGainEUR || 0, dayGainPct: eur?.dayGainPct || 0,
-        weekGainEUR: eur?.weekGainEUR || 0, weekGainPct: eur?.weekGainPct || 0,
-        mtdGainEUR: eur?.mtd?.gainEUR || 0, mtdInflationEUR: eur?.mtd?.inflationEUR || 0, mtdRealEUR: eur?.mtd?.realGainEUR || 0,
-        carryInEUR: eur?.mtd?.carryInEUR || 0,
-        salaryEUR, salaryMonthLabel: monthLabelTR(todayStr.slice(0, 7)), salaryBasisLabel: eur?.lastFull ? monthLabelTR(eur.lastFull.month) : '—',
+        asOf: eur.asOf,                       // rakamların ait olduğu snapshot günü (≠ date ise snapshot cron'u aksamıştır)
+        wealthEUR: eur.wealthEUR,
+        wealthTRY: eur.wealthTRY,
+        eurRate: eur.eurRate,
+        dayGainEUR: eur.dayGainEUR, dayGainPct: eur.dayGainPct,
+        weekGainEUR: eur.weekGainEUR, weekGainPct: eur.weekGainPct,
+        mtdGainEUR: eur.mtd?.gainEUR || 0, mtdInflationEUR: eur.mtd?.inflationEUR || 0, mtdRealEUR: eur.mtd?.realGainEUR || 0,
+        carryInEUR: eur.mtd?.carryInEUR || 0,
+        salaryEUR, salaryMonthLabel: monthLabelTR(todayStr.slice(0, 7)), salaryBasisLabel: eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—',
         projectedSalaryEUR, nextMonthLabel: monthLabelTR(nextYM),
-        healthOk: eur ? eur.health.ok : false,
+        healthOk: eur.health.ok,
         topPick: aiResponse.top_pick || '',
         portfolioDiagnosis: aiResponse.portfolio_diagnosis || '',
         marketOutlook: aiResponse.market_outlook || '',
@@ -221,7 +229,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const tgRes = await sendTelegram(buildDailyTelegram(snapshot));
       log.push(tgRes.sent ? `Telegram gönderildi` : `Telegram atlandı: ${tgRes.reason}`);
     } catch (emailErr: any) {
-      log.push(`Email gönderim hatası: ${emailErr.message}`);
+      log.push(`Email/Telegram: ${emailErr.message}`);
     }
 
     const elapsed = Date.now() - startTime;
