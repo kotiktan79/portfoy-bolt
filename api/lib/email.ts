@@ -56,7 +56,7 @@ const greenIfPos = (n: number) => (n >= 0 ? '#059669' : '#dc2626');
 // ============================================================
 const eur = (n: number, dec = 0) => `€${fmt(Math.abs(n), dec)}`;
 const seur = (n: number, dec = 0) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${eur(n, dec)}`;
-const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;
+const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
 
 export interface DailySnapshot {
   date: string;
@@ -188,7 +188,7 @@ export function buildWeeklyEmail(w: WeeklySnapshot): { subject: string; html: st
     ? w.weekIncomeBreakdown.map(r => `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
           <span style="font-size:13px;color:#475569;">${r.type}</span>
-          <span style="font-size:13px;font-weight:700;color:#059669;">+${eur(r.amount)}</span>
+          <span style="font-size:13px;font-weight:700;color:${greenIfPos(r.amount)};">${seur(r.amount)}</span>
         </div>
       `).join('')
     : '<div style="font-size:13px;color:#94a3b8;">Bu hafta gelir kaydı yok.</div>';
@@ -228,7 +228,7 @@ export function buildWeeklyEmail(w: WeeklySnapshot): { subject: string; html: st
 
       ${card(`
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;">Bu Haftanın Geliri</div>
-        <div style="font-size:20px;font-weight:800;color:#059669;margin-bottom:8px;">${w.weekIncomeEUR > 0 ? '+' : ''}${eur(w.weekIncomeEUR)}</div>
+        <div style="font-size:20px;font-weight:800;color:${greenIfPos(w.weekIncomeEUR)};margin-bottom:8px;">${seur(w.weekIncomeEUR)}</div>
         ${incomeRows}
       `)}
 
@@ -271,7 +271,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
     ? m.monthIncomeBreakdown.map(r => `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
           <span style="font-size:13px;color:#475569;">${r.type}</span>
-          <span style="font-size:13px;font-weight:700;color:#059669;">+${eur(r.amount)}</span>
+          <span style="font-size:13px;font-weight:700;color:${greenIfPos(r.amount)};">${seur(r.amount)}</span>
         </div>
       `).join('')
     : '<div style="font-size:13px;color:#94a3b8;">Bu ay gelir kaydı yok.</div>';
@@ -334,7 +334,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
 
       ${card(`
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;">Bu Ayın Kaydedilen Geliri</div>
-        <div style="font-size:20px;font-weight:800;color:#059669;margin-bottom:8px;">${m.realizedIncomeEUR > 0 ? '+' : ''}${eur(m.realizedIncomeEUR)}</div>
+        <div style="font-size:20px;font-weight:800;color:${greenIfPos(m.realizedIncomeEUR)};margin-bottom:8px;">${seur(m.realizedIncomeEUR)}</div>
         ${incomeRows}
       `)}
 

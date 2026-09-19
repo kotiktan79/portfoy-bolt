@@ -133,7 +133,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         setFxStart(fs); setFxEnd(fe);
         setLoading(false);
       }
-    })();
+    })().catch(() => { if (!cancelled) { setMotorGainEUR(null); setLoading(false); } });   // motor/sorgu hatası: sonsuz iskelet yok
 
     return () => { cancelled = true; };
   }, [selectedMonth]);

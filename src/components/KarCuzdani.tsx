@@ -21,6 +21,7 @@ export default function KarCuzdani({ holdings }: Props) {
   const [mtd, setMtd] = useState<MonthToDate | null>(null);
   const [withdrawals, setWithdrawals] = useState<SalaryWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
   const [amountInput, setAmountInput] = useState<string>('');
@@ -28,13 +29,19 @@ export default function KarCuzdani({ holdings }: Props) {
   useEffect(() => { loadAll(); }, []);
   async function loadAll() {
     setLoading(true);
-    const [s, a, w, m] = await Promise.all([
-      getDynamicSalary(), getSalaryAccrual(),
-      supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(20),
-      getMonthToDate(),
-    ]);
-    setSalary(s); setAccrual(a); setMtd(m); if (w.data) setWithdrawals(w.data);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [s, a, w, m] = await Promise.all([
+        getDynamicSalary(), getSalaryAccrual(),
+        supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(20),
+        getMonthToDate(),
+      ]);
+      setSalary(s); setAccrual(a); setMtd(m); if (w.data) setWithdrawals(w.data);
+    } catch (e: unknown) {
+      setLoadError(e instanceof Error ? e.message : 'veri yüklenemedi');   // motor hatası: rakam gösterme
+    } finally {
+      setLoading(false);
+    }
   }
 
   const fx = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
@@ -74,6 +81,7 @@ export default function KarCuzdani({ holdings }: Props) {
     setConfirmWithdraw(false); await loadAll(); window.location.reload();
   }
 
+  if (loadError) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Maaş verisi yüklenemedi</p><p className="text-xs text-red-500 mt-1">{loadError}</p><button onClick={loadAll} className="mt-3 text-xs underline text-red-600">Tekrar dene</button></div>;
   if (loading) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6"><p className="text-slate-400 text-sm">Cüzdan yükleniyor...</p></div>;
 
   return (

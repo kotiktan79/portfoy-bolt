@@ -75,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: lastReport } = await supabase
       .from('daily_reports')
       .select('portfolio_diagnosis')
+      .not('ai_model', 'is', null)      // risk-monitor'ün kısmi satırını atla
       .order('report_date', { ascending: false })
       .limit(1)
       .maybeSingle();

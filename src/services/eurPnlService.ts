@@ -12,27 +12,39 @@ const TTL = 5 * 60 * 1000;
 
 const dailyRows = (rows: Array<{ day: string; rate: number }> | null) => (rows || []).map(r => ({ recorded_at: String(r.day), rate: Number(r.rate) }));
 
+/** PostgREST max_rows=1000 tavanını sayfalayarak aşar (.range tek başına YETMEZ — tavan sunucuda).
+ *  Hata fırlatır: sessizce yarım seriyle yanlış kâr hesaplamaktansa ekran boş kalsın (çağıranlar catch eder). */
+async function fetchAll<T>(name: string, build: () => any): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += ROW_CAP) {
+    const { data, error } = await build().range(from, from + ROW_CAP - 1);
+    if (error) throw new Error(`eurPnl ${name}: ${error.message}`);
+    const rows = (data || []) as T[];
+    out.push(...rows);
+    if (rows.length < ROW_CAP) return out;
+    if (out.length > 200_000) throw new Error(`eurPnl ${name}: beklenmedik satır sayısı`);
+  }
+}
+
 async function load(): Promise<EurModel> {
   if (_cache && Date.now() - _cache.ts < TTL) return _cache.value;
-  const [snapRes, eurRes, usdRes, txRes, rzCashRes, holdRes] = await Promise.all([
-    supabase.from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
-      .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).range(0, 4999),
-    // exchange_rates_daily: gün başına son kur (~170 satır) — ham tablo 2.800+ satır, PostgREST max_rows=1000 kesiyordu (2026-09-19)
-    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true }),
-    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true }),
-    supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').range(0, 4999),
-    supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').range(0, 4999),
-    supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at'),
+  const rateQ = (ccy: 'EUR' | 'USD') => () => supabase.from('exchange_rates_daily').select('day,rate')
+    .eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true });
+  const [snaps, eurRates, usdRates, txs, cashSells, holds] = await Promise.all([
+    fetchAll<{ snapshot_date: string; total_value: number; total_investment: number }>('snapshots', () => supabase
+      .from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
+      .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false })),
+    // exchange_rates_daily: gün başına son kur (~170 satır) — ham tablo 2.800+ satır, tavanda kesiliyordu (2026-09-19)
+    fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
+    fetchAll<{ day: string; rate: number }>('usd', rateQ('USD')),
+    fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true })),
+    fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true })),
+    fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
   ]);
-  // Sorgu hatası veya 1000-satır tavanı → sessizce sabit/yarım kurla hesaplamak yerine HATA (çağıranlar catch eder, kart boş kalır)
-  for (const [name, r] of [['snapshots', snapRes], ['eur', eurRes], ['usd', usdRes], ['tx', txRes], ['cashSells', rzCashRes], ['holdings', holdRes]] as const) {
-    if (r.error) throw new Error(`eurPnl ${name}: ${r.error.message}`);
-    if ((r.data || []).length >= ROW_CAP) throw new Error(`eurPnl ${name}: ${ROW_CAP} satır tavanına takıldı — sayfalama gerekir`);
-  }
   const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
   const value = buildEurModel({
-    snapshots: snapRes.data || [], eurRates: dailyRows(eurRes.data), usdRates: dailyRows(usdRes.data),
-    transactions: txRes.data || [], cashSells: rzCashRes.data || [], holdings: holdRes.data || [],
+    snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
+    transactions: txs, cashSells, holdings: holds,
     usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
   });
   if (!value.health.ok) console.error(`eurPnl: kur serisi ${value.health.lastEurRateDay}'de bitiyor, snapshot ${value.health.lastSnapDay} — hesap GÜVENİLMEZ`);

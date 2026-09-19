@@ -38,9 +38,18 @@ const toRow = (r: MonthRow): DynamicSalary => ({
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
 });
 
+/** İçinde bulunulan ay, Europe/Bucharest yerel takvimine göre (UTC ayın 1'inde saat farkıyla bir ay geri atıyordu) */
+export function currentYM(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit' }).format(now).slice(0, 7);
+}
+function prevYM(now = new Date()): string {
+  const ym = currentYM(now); const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
 export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalaryRow[]> {
   const rows = await getEurMonths();
-  const thisMonth = new Date().toISOString().slice(0, 7);
+  const thisMonth = currentYM();
   return rows.filter(r => r.month < thisMonth).map(r => ({
     ...toRow(r),
     gapDays: Math.round((new Date(r.lastDate + 'T00:00:00').getTime() - new Date(r.firstDate + 'T00:00:00').getTime()) / 86400000),
@@ -50,8 +59,8 @@ export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalary
 export async function getDynamicSalary(): Promise<DynamicSalary | null> {
   // KESİN önceki takvim ayı (cron summarizeEur.lastFull ile aynı kural); o ayda snapshot yoksa maaş yok
   const rows = await getEurMonths();
-  const now = new Date(); const prevYM = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
-  const r = rows.find(x => x.month === prevYM);
+  const p = prevYM();
+  const r = rows.find(x => x.month === p);
   return r ? toRow(r) : null;
 }
 
@@ -72,7 +81,6 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
 export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string }
 export async function getMonthToDate(): Promise<MonthToDate | null> {
   const rows = await getEurMonths();
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const r = rows.find(x => x.month === thisMonth); if (!r) return null;
+  const r = rows.find(x => x.month === currentYM()); if (!r) return null;
   return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate };
 }

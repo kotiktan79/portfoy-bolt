@@ -70,8 +70,11 @@ export default function PerformancePage() {
     let cancelled = false;
     setLoading(true);
     Promise.all([getEurDaily(), getEurPnlHealth()]).then(([d, h]) => {
-      if (!cancelled) { setAllDaily(d); setHealth(h); setLoading(false); }
-    });
+      if (!cancelled) { setAllDaily(d); setHealth(h); }
+    }).catch((e) => {
+      // motor hatası (kur/satır) — sessiz yarım veri yerine boş seri + sağlık uyarısı
+      if (!cancelled) { setAllDaily([]); setHealth({ ok: false, lastEurRateDay: '', lastSnapDay: String(e?.message || 'hata') }); }
+    }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 

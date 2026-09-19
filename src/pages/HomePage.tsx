@@ -90,11 +90,12 @@ export default function HomePage() {
   const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
   const [inception, setInception] = useState<InceptionSummary | null>(null);
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
+  const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
 
   useEffect(() => {
     getDynamicSalary().then(setDynamic).catch(() => {});
     getInceptionPnl().then(setInception).catch(() => {});
-    getEurDaily().then(d => setLastDay(d.length ? d[d.length - 1] : null)).catch(() => {});
+    getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {});
   }, []);
 
   const {
@@ -162,6 +163,7 @@ export default function HomePage() {
                 inceptionGainPct={inception?.totalGainPct}
                 todayGainEUR={lastDay?.gainEUR}
                 todayWealthEUR={lastDay?.wealthEUR}
+                prevWealthEUR={prevDay?.wealthEUR}
                 todayDate={lastDay?.date}
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}

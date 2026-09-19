@@ -20,6 +20,7 @@ interface HeroDashboardProps {
   inceptionGainPct?: number;
   todayGainEUR?: number;
   todayWealthEUR?: number;
+  prevWealthEUR?: number;      // önceki snapshot günü serveti — günlük % TABANI (LivePage/cron/risk-monitor ile aynı)
   todayDate?: string;
   totalPnLTRY?: number;
   totalPnLPct?: number;
@@ -91,6 +92,7 @@ export default function HeroDashboard({
   inceptionGainPct,
   todayGainEUR,
   todayWealthEUR,
+  prevWealthEUR,
   todayDate,
   totalPnLTRY,
   totalPnLPct,
@@ -106,7 +108,9 @@ export default function HeroDashboard({
   const gainEUR = inceptionGainEUR ?? 0;
   const gainPct = inceptionGainPct ?? 0;
   const todayEUR = todayGainEUR ?? 0;
-  const todayPct = todayWealthEUR && todayWealthEUR - todayEUR > 0 ? (100 * todayEUR) / (todayWealthEUR - todayEUR) : 0;
+  // Taban = önceki günün serveti. 'todayWealth − gain' akış günlerinde akış kadar sapıyordu (hakem 2026-09-19).
+  const todayPct = prevWealthEUR && prevWealthEUR > 0 ? (100 * todayEUR) / prevWealthEUR : 0;
+  void todayWealthEUR;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 

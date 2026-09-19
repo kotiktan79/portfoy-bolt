@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let eur: EurSummary | null = null;
     try {
       eur = await loadEurSummary(supabase, todayStr);
-      log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)}, gün ${fmtSignedEUR(eur.dayGainEUR)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.lastFull?.salaryEUR || 0)}, kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
+      log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)} (dün ${fmtEUR(eur.prevWealthEUR)}), gün ${fmtSignedEUR(eur.dayGainEUR)} = %${eur.dayGainPct.toFixed(2)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.lastFull?.salaryEUR || 0)}, kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
     } catch (e: any) {
       log.push(`EUR motoru HATA: ${e.message}`);
     }

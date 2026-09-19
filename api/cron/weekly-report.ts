@@ -37,6 +37,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     // >= : Pazartesi snapshot günü haftaya DAHİL (taban = önceki Pazar). '>' Pazartesi kârını hiçbir haftaya saymıyordu (hakem 2026-09-19)
     const idx = daily.findIndex(d => d.date >= weekStartStr);
+    if (idx < 0) {
+      // Hafta içinde hiç snapshot yok → '+€0' diye OLGU yayınlamak yerine uyar
+      const last = daily[daily.length - 1].date;
+      await sendTelegram(`⚠️ <b>Haftalık</b>\n${weekStartStr} sonrası snapshot yok (son veri ${last}) — hafta kârı hesaplanamadı.`);
+      log.push(`Hafta penceresinde snapshot yok (son ${last}) — rakam yayınlanmadı`);
+      return res.status(200).json({ success: false, log });
+    }
     const base = idx > 0 ? daily[idx - 1].wealthEUR : daily[0].wealthEUR;
     const weekGainEUR = idx >= 0 ? daily.slice(Math.max(idx, 1)).reduce((s, d) => s + d.gainEUR, 0) : 0;
     const weekGainPct = base > 0 ? (weekGainEUR / base) * 100 : 0;
@@ -73,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: latestReport } = await supabase
       .from('daily_reports')
       .select('actions')
+      .not('ai_model', 'is', null)      // risk-monitor'ün kısmi satırını atla
       .order('report_date', { ascending: false })
       .limit(1)
       .single();

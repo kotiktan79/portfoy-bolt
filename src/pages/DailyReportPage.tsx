@@ -24,21 +24,29 @@ export default function DailyReportPage() {
   const [holdings, setHoldings] = useState<Array<{ symbol: string; asset_type: string }>>([]);
   const [incomeRefreshKey, setIncomeRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<'report' | 'income' | 'history'>('report');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [reportData, historyData, salaryData, dyn] = await Promise.all([
-      getLatestReport(),
-      getReportHistory(30),
-      getMonthlySalarySeries(12),
-      getDynamicSalary(),
-    ]);
-    if (reportData) setReport(salvageBrokenReport(reportData));
-    setReports(historyData.map(salvageBrokenReport));
-    setSalaryHistory(salaryData);
-    setDynSalary(dyn);
-    setSelectedIndex(0);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [reportData, historyData, salaryData, dyn] = await Promise.all([
+        getLatestReport(),
+        getReportHistory(30),
+        getMonthlySalarySeries(12),
+        getDynamicSalary(),
+      ]);
+      if (reportData) setReport(salvageBrokenReport(reportData));
+      setReports(historyData.map(salvageBrokenReport));
+      setSalaryHistory(salaryData);
+      setDynSalary(dyn);
+      setSelectedIndex(0);
+    } catch (e: unknown) {
+      // EUR motoru hata fırlatabilir (kur/satır sorunu) — sessizce 'Yükleniyor' bırakma
+      setLoadError(e instanceof Error ? e.message : 'veri yüklenemedi');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -74,6 +82,20 @@ export default function DailyReportPage() {
     if (!n || !isFinite(n)) return '0';
     return n.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
   };
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-950 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 p-6">
+            <p className="text-sm font-semibold text-red-700 dark:text-red-300">Rapor verisi yüklenemedi</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{loadError}</p>
+            <button onClick={loadData} className="mt-3 text-xs font-semibold text-red-700 dark:text-red-300 underline">Tekrar dene</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -172,7 +194,7 @@ export default function DailyReportPage() {
                       <p className="text-[10px] uppercase tracking-wider text-gray-400">Servet</p>
                       <p className="text-lg font-bold text-gray-900 dark:text-white">€{formatMoney(report.wealth_eur)}</p>
                       {/* ₺ karşılığı motorun kendi kuruyla (wealth_eur × eur_rate); portfolio_value 18:30'daki canlı toplam, farklı kaynak */}
-                      <p className="text-[10px] text-gray-400">≈ ₺{formatMoney((report.wealth_eur ?? 0) * (report.eur_rate ?? 0))}{report.eur_health_ok === false ? ' · ⚠️ kur eski' : ''}</p>
+                      <p className="text-[10px] text-gray-400">{(report.eur_rate ?? 0) > 0 ? `≈ ₺${formatMoney((report.wealth_eur ?? 0) * (report.eur_rate ?? 0))}` : 'kur kaydı yok'}{report.eur_health_ok === false ? ' · ⚠️ kur eski' : ''}</p>
                     </div>
                     <div className={`rounded-xl p-3 ${(report.pnl_eur_day ?? 0) >= 0 ? 'bg-accent-50 dark:bg-accent-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
                       <p className="text-[10px] uppercase tracking-wider text-gray-400">Gün / Bu Ay</p>
@@ -186,14 +208,14 @@ export default function DailyReportPage() {
                   </>
                 ) : (
                   <>
-                    {/* Eski rapor (2026-09-19 öncesi): yalnız nominal TL var */}
+                    {/* wealth_eur yok: ya 2026-09-19 öncesi eski rapor, ya da o gün EUR motoru çalışmamış */}
                     <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
                       <p className="text-[10px] uppercase tracking-wider text-gray-400">Toplam Değer (nominal)</p>
                       <p className="text-lg font-bold text-gray-900 dark:text-white">₺{formatMoney(report.portfolio_value)}</p>
                     </div>
                     <div className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
                       <p className="text-[10px] uppercase tracking-wider text-gray-400">EUR kâr</p>
-                      <p className="text-sm text-gray-400">eski rapor — yok</p>
+                      <p className="text-sm text-gray-400">{report.report_date >= '2026-09-19' ? 'o gün EUR motoru çalışmadı' : 'eski rapor — EUR yok'}</p>
                     </div>
                   </>
                 )}

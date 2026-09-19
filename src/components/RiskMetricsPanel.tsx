@@ -25,6 +25,7 @@ export function RiskMetricsPanel() {
     let cancelled = false;
     getEurDaily()
       .then((snaps) => { if (!cancelled) setMetrics(computeRiskMetrics(snaps)); })
+      .catch(() => { if (!cancelled) setMetrics(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);

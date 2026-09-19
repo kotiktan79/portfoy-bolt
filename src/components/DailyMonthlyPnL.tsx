@@ -31,12 +31,15 @@ export function DailyMonthlyPnL() {
   const [weekly, setWeekly] = useState<Period[]>([]);
   const [monthly, setMonthly] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  // daily DESC (yeni→eski) → i'nin önceki günü i+1. Taban = önceki günün serveti (LivePage/ana sayfa/cron ile aynı).
+  const prevWealthOf = (i: number) => daily[i + 1]?.wealthEUR ?? (daily[i] ? daily[i].wealthEUR - daily[i].gainEUR : 0);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       const gap = (a: string, b: string) => Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
-      const [d, w, m] = await Promise.all([getEurDaily(), getEurWeeks(), getEurMonths()]);
+      const [d, w, m] = await Promise.all([getEurDaily(), getEurWeeks(), getEurMonths()]).catch((e) => { setErr(e?.message || 'veri yüklenemedi'); return [[], [], []] as const; });
       setDaily([...d].reverse());
       setWeekly([...w].map((x, i, arr) => ({ ...x, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate) })).reverse());
       setMonthly([...m].map((x: MonthRow, i, arr) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate), inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR })).reverse());
@@ -94,11 +97,11 @@ export function DailyMonthlyPnL() {
         </div>
       </div>
 
-      {loading ? <p className="text-center text-slate-400 py-10">Yükleniyor…</p> : (
+      {err ? <p className="text-center text-red-500 py-10 text-sm">Kâr verisi yüklenemedi: {err}</p> : loading ? <p className="text-center text-slate-400 py-10">Yükleniyor…</p> : (
         <>
           {tab === 'daily' && (
             <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[640px] overflow-y-auto">
-              {daily.slice(0, 60).map((d) => {
+              {daily.slice(0, 60).map((d, i) => {
                 const pos = d.gainEUR >= 0;
                 return (
                   <div key={d.date} className={`p-3 flex items-center justify-between border-l-4 ${pos ? 'border-l-green-500' : 'border-l-red-500'}`}>
@@ -106,7 +109,7 @@ export function DailyMonthlyPnL() {
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">{fmtDate(d.date)}</p>
                       <p className="text-xs text-slate-500 dark:text-gray-400">servet {fmtW(d.wealthEUR)} · EUR/TL {d.eurRate.toFixed(2)}</p>
                     </div>
-                    <Badge gain={d.gainEUR} base={d.wealthEUR - d.gainEUR} />
+                    <Badge gain={d.gainEUR} base={prevWealthOf(i)} />
                   </div>
                 );
               })}

@@ -46,7 +46,7 @@ const fmt = (n: number) =>
 
 const eur = (n: number) => `€${fmt(n)}`;
 const seur = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${eur(n)}`;
-const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;
+const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
 const arrow = (n: number) => (n > 0 ? '🟢' : n < 0 ? '🔴' : '⚪');
 
 // TEK ÖLÇÜ EUR (2026-09-19): kâr = servet farkı − dış akış; maaş = geçen ayın reel kârı × 0,85
@@ -81,7 +81,7 @@ export function buildWeeklyTelegram(w: WeeklySnapshot): string {
   if (w.worstPerformer) {
     lines.push(`${arrow(w.worstPerformer.pnlPct)} En kötü (nominal): <b>${escapeHtml(w.worstPerformer.symbol)}</b> ${spct(w.worstPerformer.pnlPct)}`);
   }
-  lines.push('', `💰 Bu hafta kaydedilen gelir: ${w.weekIncomeEUR > 0 ? '+' : ''}${eur(w.weekIncomeEUR)}`);
+  lines.push('', `💰 Bu hafta kaydedilen gelir: ${seur(w.weekIncomeEUR)}`);
   if (!w.healthOk) lines.push('', '⚠️ Kur serisi güncel değil.');
   if (w.thisWeekTodos.length > 0) {
     lines.push('', `📋 Yapılacak (${w.thisWeekTodos.length}):`);
@@ -102,7 +102,7 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
     `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (çekilebilir ${eur(m.withdrawableEUR)} × 0,85)`,
   ];
   if (m.salaryEUR === 0) lines.push(`⛔ Maaş yok — açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.`);
-  lines.push('', `💰 Kaydedilen gelir: ${m.realizedIncomeEUR > 0 ? '+' : ''}${eur(m.realizedIncomeEUR)}`);
+  lines.push('', `💰 Kaydedilen gelir: ${seur(m.realizedIncomeEUR)}`);
   if (m.yearRows.length) {
     lines.push('', `📆 Ay ay:`);
     m.yearRows.forEach(r => lines.push(`• ${escapeHtml(r.month)}: ${seur(r.gainEUR)} · maaş ${eur(r.salaryEUR)}`));
