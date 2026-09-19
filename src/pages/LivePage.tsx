@@ -196,13 +196,13 @@ export default function LivePage() {
                 style={{ fontSize: 'clamp(1.25rem, 3vw, 2.5rem)' }}
               >
                 {isPos ? <ArrowUpRight className="w-[1em] h-[1em]" /> : <ArrowDownRight className="w-[1em] h-[1em]" />}
-                <span className="tabular-nums tracking-[-0.02em]">{isPos ? '+' : ''}{dailyPct.toFixed(2)}%</span>
+                <span className="tabular-nums tracking-[-0.02em]">{lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}%` : '—'}</span>
               </div>
               <span
                 className={`tabular-nums ${isPos ? 'text-emerald-300' : 'text-rose-300'}`}
                 style={{ fontSize: 'clamp(0.7rem, 1vw, 1rem)' }}
               >
-                {isPos ? '+' : '−'}€{fmtUSD(Math.abs(dailyChange))} son gün{lastDay ? ` (${lastDay.date.slice(5).replace('-', '/')})` : ''}
+                {lastDay ? `${isPos ? '+' : '−'}€${fmtUSD(Math.abs(dailyChange))} son gün (${lastDay.date.slice(5).replace('-', '/')})` : 'veri yüklenemedi'}
               </span>
             </motion.div>
           </div>
@@ -251,14 +251,15 @@ export default function LivePage() {
         {/* KPI bandı 4'lü — mobilde 2x2, tablet+ 4'lü */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-5">
           {[
-            { label: 'Kuruluştan Bugüne Kâr', icon: DollarSign, color: (inception?.totalGainEUR ?? 0) >= 0 ? 'emerald' : 'rose',
-              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`, sub: `${(inception?.totalGainPct ?? 0) >= 0 ? '+' : ''}${(inception?.totalGainPct ?? 0).toFixed(1)}% · alış günü kuruyla` },
-            { label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: isPos ? 'emerald' : 'rose',
-              value: dailyChange, fmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`, sub: `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç` },
+            // Veri gelmediyse '—': '+€0' bir olgu gibi okunur (hakem 2026-09-19)
+            { label: 'Kuruluştan Bugüne Kâr', icon: DollarSign, color: !inception ? 'gold' : inception.totalGainEUR >= 0 ? 'emerald' : 'rose',
+              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => inception ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: inception ? `${inception.totalGainPct >= 0 ? '+' : ''}${inception.totalGainPct.toFixed(1)}% · alış günü kuruyla` : 'veri yüklenemedi' },
+            { label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: !lastDay ? 'gold' : isPos ? 'emerald' : 'rose',
+              value: dailyChange, fmt: (n: number) => lastDay ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç · taban dünkü servet` : 'veri yüklenemedi' },
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },
             { label: 'Dinamik Maaş', icon: Gauge, color: 'gold',
-              value: dynamic?.salaryEUR ?? 0, fmt: (n: number) => `€${fmtUSD(n)}`, sub: dynamic ? (dynamic.carryInEUR < 0 ? `devreden açık −€${Math.round(Math.abs(dynamic.carryInEUR))} → çekilebilir €${Math.round(dynamic.withdrawableEUR)} × 0,85` : `${dynamic.monthLabel} çekilebilir × 0,85`) : '/ay' },
+              value: dynamic?.salaryEUR ?? 0, fmt: (n: number) => dynamic ? `€${fmtUSD(n)}` : '—', sub: dynamic ? (dynamic.carryInEUR < 0 ? `devreden açık −€${Math.round(Math.abs(dynamic.carryInEUR))} → çekilebilir €${Math.round(dynamic.withdrawableEUR)} × 0,85` : `${dynamic.monthLabel} çekilebilir × 0,85`) : '/ay' },
           ].map((card) => {
             const Icon = card.icon;
             const colors: Record<string, { text: string; border: string; bg: string; ic: string }> = {
