@@ -8,7 +8,7 @@ import { makeRateSeries, dailyEurGains, monthlyRows, fxDriftTRY, type SnapPoint,
 export const RELIABLE_FROM = '2026-04-06';       // EUR/USD kur serisinin başladığı gün
 export const INFLATION_EUR = 0.02;               // Euro Bölgesi HICP, yıllık, sabit; yılda bir güncelle (kullanıcı kararı 2026-09-19)
 
-export interface EurDaily extends DailyGain { totalValueTRY: number; eurRate: number }
+export interface EurDaily extends DailyGain { totalValueTRY: number; eurRate: number; usdRate: number }
 
 let _cache: { ts: number; value: { daily: EurDaily[]; months: MonthRow[]; health: { ok: boolean; lastEurRateDay: string; lastSnapDay: string } } } | null = null;
 const TTL = 5 * 60 * 1000;
@@ -88,7 +88,7 @@ async function load() {
   }
 
   const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay);
-  const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date) }));
+  const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
   const months = monthlyRows(daily, INFLATION_EUR);
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
   const health = { ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay, lastEurRateDay: E.lastDay, lastSnapDay };

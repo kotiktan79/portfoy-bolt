@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ShieldAlert, TrendingUp, TrendingDown, Activity } from 'lucide-react';
-import { getHistoricalSnapshots } from '../services/analyticsService';
+import { getEurDaily } from '../services/eurPnlService';
 import { computeRiskMetrics, RiskMetrics } from '../services/riskMetricsService';
-import { fmtTRY0 } from '../lib/chartTheme';
+import { fmtEUR0 } from '../lib/chartTheme';
 
 const MONTH_NAMES_TR = [
   'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
@@ -23,7 +23,7 @@ export function RiskMetricsPanel() {
 
   useEffect(() => {
     let cancelled = false;
-    getHistoricalSnapshots(10000)
+    getEurDaily()
       .then((snaps) => { if (!cancelled) setMetrics(computeRiskMetrics(snaps)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -76,7 +76,7 @@ export function RiskMetricsPanel() {
           label="Sharpe oranı"
           value={metrics.sharpeRatio != null ? metrics.sharpeRatio.toFixed(2) : '—'}
           positive={metrics.sharpeRatio != null ? metrics.sharpeRatio > 0 : undefined}
-          sub="Risksiz oran: %40 (TRY)"
+          sub="Risksiz oran: %2 (EUR)"
         />
         <MetricTile
           label="Sortino oranı"
@@ -88,7 +88,7 @@ export function RiskMetricsPanel() {
           label="Maks. düşüş"
           value={`−%${metrics.maxDrawdownPct.toFixed(1)}`}
           positive={false}
-          sub={`≈${fmtTRY0(metrics.maxDrawdownValueTry)} · ${fmtDate(metrics.maxDrawdownStart)} → ${fmtDate(metrics.maxDrawdownTrough)}${metrics.maxDrawdownRecovered ? ` · toparlandı ${fmtDate(metrics.maxDrawdownRecovered)}` : ' · henüz toparlanmadı'}`}
+          sub={`≈${fmtEUR0(metrics.maxDrawdownValueTry)} · ${fmtDate(metrics.maxDrawdownStart)} → ${fmtDate(metrics.maxDrawdownTrough)}${metrics.maxDrawdownRecovered ? ` · toparlandı ${fmtDate(metrics.maxDrawdownRecovered)}` : ' · henüz toparlanmadı'}`}
         />
         <MetricTile
           label="Pozitif gün oranı"
@@ -100,14 +100,14 @@ export function RiskMetricsPanel() {
           value={metrics.bestDay ? `+%${metrics.bestDay.changePct.toFixed(2)}` : '—'}
           positive
           icon={<TrendingUp size={12} />}
-          sub={metrics.bestDay ? `${fmtDate(metrics.bestDay.date)} · +${fmtTRY0(metrics.bestDay.changeTry)}` : undefined}
+          sub={metrics.bestDay ? `${fmtDate(metrics.bestDay.date)} · +${fmtEUR0(metrics.bestDay.changeTry)}` : undefined}
         />
         <MetricTile
           label="En kötü gün"
           value={metrics.worstDay ? `%${metrics.worstDay.changePct.toFixed(2)}` : '—'}
           positive={false}
           icon={<TrendingDown size={12} />}
-          sub={metrics.worstDay ? `${fmtDate(metrics.worstDay.date)} · ${fmtTRY0(metrics.worstDay.changeTry)}` : undefined}
+          sub={metrics.worstDay ? `${fmtDate(metrics.worstDay.date)} · ${fmtEUR0(metrics.worstDay.changeTry)}` : undefined}
         />
       </div>
 

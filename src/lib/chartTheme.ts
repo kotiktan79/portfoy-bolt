@@ -98,3 +98,8 @@ export const paddedDomain: [(dataMin: number) => number, (dataMax: number) => nu
   (dataMin: number) => (dataMin >= 0 ? Math.floor(dataMin * 0.985) : Math.floor(dataMin * 1.015)),
   (dataMax: number) => Math.ceil(dataMax * 1.015),
 ];
+
+// EURO cetveli (2026-09-19): Performans sayfası ve K/Z ekranları
+export const fmtEUR0 = (n: number) => '€' + Math.round(n).toLocaleString('de-DE');
+export const fmtSignedEUR0 = (n: number) => (n >= 0 ? '+' : '−') + fmtEUR0(Math.abs(n));
+export const fmtAxisEUR = (n: number) => Math.abs(n) >= 1e6 ? '€' + (n / 1e6).toFixed(1) + 'M' : Math.abs(n) >= 1e3 ? '€' + (n / 1e3).toFixed(0) + 'K' : '€' + Math.round(n);

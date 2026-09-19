@@ -1,4 +1,6 @@
-import { PortfolioSnapshot } from './analyticsService';
+// 2026-09-19 gece: risk metrikleri EURO günlük seriden (eurPnlService.getEurDaily) — TL serisi kur
+// hareketini getiri/volatilite sayıyordu; kasa akışı (total_deposits) artık portföy dışı, kullanılmaz.
+export interface RiskInput { date: string; gainEUR: number; wealthEUR: number }
 
 export interface RiskMetrics {
   observationDays: number;
@@ -21,50 +23,32 @@ export interface RiskMetrics {
 }
 
 const TRADING_DAYS_PER_YEAR = 252;
-const RISK_FREE_RATE_ANNUAL = 0.40;
+const RISK_FREE_RATE_ANNUAL = 0.02;   // EUR kısa vade (ECB mevduat ~%2)
 
-export function computeRiskMetrics(snapshots: PortfolioSnapshot[]): RiskMetrics | null {
+export function computeRiskMetrics(snapshots: RiskInput[]): RiskMetrics | null {
   if (snapshots.length < 2) return null;
 
   const sorted = [...snapshots].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // Net external cash flow into the portfolio for period i (deposits added,
-  // withdrawals removed). The user injects new money regularly (e.g. weekly
-  // buys); that is NOT investment return and must be stripped out before
-  // computing any return-based metric, otherwise a deposit day reads as a huge
-  // positive "return" and inflates mean/vol/Sharpe/Sortino/best-day.
-  const cashFlow = (i: number): number => {
-    const prevDep = sorted[i - 1].total_deposits ?? 0;
-    const currDep = sorted[i].total_deposits ?? 0;
-    const prevWd = sorted[i - 1].total_withdrawals ?? 0;
-    const currWd = sorted[i].total_withdrawals ?? 0;
-    return (currDep - prevDep) - (currWd - prevWd);
-  };
-
   const dailyReturns: number[] = [];
   const dailyChanges: { date: string; changePct: number; changeTry: number }[] = [];
   // Deposit-adjusted time-weighted return index (starts at 1) + the underlying
   // portfolio value at each point, used for a deposit-clean drawdown.
   const indexSeries: { date: string; idx: number; value: number }[] = [
-    { date: sorted[0].date, idx: 1, value: sorted[0].total_value },
+    { date: sorted[0].date, idx: 1, value: sorted[0].wealthEUR },
   ];
   let acc = 1;
 
   for (let i = 1; i < sorted.length; i++) {
-    const prev = sorted[i - 1].total_value;
-    const curr = sorted[i].total_value;
+    const prev = sorted[i - 1].wealthEUR;
+    const curr = sorted[i].wealthEUR;
     if (prev > 0) {
-      const cf = cashFlow(i);
-      const gainTry = curr - prev - cf; // pure investment gain, deposits removed
+      const gainTry = sorted[i].gainEUR;   // motor: euro servet artışı − dış akış (kur-drift arındırılmış); alan adı geriye uyumlu
       const r = gainTry / prev;
       dailyReturns.push(r);
-      dailyChanges.push({
-        date: sorted[i].date,
-        changePct: r * 100,
-        changeTry: gainTry,
-      });
+      dailyChanges.push({ date: sorted[i].date, changePct: r * 100, changeTry: gainTry });
       acc *= 1 + r;
     }
     indexSeries.push({ date: sorted[i].date, idx: acc, value: curr });

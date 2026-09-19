@@ -12,15 +12,15 @@ import {
   Legend,
   ComposedChart,
 } from 'recharts';
-import { getHistoricalSnapshots, PortfolioSnapshot } from '../services/analyticsService';
-import { computePeriodChange } from '../lib/portfolioMetrics';
-import { formatCurrency } from '../services/priceService';
+// PERFORMANS — TEK CETVEL: EURO (2026-09-19 gece). Grafik = euro servet; kâr = euro servet artışı − dış akış
+// (eurPnlService, GIPS/IAS 21). TL sadece '≈ ₺ (kur dahil)' ikincil bilgi. 'En yüksek/En düşük' kaldırıldı
+// (deposit merdiveni yüzünden kâr sanılıyordu). TotalAttribution/DailyGainPanel TL şişik → euro sürümü gelene kadar sayfada değil.
+import { getEurDaily, getEurPnlHealth, RELIABLE_FROM, type EurDaily } from '../services/eurPnlService';
 import { usePortfolio } from '../contexts/PortfolioContext';
-import { DailyGainPanel } from '../components/DailyGainPanel';
 import { DailyMonthlyPnL } from '../components/DailyMonthlyPnL';
 import { MonthlyAttribution } from '../components/MonthlyAttribution';
-import { TotalAttribution } from '../components/TotalAttribution';
 import { RiskMetricsPanel } from '../components/RiskMetricsPanel';
+import { InceptionPnl } from '../components/InceptionPnl';
 import {
   getBenchmarkHistory,
   BENCHMARK_OPTIONS,
@@ -28,7 +28,7 @@ import {
   BenchmarkPoint,
 } from '../services/benchmarkService';
 import { useDarkMode } from '../hooks/useDarkMode';
-import { chartChrome, fmtTRY0, paddedDomain } from '../lib/chartTheme';
+import { chartChrome, fmtEUR0, fmtSignedEUR0, fmtAxisEUR, paddedDomain } from '../lib/chartTheme';
 
 type Period = 7 | 30 | 90 | 9999;
 
@@ -55,11 +55,12 @@ function formatTooltipDate(dateStr: string): string {
 }
 
 export default function PerformancePage() {
-  const { holdings, livePnlData } = usePortfolio();
+  const { holdings } = usePortfolio();
   const { isDark } = useDarkMode();
   const chrome = chartChrome(isDark);
   const [period, setPeriod] = useState<Period>(30);
-  const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
+  const [allDaily, setAllDaily] = useState<EurDaily[]>([]);
+  const [health, setHealth] = useState<{ ok: boolean; lastEurRateDay: string; lastSnapDay: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [benchmarkKey, setBenchmarkKey] = useState<BenchmarkKey | null>(null);
   const [benchmarkSeries, setBenchmarkSeries] = useState<BenchmarkPoint[]>([]);
@@ -68,16 +69,20 @@ export default function PerformancePage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getHistoricalSnapshots(period === 9999 ? 10000 : period).then((data) => {
-      if (!cancelled) {
-        setSnapshots(data);
-        setLoading(false);
-      }
+    Promise.all([getEurDaily(), getEurPnlHealth()]).then(([d, h]) => {
+      if (!cancelled) { setAllDaily(d); setHealth(h); setLoading(false); }
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [period]);
+    return () => { cancelled = true; };
+  }, []);
+
+  // Dönem = takvim günü filtresi (eski kod son N satır alıyordu). 'Tümü' = RELIABLE_FROM'dan itibaren.
+  const snapshots = useMemo(() => {
+    if (!allDaily.length) return [] as EurDaily[];
+    if (period === 9999) return allDaily;
+    const cutoff = new Date(allDaily[allDaily.length - 1].date + 'T00:00:00'); cutoff.setDate(cutoff.getDate() - period);
+    const iso = cutoff.toISOString().slice(0, 10);
+    return allDaily.filter(d => d.date >= iso);
+  }, [allDaily, period]);
 
   useEffect(() => {
     if (!benchmarkKey) {
@@ -101,57 +106,44 @@ export default function PerformancePage() {
   const chartData = useMemo(() => {
     if (snapshots.length === 0) return [];
 
-    const portfolioBase = snapshots[0].total_value;
+    // Benchmark native fiyatı → EURO: XU100 TL ÷ EUR/TRY; SPX & GOLD USD × USD/TRY ÷ EUR/TRY (o günün kurları)
     const benchmarkMap: Record<string, number> = {};
     for (const p of benchmarkSeries) benchmarkMap[p.date] = p.value;
-
+    const toEur = (d: EurDaily, v: number) => benchmarkKey === 'XU100' ? v / d.eurRate : (v * d.usdRate) / d.eurRate;
     let benchmarkBase = 0;
     if (benchmarkKey && benchmarkSeries.length > 0) {
-      const firstSnapDate = snapshots[0].date;
-      const firstAvailable =
-        benchmarkSeries.find((p) => p.date >= firstSnapDate) || benchmarkSeries[0];
-      benchmarkBase = firstAvailable?.value || 0;
+      const first = snapshots.find(d => benchmarkMap[d.date] != null);
+      if (first) benchmarkBase = toEur(first, benchmarkMap[first.date]);
     }
-
-    return snapshots.map((s) => {
+    // Portföy endeksi = akış-düzeltmeli TWR zinciri (GIPS): idx_t = idx_{t−1} × (1 + gain_t / wealth_{t−1})
+    let idx = 100;
+    return snapshots.map((s, i) => {
+      if (i > 0 && snapshots[i - 1].wealthEUR > 0) idx *= 1 + s.gainEUR / snapshots[i - 1].wealthEUR;
       const benchValue = benchmarkMap[s.date];
       return {
         date: s.date,
         dateLabel: formatDateTR(s.date),
-        value: s.total_value,
-        investment: s.total_investment,
-        portfolioIdx: portfolioBase > 0 ? (s.total_value / portfolioBase) * 100 : 100,
-        benchmarkIdx:
-          benchmarkKey && benchValue && benchmarkBase > 0
-            ? (benchValue / benchmarkBase) * 100
-            : null,
+        value: s.wealthEUR,
+        valueTRY: s.totalValueTRY,
+        eurRate: s.eurRate,
+        portfolioIdx: idx,
+        benchmarkIdx: benchmarkKey && benchValue && benchmarkBase > 0 ? (toEur(s, benchValue) / benchmarkBase) * 100 : null,
       };
     });
   }, [snapshots, benchmarkSeries, benchmarkKey]);
 
   const stats = useMemo(() => {
     if (snapshots.length === 0)
-      return { startValue: 0, endValue: 0, changeTL: 0, changePct: 0, highest: 0, lowest: 0 };
+      return { startValue: 0, endValue: 0, gainEUR: 0, twrPct: 0, rateStart: 0, rateEnd: 0 };
+    const startValue = snapshots[0].wealthEUR;
+    const endValue = snapshots[snapshots.length - 1].wealthEUR;
+    // Dönem kârı = günlük euro kazançların toplamı (ilk gün başlangıç; koyduğun/çektiğin para hariç)
+    const gainEUR = snapshots.slice(1).reduce((s, d) => s + d.gainEUR, 0);
+    const twrPct = chartData.length ? chartData[chartData.length - 1].portfolioIdx - 100 : 0;
+    return { startValue, endValue, gainEUR, twrPct, rateStart: snapshots[0].eurRate, rateEnd: snapshots[snapshots.length - 1].eurRate };
+  }, [snapshots, chartData]);
 
-    const startValue = snapshots[0].total_value;
-    const endValue = snapshots[snapshots.length - 1].total_value;
-    // KÂR-BAZLI: değişim = current_pnl − previous_pnl (deposit etkisinden bağımsız).
-    // Eski formül (endValue − startValue) haftalık €1000 alımları kâr sayıyordu.
-    const period = computePeriodChange(
-      snapshots[snapshots.length - 1],
-      snapshots[0],
-      100,
-    );
-    const changeTL = period.changeTRY;
-    const changePct = period.changePct;
-    const values = snapshots.map((s) => s.total_value);
-    const highest = Math.max(...values);
-    const lowest = Math.min(...values);
-
-    return { startValue, endValue, changeTL, changePct, highest, lowest };
-  }, [snapshots]);
-
-  const isPositive = stats.changeTL >= 0;
+  const isPositive = stats.gainEUR >= 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50/40 via-white to-accent-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 p-4 md:p-6">
@@ -159,7 +151,7 @@ export default function PerformancePage() {
         <PageHeader
           icon={TrendingUp}
           title="Performans"
-          subtitle="Portföy değer trendi ve benchmark karşılaştırması"
+          subtitle="Euro servet trendi ve benchmark karşılaştırması (€) — kâr, koyduğun/çektiğin para hariç"
         />
 
         {/* Period selector */}
@@ -216,6 +208,11 @@ export default function PerformancePage() {
           </div>
         </div>
 
+        {health && !health.ok && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300">
+            Kur serisi {health.lastEurRateDay}'de bitiyor, kayıtlar {health.lastSnapDay}'e kadar — bu sayfadaki rakamlar güvenilmez.
+          </div>
+        )}
         {/* Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
           {loading ? (
@@ -248,11 +245,9 @@ export default function PerformancePage() {
                   tick={{ fontSize: 12, fill: chrome.axis }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(v: number) =>
-                    benchmarkKey ? v.toFixed(0) : formatCurrency(v, 0)
-                  }
+                  tickFormatter={(v: number) => (benchmarkKey ? v.toFixed(0) : fmtAxisEUR(v))}
                   domain={paddedDomain}
-                  width={benchmarkKey ? 50 : 90}
+                  width={benchmarkKey ? 50 : 70}
                 />
                 <Tooltip
                   content={({ active, payload }) => {
@@ -264,11 +259,10 @@ export default function PerformancePage() {
                           {formatTooltipDate(data.date)}
                         </p>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">
-                          Portföy: {fmtTRY0(data.value)}
-                          <span className="ml-2 text-xs text-gray-500">
-                            (idx {data.portfolioIdx?.toFixed(1)})
-                          </span>
+                          Portföy: {fmtEUR0(data.value)}
+                          <span className="ml-2 text-xs text-gray-500">(idx {data.portfolioIdx?.toFixed(1)})</span>
                         </p>
+                        <p className="text-[11px] text-gray-400">≈ ₺{Math.round(data.valueTRY).toLocaleString('tr-TR')} (kur dahil) · EUR/TL {data.eurRate.toFixed(2)}</p>
                         {data.benchmarkIdx != null && benchmarkKey && (
                           <p className="text-sm font-bold text-brand-600 dark:text-brand-400">
                             {BENCHMARK_OPTIONS.find((b) => b.key === benchmarkKey)?.label}: idx {data.benchmarkIdx.toFixed(1)}
@@ -316,34 +310,20 @@ export default function PerformancePage() {
         {/* Stats grid */}
         {!loading && chartData.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <StatCard label="Dönem başı servet" value={fmtEUR0(stats.startValue)} />
+            <StatCard label="Şu anki servet" value={fmtEUR0(stats.endValue)} />
             <StatCard
-              label="Dönem başı değer"
-              value={fmtTRY0(stats.startValue)}
-            />
-            <StatCard
-              label="Şu anki değer"
-              value={fmtTRY0(stats.endValue)}
-            />
-            <StatCard
-              label="Değişim"
-              value={`${isPositive ? '+' : ''}${fmtTRY0(stats.changeTL)}`}
-              sub={`${isPositive ? '+' : ''}${stats.changePct.toFixed(2)}%`}
+              label="Dönem kârı (para hariç)"
+              value={fmtSignedEUR0(stats.gainEUR)}
+              sub={`${stats.twrPct >= 0 ? '+' : ''}${stats.twrPct.toFixed(2)}% getiri`}
               color={isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
             />
             <StatCard
-              label="En yüksek"
-              value={fmtTRY0(stats.highest)}
-              color="text-green-600 dark:text-green-400"
+              label="Kur EUR/TL (bilgi, kâr değil)"
+              value={`${stats.rateStart.toFixed(2)} → ${stats.rateEnd.toFixed(2)}`}
+              sub={`TL ${stats.rateEnd >= stats.rateStart ? '−' : '+'}${Math.abs(100 * (stats.rateEnd / stats.rateStart - 1)).toFixed(1)}%`}
             />
-            <StatCard
-              label="En düşük"
-              value={fmtTRY0(stats.lowest)}
-              color="text-red-600 dark:text-red-400"
-            />
-            <StatCard
-              label="Veri noktası"
-              value={`${snapshots.length} gün`}
-            />
+            <StatCard label="Veri noktası" value={`${snapshots.length} gün`} sub={period === 9999 ? `${RELIABLE_FROM}'dan` : undefined} />
           </div>
         )}
 
@@ -359,21 +339,12 @@ export default function PerformancePage() {
           <RiskMetricsPanel />
         </div>
 
-        {/* Kuruluştan bugüne — hangi pozisyon toplam kârın ne kadarını getirdi */}
+        {/* Kuruluştan bugüne — alış günü kuruyla euro kâr */}
+        <div className="mt-6"><InceptionPnl /></div>
+
+        {/* Günlük/haftalık/aylık geçmiş (euro) */}
         {holdings.length > 0 && (
           <div className="mt-6">
-            <TotalAttribution holdings={holdings} />
-          </div>
-        )}
-
-        {/* Bugünün kazananları/kaybedenleri + günlük/haftalık/aylık geçmiş tablosu */}
-        {holdings.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-            <DailyGainPanel
-              holdings={holdings}
-              totalDailyChange={livePnlData?.daily.change ?? 0}
-              totalDailyPct={livePnlData?.daily.percentage ?? 0}
-            />
             <DailyMonthlyPnL />
           </div>
         )}

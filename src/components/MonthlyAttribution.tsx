@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, ArrowDownToLine, Calendar } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
-import { fxToTRY, getFxRatesFromHoldings } from '../lib/fx';
-import { formatCurrency } from '../services/priceService';
+import { getEurMonths, RELIABLE_FROM } from '../services/eurPnlService';
+import { fmtEUR0, fmtSignedEUR0 } from '../lib/chartTheme';
+// 2026-09-19 gece: EURO cetveli. Pozisyon katkısı = ay sonu € değeri − ay başı € değeri (o günlerin kurlarıyla)
+// → EURO/USD kasası kur şişmesiyle 'kazanan' görünmez. Resmi ay kârı = motor (eurPnlService). Aylar ≥ Nisan 2026.
 
 interface PricePoint {
   holding_id: string;
@@ -29,7 +31,7 @@ interface AttribRow {
   startPrice: number;
   endPrice: number;
   pricePct: number;
-  gainTRY: number;
+  gainEUR: number;
   splitAdjusted?: number; // tespit edilen split oranı (varsa)
 }
 
@@ -71,12 +73,11 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   });
   const [prices, setPrices] = useState<PricePoint[]>([]);
   const [cashTx, setCashTx] = useState<CashTx[]>([]);
-  const [snapshotPnLDelta, setSnapshotPnLDelta] = useState<number | null>(null);
+  const [motorGainEUR, setMotorGainEUR] = useState<number | null>(null);
+  const [fxStart, setFxStart] = useState<{ eur: number; usd: number } | null>(null);
+  const [fxEnd, setFxEnd] = useState<{ eur: number; usd: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fxRates = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
-  // Ortak helper: RUB/RON/CHF de doğru çevrilir (eskiden 1:1 TRY sayılıyordu).
-  const fxFor = (c?: string | null) => fxToTRY(1, c, fxRates);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,32 +113,24 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         .lte('created_at', periodEnd)
         .order('created_at', { ascending: true });
 
-      // Snapshot pnl delta (referans)
-      const { data: snaps } = await supabase
-        .from('portfolio_snapshots')
-        .select('snapshot_date, total_pnl, total_value, total_investment, created_at')
-        .gte('snapshot_date', prev + '-25')
-        .lte('snapshot_date', lastDayOf(selectedMonth))
-        .order('snapshot_date', { ascending: true })
-        .order('created_at', { ascending: false });
-      interface SnapRow { snapshot_date: string; total_pnl: number | null; total_value: number; total_investment: number; created_at: string }
-      const seen = new Set<string>();
-      const uniq: SnapRow[] = [];
-      for (const s of snaps || []) {
-        if (seen.has(s.snapshot_date)) continue;
-        seen.add(s.snapshot_date);
-        uniq.push(s);
-      }
-      uniq.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
-      const prevSnap = uniq.filter(s => s.snapshot_date < monthStart).pop();
-      const lastSnap = uniq.filter(s => s.snapshot_date >= monthStart).pop();
-      const pnlOf = (s: SnapRow) => s.total_pnl != null ? Number(s.total_pnl) : (Number(s.total_value) - Number(s.total_investment));
-      const delta = prevSnap && lastSnap ? pnlOf(lastSnap) - pnlOf(prevSnap) : null;
+      // Resmi ay kârı = euro motoru; ay başı/sonu kurları = exchange_rates (api)
+      const months = await getEurMonths();
+      const mrow = months.find(m => m.month === selectedMonth) || null;
+      const fxAt = async (dateMax: string) => {
+        const [e, u] = await Promise.all([
+          supabase.from('exchange_rates').select('rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
+          supabase.from('exchange_rates').select('rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
+        ]);
+        return { eur: Number(e.data?.rate) || 0, usd: Number(u.data?.rate) || 0 };
+      };
+      const prevEnd = lastDayOf(prev);
+      const [fs, fe] = await Promise.all([fxAt(prevEnd), fxAt(lastDayOf(selectedMonth))]);
 
       if (!cancelled) {
         setPrices(all);
         setCashTx(tx || []);
-        setSnapshotPnLDelta(delta);
+        setMotorGainEUR(mrow ? mrow.gainEUR : null);
+        setFxStart(fs); setFxEnd(fe);
         setLoading(false);
       }
     })();
@@ -168,18 +161,27 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
       // start'ı split sonrası eşdeğerine indir, böylece sahte −%50 görünmesin.
       const splitRatio = detectSplitRatio(rawStart, e);
       const s = splitRatio ? rawStart / splitRatio : rawStart;
-      const fx = fxFor(h.currency);
+      if (!fxStart || !fxEnd || !fxStart.eur || !fxEnd.eur) continue;
+      const c = (h.currency || 'TRY').toUpperCase();
+      // pozisyonun € değeri, o günün kuruyla: TL fiyat ÷ EUR/TL; USD fiyat × USD/TL ÷ EUR/TL; EUR fiyat aynen
+      const toEur = (price: number, f: { eur: number; usd: number }) => c === 'TRY' ? price / f.eur : c === 'USD' ? (price * f.usd) / f.eur : price;
+      const vs = toEur(s, fxStart) * h.quantity, ve = toEur(e, fxEnd) * h.quantity;
       const pricePct = ((e - s) / s) * 100;
-      const gainTRY = (e - s) * h.quantity * fx;
       rows.push({
-        symbol: h.symbol, type: h.asset_type, currency: h.currency || 'TRY',
-        qty: h.quantity, startPrice: s, endPrice: e, pricePct, gainTRY,
+        symbol: h.symbol, type: h.asset_type, currency: c,
+        qty: h.quantity, startPrice: s, endPrice: e, pricePct, gainEUR: ve - vs,
         splitAdjusted: splitRatio || undefined,
       });
     }
-    return rows.sort((a, b) => b.gainTRY - a.gainTRY);
-  }, [prices, holdings, selectedMonth]);
+    return rows.sort((a, b) => b.gainEUR - a.gainEUR);
+  }, [prices, holdings, selectedMonth, fxStart, fxEnd]);
 
+  // Nakit akışı € karşılığı (ay sonu kuru; RUB/RON yaklaşık)
+  const toEurAmt = (amt: number, ccy: string) => {
+    const c = (ccy || 'TRY').toUpperCase(); if (!fxEnd || !fxEnd.eur) return 0;
+    if (c === 'EUR') return amt; if (c === 'TRY') return amt / fxEnd.eur; if (c === 'USD') return (amt * fxEnd.usd) / fxEnd.eur;
+    if (c === 'RUB') return (amt * 0.555) / fxEnd.eur; if (c === 'RON') return amt / 4.97; return 0;
+  };
   // Aynı zaman damgasında hem çıkış hem giriş varsa bu bir İÇ TRANSFERdir
   // (ör. kasadaki ruble → EUR pozisyonu): para portföyden çıkmadı, yer değiştirdi.
   // Eskiden bunlar "çekilen" olarak sayılıp toplamı kat kat şişiriyordu.
@@ -193,19 +195,16 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   const deposits = useMemo(() => {
     return cashTx
       .filter(c => (c.transaction_type || c.type) === 'deposit' && !isInternalTransfer(c))
-      .map(c => ({
-        ...c,
-        tryEquiv: Number(c.amount) * fxFor(c.currency),
-      }));
-  }, [cashTx, fxRates]);
+      .map(c => ({ ...c, eurEquiv: toEurAmt(Number(c.amount), c.currency) }));
+  }, [cashTx, fxEnd]);
   const withdrawals = useMemo(() => {
     return cashTx
       .filter(c => ((c.transaction_type || c.type) === 'withdraw' || (c.transaction_type || c.type) === 'withdrawal') && !isInternalTransfer(c))
-      .map(c => ({ ...c, tryEquiv: Number(c.amount) * fxFor(c.currency) }));
-  }, [cashTx, fxRates]);
+      .map(c => ({ ...c, eurEquiv: toEurAmt(Number(c.amount), c.currency) }));
+  }, [cashTx, fxEnd]);
 
-  const totalDeposit = deposits.reduce((s, d) => s + d.tryEquiv, 0);
-  const totalWithdraw = withdrawals.reduce((s, w) => s + w.tryEquiv, 0);
+  const totalDeposit = deposits.reduce((s, d) => s + d.eurEquiv, 0);
+  const totalWithdraw = withdrawals.reduce((s, w) => s + w.eurEquiv, 0);
 
   // Month seçici için son 12 ay
   const monthOptions = useMemo(() => {
@@ -213,20 +212,21 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
     const out: string[] = [];
     for (let i = 0; i < 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (ym >= RELIABLE_FROM.slice(0, 7)) out.push(ym);   // kur serisi öncesi aylar yok
     }
     return out;
   }, []);
 
-  const winners = attribution.filter(r => r.gainTRY > 0);
-  const losers = attribution.filter(r => r.gainTRY < 0);
-  const totalWin = winners.reduce((s, r) => s + r.gainTRY, 0);
-  const totalLoss = losers.reduce((s, r) => s + r.gainTRY, 0);
+  const winners = attribution.filter(r => r.gainEUR > 0);
+  const losers = attribution.filter(r => r.gainEUR < 0);
+  const totalWin = winners.reduce((s, r) => s + r.gainEUR, 0);
+  const totalLoss = losers.reduce((s, r) => s + r.gainEUR, 0);
   const netAttribution = totalWin + totalLoss;
 
   // Tip bazında
   const byType: Record<string, number> = {};
-  for (const r of attribution) byType[r.type] = (byType[r.type] || 0) + r.gainTRY;
+  for (const r of attribution) byType[r.type] = (byType[r.type] || 0) + r.gainEUR;
   const typeLabels: Record<string, string> = {
     stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz/Nakit',
     fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia',
@@ -264,7 +264,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
             <div className="flex items-baseline justify-between">
               <h4 className="text-sm font-bold text-slate-700 dark:text-gray-200 uppercase tracking-wider">Pozisyon Hareketi</h4>
               <span className={`text-lg font-extrabold ${netAttribution >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {netAttribution >= 0 ? '+' : ''}{formatCurrency(netAttribution)} ₺
+                {fmtSignedEUR0(netAttribution)}
               </span>
             </div>
 
@@ -274,7 +274,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                 <div key={t} className={`px-3 py-2 rounded-lg border ${g >= 0 ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'}`}>
                   <p className="text-xs text-slate-600 dark:text-gray-400">{typeLabels[t] || t}</p>
                   <p className={`text-sm font-bold ${g >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
-                    {g >= 0 ? '+' : ''}{formatCurrency(g)} ₺
+                    {fmtSignedEUR0(g)}
                   </p>
                 </div>
               ))}
@@ -294,7 +294,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                         {r.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">1:{r.splitAdjusted} split</span>}
                       </span>
                       <div className="text-right">
-                        <span className="font-bold text-green-600">+{formatCurrency(r.gainTRY)} ₺</span>
+                        <span className="font-bold text-green-600">{fmtSignedEUR0(r.gainEUR)}</span>
                         <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({r.pricePct >= 0 ? '+' : ''}{r.pricePct.toFixed(1)}%)</span>
                       </div>
                     </div>
@@ -317,7 +317,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                         {r.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">1:{r.splitAdjusted} split</span>}
                       </span>
                       <div className="text-right">
-                        <span className="font-bold text-red-600">{formatCurrency(r.gainTRY)} ₺</span>
+                        <span className="font-bold text-red-600">{fmtSignedEUR0(r.gainEUR)}</span>
                         <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({r.pricePct.toFixed(1)}%)</span>
                       </div>
                     </div>
@@ -326,11 +326,11 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
               </div>
             )}
 
-            {snapshotPnLDelta !== null && (
+            {motorGainEUR !== null && (
               <div className="text-xs text-slate-500 dark:text-gray-400 pt-2 border-t border-slate-200 dark:border-gray-700">
-                Resmi snapshot kâr delta: <span className={`font-bold ${snapshotPnLDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>{snapshotPnLDelta >= 0 ? '+' : ''}{formatCurrency(snapshotPnLDelta)} ₺</span>
-                {Math.abs(snapshotPnLDelta - netAttribution) > 1000 && (
-                  <span className="ml-1 text-amber-600 dark:text-amber-400">(fark: split/yeni alım/satış etkisi)</span>
+                Resmi ay kârı (euro motoru): <span className={`font-bold ${motorGainEUR >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmtSignedEUR0(motorGainEUR)}</span>
+                {Math.abs(motorGainEUR - netAttribution) > 150 && (
+                  <span className="ml-1 text-amber-600 dark:text-amber-400">(pozisyon kırılımı yaklaşıktır: bugünkü adet, ay içi alım/satış, fiyat geçmişi)</span>
                 )}
               </div>
             )}
@@ -341,7 +341,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
             <div className="flex items-baseline justify-between">
               <h4 className="text-sm font-bold text-slate-700 dark:text-gray-200 uppercase tracking-wider">Portföye Eklenen Para</h4>
               <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
-                +{formatCurrency(totalDeposit)} ₺
+                +{fmtEUR0(totalDeposit)}
               </span>
             </div>
 
@@ -364,7 +364,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                       </div>
                     </div>
                     <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                      ≈ {formatCurrency(d.tryEquiv)} ₺
+                      ≈ {fmtEUR0(d.eurEquiv)}
                     </span>
                   </div>
                 ))}
@@ -380,11 +380,11 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                       <span className="text-sm font-semibold text-slate-700 dark:text-gray-200">
                         {w.currency} {Number(w.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                       </span>
-                      <span className="text-sm font-semibold text-rose-600">−{formatCurrency(w.tryEquiv)} ₺</span>
+                      <span className="text-sm font-semibold text-rose-600">−{fmtEUR0(w.eurEquiv)}</span>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-gray-400 mt-2">Toplam çekilen: <span className="font-bold text-rose-600">−{formatCurrency(totalWithdraw)} ₺</span></p>
+                <p className="text-xs text-slate-500 dark:text-gray-400 mt-2">Toplam çekilen: <span className="font-bold text-rose-600">−{fmtEUR0(totalWithdraw)}</span></p>
               </div>
             )}
 

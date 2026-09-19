@@ -15,11 +15,13 @@ describe('riskMetrics: deposit adjustment (hand-derived)', () => {
   // r2=(1100-1000-0)/1000=+0.10
   // r3=(2100-1100-1000)/1100=0   (pure deposit day → 0 gain)
   // r4=(1900-2100-0)/2100=-0.0952381
+  // 2026-09-19: computeRiskMetrics artık motorun günlük EUR serisini alır (gainEUR = akış-arındırılmış kazanç).
+  // Aynı el hesabı: d2 gain 100, d3 gain 0 (deposit günü), d4 gain −200.
   const snaps = [
-    { date: '2026-01-04', total_value: 1900, total_investment: 0, total_pnl: 0, pnl_percentage: 0, total_deposits: 1000, total_withdrawals: 0 },
-    { date: '2026-01-01', total_value: 1000, total_investment: 0, total_pnl: 0, pnl_percentage: 0, total_deposits: 0, total_withdrawals: 0 },
-    { date: '2026-01-03', total_value: 2100, total_investment: 0, total_pnl: 0, pnl_percentage: 0, total_deposits: 1000, total_withdrawals: 0 },
-    { date: '2026-01-02', total_value: 1100, total_investment: 0, total_pnl: 0, pnl_percentage: 0, total_deposits: 0, total_withdrawals: 0 },
+    { date: '2026-01-04', wealthEUR: 1900, gainEUR: -200 },
+    { date: '2026-01-01', wealthEUR: 1000, gainEUR: 0 },
+    { date: '2026-01-03', wealthEUR: 2100, gainEUR: 0 },
+    { date: '2026-01-02', wealthEUR: 1100, gainEUR: 100 },
   ];
   const m = computeRiskMetrics(snaps)!;
 
