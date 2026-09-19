@@ -29,6 +29,10 @@ import KarCuzdani from '../components/KarCuzdani';
 import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
 import HeroDashboard from '../components/HeroDashboard';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
+import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
+import { getEurDaily, type EurDaily } from '../services/eurPnlService';
+// Dinamik Maaş kart alt yazısı: sıfırın SEBEBİNİ göster (devreden açık) — hakem/tarama bulgusu
+const salaryLabel = (d: DynamicSalary) => d.carryInEUR < 0 ? `${d.monthLabel}: reel kâr ${d.realGainEUR >= 0 ? '+' : '−'}€${Math.round(Math.abs(d.realGainEUR))}, devreden açık −€${Math.round(Math.abs(d.carryInEUR))} → çekilebilir €${Math.round(d.withdrawableEUR)} × 0,85` : `${d.monthLabel} çekilebilir reel kârı × 0,85`;
 
 
 // Lazy loaded components (charts, modals - loaded on demand)
@@ -84,9 +88,13 @@ export default function HomePage() {
   });
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
   const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
+  const [inception, setInception] = useState<InceptionSummary | null>(null);
+  const [lastDay, setLastDay] = useState<EurDaily | null>(null);
 
   useEffect(() => {
     getDynamicSalary().then(setDynamic).catch(() => {});
+    getInceptionPnl().then(setInception).catch(() => {});
+    getEurDaily().then(d => setLastDay(d.length ? d[d.length - 1] : null)).catch(() => {});
   }, []);
 
   const {
@@ -149,7 +157,12 @@ export default function HomePage() {
                 dailyChangePct={livePnlData?.daily.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
                 dynamicSafeMaxUSD={dynamic?.salaryEUR}
-                dynamicSalaryLabel={dynamic ? `${dynamic.monthLabel} reel kârı × 0,85` : undefined}
+                dynamicSalaryLabel={dynamic ? salaryLabel(dynamic) : undefined}
+                inceptionGainEUR={inception?.totalGainEUR}
+                inceptionGainPct={inception?.totalGainPct}
+                todayGainEUR={lastDay?.gainEUR}
+                todayWealthEUR={lastDay?.wealthEUR}
+                todayDate={lastDay?.date}
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}
               />

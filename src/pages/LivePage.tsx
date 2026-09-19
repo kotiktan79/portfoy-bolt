@@ -17,6 +17,8 @@ import { TrendingUp, TrendingDown, RefreshCw, Wifi, Wallet, Gauge, ArrowUpRight,
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
+import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
+import { getEurDaily, type EurDaily } from '../services/eurPnlService';
 
 
 // Egress quota: 30s → 60s. Kiosk modda 24 saat açık kalırsa 30s'lik çevrim
@@ -50,6 +52,9 @@ export default function LivePage() {
   const [now, setNow] = useState(new Date());
   const [countdown, setCountdown] = useState(REFRESH_SEC);
   const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
+  const [inception, setInception] = useState<InceptionSummary | null>(null);
+  const [lastDay, setLastDay] = useState<EurDaily | null>(null);
+  const loadEur = () => { getInceptionPnl().then(setInception).catch(() => {}); getEurDaily().then(d => setLastDay(d.length ? d[d.length - 1] : null)).catch(() => {}); };
   const lastRefreshRef = useRef<Date>(new Date());
 
   // Saat tikleyici
@@ -66,6 +71,7 @@ export default function LivePage() {
           handleRefresh();
           lastRefreshRef.current = new Date();
           getDynamicSalary().then(setDynamic).catch(() => {});
+          loadEur();
           return REFRESH_SEC;
         }
         return c - 1;
@@ -75,14 +81,16 @@ export default function LivePage() {
   }, [handleRefresh]);
 
   // İlk yükleme dinamik veriler
-  useEffect(() => { getDynamicSalary().then(setDynamic).catch(() => {}); }, []);
+  useEffect(() => { getDynamicSalary().then(setDynamic).catch(() => {}); loadEur(); }, []);
 
   const m = useMemo(() => computePortfolioMetrics(holdings), [holdings]);
   const grandTotal = m.totalValueTRY + totalCashValue;
   const grandTotalUSD = m.fxRates.usd > 0 ? grandTotal / m.fxRates.usd : 0;
 
-  const dailyChange = livePnlData?.daily?.change ?? 0;
-  const dailyPct = livePnlData?.daily?.percentage ?? 0;
+  // 2026-09-19: 'Bugün' ve 'Toplam Kâr' EURO cetveli (motor). TL günlük değişim kur şişmesi taşıyordu.
+  void livePnlData;
+  const dailyChange = lastDay?.gainEUR ?? 0;
+  const dailyPct = lastDay && lastDay.wealthEUR - dailyChange > 0 ? (100 * dailyChange) / (lastDay.wealthEUR - dailyChange) : 0;
   const isPos = dailyChange >= 0;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
@@ -192,7 +200,7 @@ export default function LivePage() {
                 className={`tabular-nums ${isPos ? 'text-emerald-300' : 'text-rose-300'}`}
                 style={{ fontSize: 'clamp(0.7rem, 1vw, 1rem)' }}
               >
-                {isPos ? '+' : ''}₺{fmtTRY(dailyChange)} bugün
+                {isPos ? '+' : '−'}€{fmtUSD(Math.abs(dailyChange))} son gün{lastDay ? ` (${lastDay.date.slice(5).replace('-', '/')})` : ''}
               </span>
             </motion.div>
           </div>
@@ -241,14 +249,14 @@ export default function LivePage() {
         {/* KPI bandı 4'lü — mobilde 2x2, tablet+ 4'lü */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-5">
           {[
-            { label: 'Toplam Kâr', icon: DollarSign, color: 'emerald',
-              value: m.totalPnLPct, fmt: (n: number) => `+${n.toFixed(1)}%`, sub: `+₺${fmtTRY(m.totalPnLTRY)}` },
-            { label: 'Bugün', icon: isPos ? TrendingUp : TrendingDown, color: isPos ? 'emerald' : 'rose',
-              value: dailyChange, fmt: (n: number) => `${n >= 0 ? '+' : ''}₺${fmtTRY(n)}`, sub: `${(dailyPct).toFixed(2)}%` },
+            { label: 'Kuruluştan Bugüne Kâr', icon: DollarSign, color: (inception?.totalGainEUR ?? 0) >= 0 ? 'emerald' : 'rose',
+              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`, sub: `${(inception?.totalGainPct ?? 0) >= 0 ? '+' : ''}${(inception?.totalGainPct ?? 0).toFixed(1)}% · alış günü kuruyla` },
+            { label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: isPos ? 'emerald' : 'rose',
+              value: dailyChange, fmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`, sub: `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç` },
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },
             { label: 'Dinamik Maaş', icon: Gauge, color: 'gold',
-              value: dynamic?.salaryEUR ?? 0, fmt: (n: number) => `€${fmtUSD(n)}`, sub: dynamic ? `${dynamic.monthLabel} reel kârı × 0,85` : '/ay' },
+              value: dynamic?.salaryEUR ?? 0, fmt: (n: number) => `€${fmtUSD(n)}`, sub: dynamic ? (dynamic.carryInEUR < 0 ? `devreden açık −€${Math.round(Math.abs(dynamic.carryInEUR))} kapanınca başlar` : `${dynamic.monthLabel} çekilebilir × 0,85`) : '/ay' },
           ].map((card) => {
             const Icon = card.icon;
             const colors: Record<string, { text: string; border: string; bg: string; ic: string }> = {

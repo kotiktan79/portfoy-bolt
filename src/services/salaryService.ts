@@ -64,3 +64,12 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
   const available = last.withdrawableEUR * 1 - Math.max(0, withdrawnEUR - 0); // çekilebilir: son ayın devir-sonrası bakiyesi
   return { months: rows.length, fromLabel: rows[rows.length - 1].monthLabel, nominalEUR, inflationEUR, realEUR, withdrawnEUR, availableEUR: Math.max(0, available), deficitEUR: Math.max(0, -last.carryInEUR - Math.max(0, last.realGainEUR)) };
 }
+
+/** Bu ay şimdiye kadar (MTD): nominal kâr, enflasyon payı, devreden açık ve gelecek ay maaş ön izlemesi. */
+export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string }
+export async function getMonthToDate(): Promise<MonthToDate | null> {
+  const rows = await getEurMonths();
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const r = rows.find(x => x.month === thisMonth); if (!r) return null;
+  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate };
+}

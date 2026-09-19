@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Wallet, Gauge, AlertCircle } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
-import { getDynamicSalary, getSalaryAccrual, DynamicSalary, SalaryAccrual } from '../services/salaryService';
+import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
 //   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
@@ -18,6 +18,7 @@ const sgn = (n: number) => (n >= 0 ? '+' : '−');
 export default function KarCuzdani({ holdings }: Props) {
   const [salary, setSalary] = useState<DynamicSalary | null>(null);
   const [accrual, setAccrual] = useState<SalaryAccrual | null>(null);
+  const [mtd, setMtd] = useState<MonthToDate | null>(null);
   const [withdrawals, setWithdrawals] = useState<SalaryWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
@@ -27,11 +28,12 @@ export default function KarCuzdani({ holdings }: Props) {
   useEffect(() => { loadAll(); }, []);
   async function loadAll() {
     setLoading(true);
-    const [s, a, w] = await Promise.all([
+    const [s, a, w, m] = await Promise.all([
       getDynamicSalary(), getSalaryAccrual(),
       supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(20),
+      getMonthToDate(),
     ]);
-    setSalary(s); setAccrual(a); if (w.data) setWithdrawals(w.data);
+    setSalary(s); setAccrual(a); setMtd(m); if (w.data) setWithdrawals(w.data);
     setLoading(false);
   }
 
@@ -102,6 +104,13 @@ export default function KarCuzdani({ holdings }: Props) {
             <div><p className="text-slate-500 dark:text-gray-400">Kalan hak</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Portföy</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(portfolioEur)}</p></div>
           </div>
+          {mtd && (
+            <div className="mt-3 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-gray-300">
+              <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)} · enflasyon payı €{fmt(mtd.inflationEUR)} · reel {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}
+              {mtd.carryInEUR < 0 && <> · devreden açık −€{fmt(mtd.carryInEUR)} → kalan açık €{fmt(Math.min(0, mtd.carryInEUR + mtd.realGainEUR))}</>}
+              <br />→ <span className="font-semibold">gelecek ay maaş ön izlemesi: €{fmt(mtd.projectedSalaryEUR)}</span> (ay sonuna kadar değişir)
+            </div>
+          )}
           {accrual && (
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-3">
               {accrual.fromLabel}'dan beri {accrual.months} ay: kâr {sgn(accrual.nominalEUR)}€{fmt(accrual.nominalEUR)} − enflasyon €{fmt(accrual.inflationEUR)} = reel {sgn(accrual.realEUR)}€{fmt(accrual.realEUR)}

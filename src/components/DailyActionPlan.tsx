@@ -522,33 +522,8 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
             </div>
           )}
 
-          {/* Monthly Dynamic Salary - ALWAYS shown */}
-          {report.grandTotal > 5000 && (
-            <div className="p-3 rounded-xl bg-accent-50 dark:bg-accent-950/20 border border-accent-200 dark:border-accent-800">
-              <p className="text-[10px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-widest mb-2">Aylık Dinamik Maaş</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="text-center">
-                  <p className="text-[10px] text-accent-600">Güvenli (%2/yıl)</p>
-                  <p className="text-sm font-bold text-accent-700 dark:text-accent-300">{formatCurrency(report.grandTotal * 0.02 / 12)} ₺</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-accent-600">Dengeli (%4/yıl)</p>
-                  <p className="text-sm font-bold text-accent-700 dark:text-accent-300">{formatCurrency(report.grandTotal * 0.04 / 12)} ₺</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-accent-600">Büyüme (%6/yıl)</p>
-                  <p className="text-sm font-bold text-accent-700 dark:text-accent-300">{formatCurrency(report.grandTotal * 0.06 / 12)} ₺</p>
-                </div>
-              </div>
-              {(aiPlan as any)?.monthly_income?.description ? (
-                <p className="text-[11px] text-accent-600 dark:text-accent-400 mt-2">{(aiPlan as any).monthly_income.description}</p>
-              ) : (
-                <p className="text-[11px] text-accent-600 dark:text-accent-400 mt-2">
-                  Güvenli: portföy büyümeye devam eder. Dengeli: 25 yıl sürdürülebilir. Büyüme: kârdan çekim, anapara korunur.
-                </p>
-              )}
-            </div>
-          )}
+          {/* 2026-09-19: 'Aylık Dinamik Maaş' (servet × %2/%4/%6) KALDIRILDI — maaş tek yerden: Kâr Cüzdanı (euro motoru).
+              Bu blok ₺23.300/ay gösterip Kâr Cüzdanı'nın €0'ıyla çelişiyordu. */}
 
           {/* AI Wealth Building Tip */}
           {aiPlan && (aiPlan as any).wealth_building_tip && (
