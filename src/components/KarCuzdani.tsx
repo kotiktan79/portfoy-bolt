@@ -35,10 +35,11 @@ export default function KarCuzdani({ holdings }: Props) {
     try {
       const [s, a, w, m] = await Promise.all([
         getDynamicSalary(), getSalaryAccrual(),
-        supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(20),
+        supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(200),
         getMonthToDate(),
       ]);
-      setSalary(s); setAccrual(a); setMtd(m); if (w.data) setWithdrawals(w.data);
+      if (w.error) throw new Error(`salary_withdrawals: ${w.error.message}`);   // 'çekilen €0' sahte olgusu yasak
+      setSalary(s); setAccrual(a); setMtd(m); setWithdrawals(w.data || []);
     } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : 'veri yüklenemedi');   // motor hatası: rakam gösterme
     } finally {

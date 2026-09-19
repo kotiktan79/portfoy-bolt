@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
+import { dayPct } from '../lib/eurPnl';
 import { TrendingUp, TrendingDown, Wallet, Gauge, Coins, ArrowUpRight } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
@@ -20,6 +21,7 @@ interface HeroDashboardProps {
   inceptionGainPct?: number;
   todayGainEUR?: number;
   prevWealthEUR?: number;      // önceki snapshot günü serveti — günlük % TABANI (LivePage/cron/risk-monitor ile aynı)
+  eurState?: 'loading' | 'ok' | 'error';   // motor verisi: yüklenirken 'hesaplanıyor…', hatada 'veri yüklenemedi'
   todayDate?: string;
   totalPnLTRY?: number;
   totalPnLPct?: number;
@@ -91,6 +93,7 @@ export default function HeroDashboard({
   inceptionGainPct,
   todayGainEUR,
   prevWealthEUR,
+  eurState = 'ok',
   todayDate,
   totalPnLTRY,
   totalPnLPct,
@@ -107,7 +110,8 @@ export default function HeroDashboard({
   const gainPct = inceptionGainPct ?? 0;
   const todayEUR = todayGainEUR ?? 0;
   // Taban = önceki günün serveti. 'todayWealth − gain' akış günlerinde akış kadar sapıyordu (hakem 2026-09-19).
-  const todayPct = prevWealthEUR && prevWealthEUR > 0 ? (100 * todayEUR) / prevWealthEUR : 0;
+  const todayPct = dayPct(todayEUR, prevWealthEUR);
+  const missingNote = eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…';
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
@@ -233,7 +237,7 @@ export default function HeroDashboard({
             label: 'Kuruluştan Bugüne Kâr', icon: Coins, accent: inceptionGainEUR === undefined ? 'gold' : gainEUR >= 0 ? 'emerald' : 'rose',
             valueRaw: gainEUR,
             valueFmt: (n: number) => inceptionGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: inceptionGainEUR === undefined ? 'veri yüklenemedi' : `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
+            subtitle: inceptionGainEUR === undefined ? missingNote : `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
             symbol: '✦',
           },
           {
@@ -241,7 +245,7 @@ export default function HeroDashboard({
             accent: todayGainEUR === undefined ? 'gold' : isPos ? 'emerald' : 'rose',
             valueRaw: todayEUR,
             valueFmt: (n: number) => todayGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: todayGainEUR === undefined ? 'veri yüklenemedi' : `${isPos ? '+' : ''}${todayPct.toFixed(2)}% · euro servet, para hariç · taban dünkü servet`,
+            subtitle: todayGainEUR === undefined ? missingNote : `${isPos ? '+' : ''}${todayPct.toFixed(2)}% · euro servet, para hariç · taban dünkü servet`,
             symbol: isPos ? '↗' : '↘',
           },
           {
@@ -253,11 +257,11 @@ export default function HeroDashboard({
             symbol: '◈',
           },
           {
-            label: 'Dinamik Maaş', icon: Gauge, accent: 'terra',
+            label: 'Dinamik Maaş', icon: Gauge, accent: dynamicSafeMaxUSD === undefined ? 'gold' : 'terra',
             valueRaw: dynamicSafeMaxUSD ?? 0,
-            valueFmt: (n: number) => `€${fmtUSD(n)}`,
-            valueSuffix: '/ay',
-            subtitle: dynamicSalaryLabel ?? 'geçen ayın kârı × 0,85',
+            valueFmt: (n: number) => dynamicSafeMaxUSD === undefined ? '—' : `€${fmtUSD(n)}`,
+            valueSuffix: dynamicSafeMaxUSD === undefined ? '' : '/ay',
+            subtitle: dynamicSafeMaxUSD === undefined ? missingNote : (dynamicSalaryLabel ?? 'geçen ayın çekilebilir reel kârı × 0,85'),
             symbol: '✧',
           },
         ].map((card) => {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, ArrowDownToLine, Calendar } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
+import { ymInTZ, prevYMOf } from '../lib/eurPnl';
 import { getEurMonths, RELIABLE_FROM } from '../services/eurPnlService';
 import { fmtEUR0, fmtSignedEUR0 } from '../lib/chartTheme';
 // 2026-09-19 gece: EURO cetveli. Pozisyon katkısı = ay sonu € değeri − ay başı € değeri (o günlerin kurlarıyla)
@@ -67,10 +68,8 @@ function prevMonth(ym: string): string {
 }
 
 export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  // Ay sınırı tek kural: kullanıcının saat dilimi (lib/eurPnl ymInTZ) — tarayıcı TZ'siyle ekranlar ayrışmasın
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => ymInTZ());
   const [prices, setPrices] = useState<PricePoint[]>([]);
   const [cashTx, setCashTx] = useState<CashTx[]>([]);
   const [motorGainEUR, setMotorGainEUR] = useState<number | null>(null);
@@ -213,12 +212,11 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
 
   // Month seçici için son 12 ay
   const monthOptions = useMemo(() => {
-    const now = new Date();
     const out: string[] = [];
+    let ym = ymInTZ();
     for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (ym >= RELIABLE_FROM.slice(0, 7)) out.push(ym);   // kur serisi öncesi aylar yok
+      ym = prevYMOf(ym);
     }
     return out;
   }, []);

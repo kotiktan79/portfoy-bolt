@@ -91,11 +91,15 @@ export default function HomePage() {
   const [inception, setInception] = useState<InceptionSummary | null>(null);
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
+  const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
 
   useEffect(() => {
-    getDynamicSalary().then(setDynamic).catch(() => {});
-    getInceptionPnl().then(setInception).catch(() => {});
-    getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {});
+    // Motor verisi tek durumda izlenir: yüklenirken '…', hata olursa '—' + 'veri yüklenemedi' (asla sahte €0)
+    Promise.all([
+      getDynamicSalary().then(setDynamic),
+      getInceptionPnl().then(setInception),
+      getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }),
+    ]).then(() => setEurState('ok')).catch(() => setEurState('error'));
   }, []);
 
   const {
@@ -163,6 +167,7 @@ export default function HomePage() {
                 inceptionGainPct={inception?.totalGainPct}
                 todayGainEUR={lastDay?.gainEUR}
                 prevWealthEUR={prevDay?.wealthEUR}
+                eurState={eurState}
                 todayDate={lastDay?.date}
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}

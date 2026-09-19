@@ -19,6 +19,7 @@ import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
 import { getEurDaily, type EurDaily } from '../services/eurPnlService';
+import { dayPct } from '../lib/eurPnl';
 
 
 // Egress quota: 30s → 60s. Kiosk modda 24 saat açık kalırsa 30s'lik çevrim
@@ -55,7 +56,13 @@ export default function LivePage() {
   const [inception, setInception] = useState<InceptionSummary | null>(null);
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
-  const loadEur = () => { getInceptionPnl().then(setInception).catch(() => {}); getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {}); };
+  const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const loadEur = () => {
+    Promise.all([
+      getInceptionPnl().then(setInception),
+      getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }),
+    ]).then(() => setEurState('ok')).catch(() => setEurState('error'));
+  };
   const lastRefreshRef = useRef<Date>(new Date());
 
   // Saat tikleyici
@@ -92,7 +99,7 @@ export default function LivePage() {
   void livePnlData;
   const dailyChange = lastDay?.gainEUR ?? 0;
   // Taban = önceki snapshot günü serveti (cron summarizeEur / risk-monitor ile aynı; akış günlerinde 'servet − kâr' farklı çıkıyordu)
-  const dailyPct = prevDay && prevDay.wealthEUR > 0 ? (100 * dailyChange) / prevDay.wealthEUR : 0;
+  const dailyPct = dayPct(dailyChange, prevDay?.wealthEUR);
   const isPos = dailyChange >= 0;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
@@ -202,7 +209,7 @@ export default function LivePage() {
                 className={`tabular-nums ${isPos ? 'text-emerald-300' : 'text-rose-300'}`}
                 style={{ fontSize: 'clamp(0.7rem, 1vw, 1rem)' }}
               >
-                {lastDay ? `${isPos ? '+' : '−'}€${fmtUSD(Math.abs(dailyChange))} son gün (${lastDay.date.slice(5).replace('-', '/')})` : 'veri yüklenemedi'}
+                {lastDay ? `${isPos ? '+' : '−'}€${fmtUSD(Math.abs(dailyChange))} son gün (${lastDay.date.slice(5).replace('-', '/')})` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…')}
               </span>
             </motion.div>
           </div>
@@ -253,9 +260,9 @@ export default function LivePage() {
           {[
             // Veri gelmediyse '—': '+€0' bir olgu gibi okunur (hakem 2026-09-19)
             { label: 'Kuruluştan Bugüne Kâr', icon: DollarSign, color: !inception ? 'gold' : inception.totalGainEUR >= 0 ? 'emerald' : 'rose',
-              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => inception ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: inception ? `${inception.totalGainPct >= 0 ? '+' : ''}${inception.totalGainPct.toFixed(1)}% · alış günü kuruyla` : 'veri yüklenemedi' },
+              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => inception ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: inception ? `${inception.totalGainPct >= 0 ? '+' : ''}${inception.totalGainPct.toFixed(1)}% · alış günü kuruyla` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
             { label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: !lastDay ? 'gold' : isPos ? 'emerald' : 'rose',
-              value: dailyChange, fmt: (n: number) => lastDay ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç · taban dünkü servet` : 'veri yüklenemedi' },
+              value: dailyChange, fmt: (n: number) => lastDay ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç · taban dünkü servet` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },
             { label: 'Dinamik Maaş', icon: Gauge, color: 'gold',

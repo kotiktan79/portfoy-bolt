@@ -14,7 +14,7 @@ const dailyRows = (rows: Array<{ day: string; rate: number }> | null) => (rows |
 
 /** PostgREST max_rows=1000 tavanını sayfalayarak aşar (.range tek başına YETMEZ — tavan sunucuda).
  *  Hata fırlatır: sessizce yarım seriyle yanlış kâr hesaplamaktansa ekran boş kalsın (çağıranlar catch eder). */
-async function fetchAll<T>(name: string, build: () => any): Promise<T[]> {
+export async function fetchAll<T>(name: string, build: () => any): Promise<T[]> {
   // Sunucu max_rows'u ROW_CAP'ten KÜÇÜK olabilir → 'kısa sayfa = bitti' varsayımı seriyi sessizce yarım bırakır.
   // Bu yüzden boş sayfa görene kadar devam edilir (fazladan tek istek, karşılığında kesilme riski yok).
   const out: T[] = [];

@@ -96,7 +96,7 @@ describe('buildEurModel + summarizeEur (ham satır → model, uygulama = cron)',
   });
 });
 
-import { ymInTZ, prevYMOf, dayInTZ } from './eurPnl';
+import { ymInTZ, prevYMOf, dayInTZ, dayPct } from './eurPnl';
 
 describe('ay/gün sınırı (kullanıcının saat dilimi)', () => {
   it('1 Ekim 02:00 Bükreş (= 30 Eylül 23:00 UTC) yeni aydır', () => {
@@ -132,5 +132,14 @@ describe('günlük yüzde tabanı = önceki günün serveti (akış olan gün)',
     expect(s.prevWealthEUR).toBeCloseTo(100_000, 6);
     expect(s.dayGainPct).toBeCloseTo(0.5, 6);           // 500 / 100.000 (taban dünkü servet)
     expect(500 / (s.wealthEUR - s.dayGainEUR) * 100).toBeCloseTo(0.4545, 3);  // eski taban olsaydı: yanlış
+  });
+});
+
+describe('dayPct — tek taban kuralı (ekran ve cron aynı fonksiyonu kullanır)', () => {
+  it('taban yoksa 0, taban varsa gain/prevWealth', () => {
+    expect(dayPct(500, undefined)).toBe(0);
+    expect(dayPct(500, 0)).toBe(0);
+    expect(dayPct(500, 100_000)).toBeCloseTo(0.5, 9);
+    expect(dayPct(-210, 148_281)).toBeCloseTo(-0.1416, 4);
   });
 });

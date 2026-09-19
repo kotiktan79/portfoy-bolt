@@ -45,14 +45,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`Hafta penceresinde snapshot yok (son ${last}) — rakam yayınlanmadı`);
       return res.status(200).json({ success: false, log });
     }
-    const inWeek = daily.filter(d => d.date >= weekStartStr && d.date < todayStr);
-    const base = idx > 0 ? daily[idx - 1].wealthEUR : daily[0].wealthEUR;
+    const inWeek = daily.filter(d => d.date >= weekStartStr && d.date < todayStr);   // idx >= 0 olduğu için en az 1 eleman
+    const base = idx > 0 ? daily[idx - 1].wealthEUR : daily[0].wealthEUR;             // taban: pencereden önceki gün (idx=0 ise serinin ilk günü)
     const weekGainEUR = (idx === 0 ? inWeek.slice(1) : inWeek).reduce((s, d) => s + d.gainEUR, 0);
     const weekGainPct = base > 0 ? (weekGainEUR / base) * 100 : 0;
-    const wealthEUR = inWeek.length ? inWeek[inWeek.length - 1].wealthEUR : daily[daily.length - 1].wealthEUR;
-    const weekEndLabel = inWeek.length ? inWeek[inWeek.length - 1].date : daily[daily.length - 1].date;   // veri son snapshot gününde (Pazar) biter; cron Pazartesi çalışır
-    const eurRateNow = (inWeek.length ? inWeek[inWeek.length - 1].eurRate : daily[daily.length - 1].eurRate) || 0;
-    const toEUR = (tl: number) => (eurRateNow > 0 ? tl / eurRateNow : 0);
+    const last = inWeek[inWeek.length - 1];
+    const wealthEUR = last.wealthEUR;
+    const weekEndLabel = last.date;   // veri son snapshot gününde (Pazar) biter; cron Pazartesi çalışır
+    const eurRateNow = last.eurRate || 0;
+    if (!(eurRateNow > 0)) {
+      await sendTelegram('⚠️ <b>Haftalık</b>\nEUR kuru okunamadı — hafta raporu atlandı.');
+      log.push('EUR kuru 0 — rapor yayınlanmadı');
+      return res.status(200).json({ success: false, log });
+    }
+    const toEUR = (tl: number) => tl / eurRateNow;
 
     // Holdings: bu hafta en iyi/kötü
     // Yerel para NOMİNAL % (TL pozisyonlarda kur/enflasyon düşülmemiş) — EUR bazlı pozisyon K/Z ayrı iş
@@ -69,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('income_records')
       .select('income_type, source_symbol, amount_try, income_date')
       .gte('income_date', weekStartStr)
+      .lt('income_date', todayStr)      // kâr penceresiyle aynı aralık
       .eq('is_projected', false);
     const weekIncomeEUR = toEUR((incomes || []).reduce((s, r) => s + (Number(r.amount_try) || 0), 0));
     const breakdownMap = new Map<string, number>();

@@ -38,6 +38,7 @@ export function prevYMOf(ym: string): string {
 /** Bir anın kullanıcı saat dilimindeki YYYY-AA-GG'si */
 export function dayInTZ(d: Date | string, tz: string = TZ): string {
   const dt = typeof d === 'string' ? new Date(d) : d;
+  if (Number.isNaN(dt.getTime())) return '';     // bozuk tarih render'ı çökertmesin
   const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dt);
   const g = (t: string) => p.find(x => x.type === t)!.value;
   return `${g('year')}-${g('month')}-${g('day')}`;
@@ -78,6 +79,10 @@ export function eurGainBetween(
   const flowTRY = (b.totalInvestment - a.totalInvestment) - (opts.fxDriftTRY || 0) - (opts.realizedTRY || 0);
   return wealth - flowTRY / eb;
 }
+
+/** Günlük yüzde: TABAN = önceki snapshot gününün serveti. Ekran, cron ve e-posta bunu kullanır. */
+export const dayPct = (gainEUR: number, prevWealthEUR: number | undefined) =>
+  prevWealthEUR && prevWealthEUR > 0 ? (100 * gainEUR) / prevWealthEUR : 0;
 
 export interface DailyGain { date: string; gainEUR: number; wealthEUR: number }
 
@@ -242,7 +247,7 @@ export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
   const d = model.daily; const n = d.length;
   const last = n ? d[n - 1] : null; const prev = n > 1 ? d[n - 2] : null;
   const dayGainEUR = last ? last.gainEUR : 0;
-  const dayGainPct = prev && prev.wealthEUR > 0 ? (dayGainEUR / prev.wealthEUR) * 100 : 0;
+  const dayGainPct = dayPct(dayGainEUR, prev?.wealthEUR);
   let weekGainEUR = 0, weekBase = 0;
   if (last) {
     const from = new Date(last.date + 'T00:00:00Z'); from.setUTCDate(from.getUTCDate() - 7);
