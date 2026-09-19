@@ -32,7 +32,11 @@ async function load() {
     if (!byDay.has(s.snapshot_date) && Number(s.total_value) > 0)
       byDay.set(s.snapshot_date, { date: s.snapshot_date, totalValue: Number(s.total_value), totalInvestment: Number(s.total_investment) || 0 });
   }
-  const snaps = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
+  // GÜVENİLİR BAŞLANGIÇ (2026-09-19, kullanıcı "kaldır"): USD kur serisi 6 Nisan 2026'da
+  // başlıyor; öncesi kur hareketi sıfır varsayılırdı → Şubat/Mart satırları yaklaşıktı.
+  // Nisan'dan itibaren üç kaynakla (snapshot, pozisyonlar, piyasa) doğrulandı; öncesi gösterilmez.
+  const RELIABLE_FROM = '2026-04-01';
+  const snaps = Array.from(byDay.values()).filter(s => s.date >= RELIABLE_FROM).sort((a, b) => a.date.localeCompare(b.date));
 
 
   // gün → en son kur (Nisan-2026 öncesi kur yok → seri ilk değere düşer; panelle aynı varsayım)

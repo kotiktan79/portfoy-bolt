@@ -113,12 +113,12 @@ export function DailyMonthlyPnL() {
             <div>
               {renderPeriod(monthly)}
               {monthly.length > 0 && (() => {
-                const rows = monthly.filter(m => m.key >= '2026-03');
+                const rows = monthly.filter(m => m.key >= '2026-04');
                 const tot = rows.reduce((s, m) => s + m.gainUSD, 0);
                 const posM = rows.filter(m => m.gainUSD > 0).length;
                 return (
                   <div className="p-5 bg-slate-50 dark:bg-gray-900/30 border-t border-slate-200 dark:border-gray-700">
-                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-2">📈 Toplam (Mart 2026'dan beri, {rows.length} ay)</p>
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-2">📈 Toplam (Nisan 2026'dan beri, {rows.length} ay)</p>
                     <div className="flex items-baseline gap-4">
                       <p className={`text-2xl font-bold ${tot >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{fmtUsd(tot)}</p>
                       <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posM}/{rows.length} ay kâr</p>
