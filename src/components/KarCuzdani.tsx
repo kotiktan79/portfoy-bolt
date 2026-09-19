@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Wallet, Gauge, AlertCircle } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
-import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
+import { getDynamicSalary, getSalaryAccrual, DynamicSalary, SalaryAccrual } from '../services/salaryService';
 
 // KÂR CÜZDANI — TEK ÖLÇÜ (2026-09-19, kullanıcı kararı, KESİN)
 //   Bu ayın maaşı = GEÇEN AYIN KÂRI × 0,85  (salaryService, "Kar/Zarar Geçmişi → Aylık" ile aynı)
@@ -29,6 +29,7 @@ const fmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 
 
 export default function KarCuzdani({ holdings }: Props) {
   const [salary, setSalary] = useState<DynamicSalary | null>(null);
+  const [accrual, setAccrual] = useState<SalaryAccrual | null>(null);
   const [withdrawals, setWithdrawals] = useState<SalaryWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
@@ -39,11 +40,13 @@ export default function KarCuzdani({ holdings }: Props) {
 
   async function loadAll() {
     setLoading(true);
-    const [s, w] = await Promise.all([
+    const [s, w, a] = await Promise.all([
       getDynamicSalary(),
       supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(20),
+      getSalaryAccrual(),
     ]);
     setSalary(s);
+    setAccrual(a);
     if (w.data) setWithdrawals(w.data);
     setLoading(false);
   }
@@ -60,7 +63,9 @@ export default function KarCuzdani({ holdings }: Props) {
     .filter(w => String(w.withdrawn_at).slice(0, 7) === monthKey)
     .reduce((sum, w) => sum + Number(w.amount_usd), 0);
   const salaryUsd = salary?.salaryUSD ?? 0;
-  const remainingUsd = Math.max(0, salaryUsd - withdrawnThisMonthUsd);
+  // Çekilebilir = birikmiş hak (Mart'tan beri tüm ayların maaşları − tüm çekimler).
+  // Bu ayın maaşı bilgi; hak birikir, çekmediğin ay kaybolmaz.
+  const remainingUsd = accrual ? accrual.availableUSD : Math.max(0, salaryUsd - withdrawnThisMonthUsd);
   const amount = Math.min(remainingUsd, Math.max(0, parseFloat(amountInput) || remainingUsd));
 
   // Likit kaynaklar
@@ -159,14 +164,23 @@ export default function KarCuzdani({ holdings }: Props) {
 
       <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2">
-          <div className="grid grid-cols-3 gap-3 text-xs">
+          <p className="text-xs text-slate-500 dark:text-gray-400 uppercase tracking-wide mb-1">💰 Birikmiş Çekilmemiş Hak</p>
+          <p className={`text-4xl font-bold ${remainingUsd > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-gray-500'}`}>
+            ${fmt(remainingUsd)}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+            {accrual
+              ? `${accrual.fromLabel}'tan beri ${accrual.months} ayın maaşları $${fmt(accrual.earnedUSD)} − çekilen $${fmt(accrual.withdrawnUSD)}`
+              : 'Geçmiş aylar hesaplanıyor…'}
+          </p>
+          <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
             <div>
               <p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p>
               <p className="font-bold text-gray-900 dark:text-white">${fmt(withdrawnThisMonthUsd)}</p>
             </div>
             <div>
-              <p className="text-slate-500 dark:text-gray-400">Kalan hak</p>
-              <p className="font-bold text-emerald-600 dark:text-emerald-400">${fmt(remainingUsd)}</p>
+              <p className="text-slate-500 dark:text-gray-400">Toplam çekilen</p>
+              <p className="font-bold text-gray-900 dark:text-white">${fmt(accrual?.withdrawnUSD ?? 0)}</p>
             </div>
             <div>
               <p className="text-slate-500 dark:text-gray-400">Portföy</p>
@@ -176,7 +190,7 @@ export default function KarCuzdani({ holdings }: Props) {
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
             <AlertCircle size={14} className="text-slate-500 dark:text-gray-400 mt-0.5 shrink-0" />
             <p className="text-[11px] text-slate-600 dark:text-gray-300">
-              Kural: geçen ay kâr varsa %85'i bu ayın maaşı, kâr yoksa 0. Bol ayın fazlasını yastığa koy, sıfır ayda oradan harca.
+              Kural: her ay kâr varsa %85'i o ayın maaşı, kâr yoksa 0. Çekmediğin hak birikir, kaybolmaz; sıfır ayda birikmişten çek.
             </p>
           </div>
         </div>
@@ -194,7 +208,7 @@ export default function KarCuzdani({ holdings }: Props) {
               className="w-full px-2 py-1 text-xl font-bold bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded"
             />
           </div>
-          <p className="text-[10px] text-slate-500 dark:text-gray-400 mb-2">Boş bırakırsan kalan hakkın tamamı (${fmt(remainingUsd)}).</p>
+          <p className="text-[10px] text-slate-500 dark:text-gray-400 mb-2">Boş bırakırsan birikmiş hakkın tamamı (${fmt(remainingUsd)}).</p>
 
           {canWithdraw && cashSources.length > 0 && (
             <div className="mb-2">
@@ -236,7 +250,7 @@ export default function KarCuzdani({ holdings }: Props) {
                 ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md'
                 : 'bg-slate-200 dark:bg-gray-700 text-slate-400 dark:text-gray-500 cursor-not-allowed'}`}
             >
-              {!canWithdraw ? 'Bu ay hak yok' : !sourceSufficient ? `Kaynak yetersiz (${selectedSource?.ccyDisplay})` : `💸 $${fmt(amount)} Çek`}
+              {!canWithdraw ? 'Birikmiş hak yok' : !sourceSufficient ? `Kaynak yetersiz (${selectedSource?.ccyDisplay})` : `💸 $${fmt(amount)} Çek`}
             </button>
           )}
         </div>

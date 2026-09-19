@@ -177,3 +177,34 @@ export async function getMonthlySalarySeries(months: number = 12): Promise<Month
     return [];
   }
 }
+
+// ---- Birikmiş hak: geçmiş ayların maaşları − çekilenler ----
+// Başlangıç 2026-03: günlük kayıt 10 Şubat'ta başlıyor, Şubat'ın kendisi kurulum
+// gürültüsü (20 Şubat'ta pozisyon girişi) → Şubat ve öncesi sayılmaz.
+export const ACCRUAL_START_MONTH = '2026-03';
+
+export interface SalaryAccrual {
+  earnedUSD: number;        // ACCRUAL_START_MONTH'tan geçen tam aya kadar maaş hakları toplamı
+  withdrawnUSD: number;     // salary_withdrawals toplamı (tüm zamanlar)
+  availableUSD: number;     // earned − withdrawn (≥0)
+  months: number;           // sayılan ay adedi
+  fromLabel: string;
+}
+
+export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
+  try {
+    const [series, wdRes] = await Promise.all([
+      getMonthlySalarySeries(36),
+      supabase.from('salary_withdrawals').select('amount_usd'),
+    ]);
+    const rows = series.filter(r => r.month >= ACCRUAL_START_MONTH);
+    if (!rows.length) return null;
+    const earnedUSD = rows.reduce((s, r) => s + r.salaryUSD, 0);
+    const withdrawnUSD = (wdRes.data || []).reduce((s, w) => s + (Number(w.amount_usd) || 0), 0);
+    const first = rows[rows.length - 1]; // seri yeniden eskiye sıralı
+    return { earnedUSD, withdrawnUSD, availableUSD: Math.max(0, earnedUSD - withdrawnUSD), months: rows.length, fromLabel: first.monthLabel };
+  } catch (e) {
+    console.error('getSalaryAccrual error:', e);
+    return null;
+  }
+}
