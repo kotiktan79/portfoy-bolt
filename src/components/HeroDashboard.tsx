@@ -236,7 +236,7 @@ export default function HeroDashboard({
           {
             label: 'Dinamik Maaş', icon: Gauge, accent: 'terra',
             valueRaw: dynamicSafeMaxUSD ?? 0,
-            valueFmt: (n: number) => `$${fmtUSD(n)}`,
+            valueFmt: (n: number) => `€${fmtUSD(n)}`,
             valueSuffix: '/ay',
             subtitle: dynamicSalaryLabel ?? 'geçen ayın kârı × 0,85',
             symbol: '✧',

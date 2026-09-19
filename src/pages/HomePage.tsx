@@ -148,8 +148,8 @@ export default function HomePage() {
                 dailyChange={livePnlData?.daily.change}
                 dailyChangePct={livePnlData?.daily.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
-                dynamicSafeMaxUSD={dynamic?.salaryUSD}
-                dynamicSalaryLabel={dynamic ? `${dynamic.monthLabel} kârı × 0,85` : undefined}
+                dynamicSafeMaxUSD={dynamic?.salaryEUR}
+                dynamicSalaryLabel={dynamic ? `${dynamic.monthLabel} reel kârı × 0,85` : undefined}
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}
               />

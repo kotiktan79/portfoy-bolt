@@ -248,7 +248,7 @@ export default function LivePage() {
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },
             { label: 'Dinamik Maaş', icon: Gauge, color: 'gold',
-              value: dynamic?.salaryUSD ?? 0, fmt: (n: number) => `$${fmtUSD(n)}`, sub: dynamic ? `${dynamic.monthLabel} kârı × 0,85` : '/ay' },
+              value: dynamic?.salaryEUR ?? 0, fmt: (n: number) => `€${fmtUSD(n)}`, sub: dynamic ? `${dynamic.monthLabel} reel kârı × 0,85` : '/ay' },
           ].map((card) => {
             const Icon = card.icon;
             const colors: Record<string, { text: string; border: string; bg: string; ic: string }> = {

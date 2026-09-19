@@ -1,66 +1,66 @@
-// DİNAMİK MAAŞ — TEK ÖLÇÜ (2026-09-19, kullanıcı kararı "tutarlı istiyorum")
+// DİNAMİK MAAŞ — TEK ÖLÇÜ, EUR (2026-09-19 gece, standart araştırması + kullanıcı kararı "tek euro")
 //
-//   bu ayın maaşı = GEÇEN AYIN DOLAR KÂRI × 0,85
-//   birikmiş hak  = (Mart 2026'dan geçen aya kadar NET dolar kâr) × 0,85 − çekilenler
+//   bu ayın maaşı = geçen ayın ÇEKİLEBİLİR reel EUR kârı × 0,85
+//   çekilebilir   = max(0, devreden açık + (nominal kâr − enflasyon payı))
+//   nominal kâr   = euro servet artışı − dış akış (lib/eurPnl.ts; 4 bağımsız denetçi ±€40 içinde doğruladı)
 //
-// Kâr = dolar servetin artışı (yeni para hariç) — Kar/Zarar Geçmişi ile AYNI motor
-// (lib/usdPnl.ts + services/usdPnlService.ts). Zarar aylar birikmişten düşer (ana
-// paraya dokunulmaz). Kur hareketi kâr sayılmaz. Başka formül eklemeyin.
+// Dayanak: GIPS (dönem kârı = servet farkı − akış), IAS 21 §9 (fonksiyonel para = harcanan para = EUR),
+// IAS 29 (TL hiperenflasyonist), CF 8.7 (enflasyonu aşan kısım kârdır). Zarar devri: ana paraya dokunulmaz.
+// Başka formül EKLEMEYİN. Değiştirmek gerekirse önce kullanıcıya tek cümleyle sorun.
 
 import { supabase } from '../lib/supabase';
-import { getUsdPeriods } from './usdPnlService';
-
-export const SALARY_SAFETY = 0.85;
-export const ACCRUAL_START_MONTH = '2026-04';   // Mart doğrulanamıyor (pozisyon fiyat kaydı 6 Nisan'da başlıyor); Nisan'dan itibaren
-
-const MONTHS_TR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-const label = (ym: string) => `${MONTHS_TR[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+import { getEurMonths, monthLabel, RELIABLE_FROM, INFLATION_EUR } from './eurPnlService';
+import type { MonthRow } from '../lib/eurPnl';
+export { SALARY_SAFETY } from '../lib/eurPnl';
+export const ACCRUAL_START_MONTH = RELIABLE_FROM.slice(0, 7);
+export { INFLATION_EUR };
 
 export interface DynamicSalary {
   month: string; monthLabel: string;
-  profitUSD: number;        // geçen ayın dolar kârı
-  salaryUSD: number;        // × 0,85, eksi ise 0
-  startWealthUSD: number; endWealthUSD: number;
-  realizedTRY: number;
+  profitEUR: number;          // geçen ayın nominal kârı
+  inflationEUR: number;       // sermaye koruma payı
+  realGainEUR: number;
+  carryInEUR: number;         // devreden açık (≤0)
+  withdrawableEUR: number;
+  salaryEUR: number;          // × 0,85
+  startWealthEUR: number; endWealthEUR: number;
 }
-
-export interface MonthlySalaryRow {
-  month: string; monthLabel: string;
-  profitUSD: number; salaryUSD: number;
-  startWealthUSD: number; endWealthUSD: number; gapDays: number; realizedTRY: number;
-}
+export type MonthlySalaryRow = DynamicSalary & { gapDays: number };
 
 export interface SalaryAccrual {
-  netProfitUSD: number; earnedUSD: number; withdrawnUSD: number;
-  availableUSD: number; deficitUSD: number; months: number; fromLabel: string;
+  months: number; fromLabel: string;
+  nominalEUR: number; inflationEUR: number; realEUR: number;
+  withdrawnEUR: number; availableEUR: number; deficitEUR: number;
 }
 
-export async function getMonthlySalarySeries(months: number = 12): Promise<MonthlySalaryRow[]> {
-  const periods = await getUsdPeriods('monthly');
+const toRow = (r: MonthRow): DynamicSalary => ({
+  month: r.month, monthLabel: monthLabel(r.month), profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
+  carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
+});
+
+export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalaryRow[]> {
+  const rows = await getEurMonths();
   const thisMonth = new Date().toISOString().slice(0, 7);
-  return periods
-    .filter(p => p.key < thisMonth)              // bu ay bitmedi
-    .map(p => ({
-      month: p.key, monthLabel: label(p.key),
-      profitUSD: p.gainUSD, salaryUSD: Math.max(0, p.gainUSD * SALARY_SAFETY),
-      startWealthUSD: p.startWealthUSD, endWealthUSD: p.endWealthUSD, gapDays: p.gapDays, realizedTRY: p.realizedTRY,
-    }))
-    .slice(-months).reverse();
+  return rows.filter(r => r.month < thisMonth).map(r => ({
+    ...toRow(r),
+    gapDays: Math.round((new Date(r.lastDate + 'T00:00:00').getTime() - new Date(r.firstDate + 'T00:00:00').getTime()) / 86400000),
+  })).slice(-months).reverse();
 }
 
 export async function getDynamicSalary(): Promise<DynamicSalary | null> {
-  const rows = await getMonthlySalarySeries(2);
-  const r = rows[0]; if (!r) return null;
-  return { month: r.month, monthLabel: r.monthLabel, profitUSD: r.profitUSD, salaryUSD: r.salaryUSD, startWealthUSD: r.startWealthUSD, endWealthUSD: r.endWealthUSD, realizedTRY: r.realizedTRY };
+  const rows = await getMonthlySalarySeries(1);
+  return rows[0] || null;
 }
 
 export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
-  const [series, wdRes] = await Promise.all([getMonthlySalarySeries(36), supabase.from('salary_withdrawals').select('amount_usd')]);
-  const rows = series.filter(r => r.month >= ACCRUAL_START_MONTH);
+  const [rows, wdRes] = await Promise.all([getMonthlySalarySeries(36), supabase.from('salary_withdrawals').select('amount_usd,withdrawn_at')]);
   if (!rows.length) return null;
-  const netProfitUSD = rows.reduce((s, r) => s + r.profitUSD, 0);
-  const earnedUSD = netProfitUSD * SALARY_SAFETY;
-  const withdrawnUSD = (wdRes.data || []).reduce((s, w) => s + (Number(w.amount_usd) || 0), 0);
-  const balance = earnedUSD - withdrawnUSD;
-  return { netProfitUSD, earnedUSD, withdrawnUSD, availableUSD: Math.max(0, balance), deficitUSD: Math.max(0, -balance), months: rows.length, fromLabel: rows[rows.length - 1].monthLabel };
+  const nominalEUR = rows.reduce((s, r) => s + r.profitEUR, 0);
+  const inflationEUR = rows.reduce((s, r) => s + r.inflationEUR, 0);
+  const realEUR = nominalEUR - inflationEUR;
+  // salary_withdrawals USD tutuyor (eski şema); EUR'ya yaklaşık 1,15 ile — çekim yoksa 0
+  const withdrawnEUR = (wdRes.data || []).reduce((s, w) => s + (Number(w.amount_usd) || 0) / 1.15, 0);
+  const last = rows[0];                                      // en yeni ay (reverse edilmiş)
+  const available = last.withdrawableEUR * 1 - Math.max(0, withdrawnEUR - 0); // çekilebilir: son ayın devir-sonrası bakiyesi
+  return { months: rows.length, fromLabel: rows[rows.length - 1].monthLabel, nominalEUR, inflationEUR, realEUR, withdrawnEUR, availableEUR: Math.max(0, available), deficitEUR: Math.max(0, -last.carryInEUR - Math.max(0, last.realGainEUR)) };
 }

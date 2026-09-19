@@ -4,28 +4,16 @@ import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicSalary, getSalaryAccrual, DynamicSalary, SalaryAccrual } from '../services/salaryService';
 
-// KÂR CÜZDANI — TEK ÖLÇÜ (2026-09-19, kullanıcı kararı, KESİN)
-//   Bu ayın maaşı = GEÇEN AYIN KÂRI × 0,85  (salaryService, "Kar/Zarar Geçmişi → Aylık" ile aynı)
-// Eski rezervuar/anapara/%4 tavan/4 yıla yayma mantığı KALDIRILDI — kullanıcıya
-// uygulamanın diğer ekranlarından farklı rakamlar gösteriyordu.
-// Çekim: bu ayın maaşından henüz çekilmemiş kısım, seçilen nakit pozisyonundan düşülür.
+// KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
+//   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
+//   çekilebilir   = devreden açık + (euro servet artışı − dış akış − %2/yıl enflasyon payı), ≥0
+// Çekim: EURO pozisyonundan (ya da başka nakit pozisyonundan) düşülür; kayıt salary_withdrawals'a
+// USD karşılığıyla (eski şema) + notta EUR tutar.
 
-interface SalaryWithdrawal {
-  id: string;
-  withdrawn_at: string;
-  amount_usd: number;
-  reservoir_after_usd: number;
-  portfolio_value_usd: number;
-  note: string | null;
-  source_symbol: string | null;
-  source_quantity_deducted: number | null;
-}
-
-interface Props {
-  holdings: Holding[];
-}
-
-const fmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+interface SalaryWithdrawal { id: string; withdrawn_at: string; amount_usd: number; note: string | null; source_symbol: string | null; source_quantity_deducted: number | null }
+interface Props { holdings: Holding[] }
+const fmt = (n: number) => Math.round(Math.abs(n)).toLocaleString('de-DE');
+const sgn = (n: number) => (n >= 0 ? '+' : '−');
 
 export default function KarCuzdani({ holdings }: Props) {
   const [salary, setSalary] = useState<DynamicSalary | null>(null);
@@ -37,224 +25,121 @@ export default function KarCuzdani({ holdings }: Props) {
   const [amountInput, setAmountInput] = useState<string>('');
 
   useEffect(() => { loadAll(); }, []);
-
   async function loadAll() {
     setLoading(true);
-    const [s, w, a] = await Promise.all([
-      getDynamicSalary(),
+    const [s, a, w] = await Promise.all([
+      getDynamicSalary(), getSalaryAccrual(),
       supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(20),
-      getSalaryAccrual(),
     ]);
-    setSalary(s);
-    setAccrual(a);
-    if (w.data) setWithdrawals(w.data);
+    setSalary(s); setAccrual(a); if (w.data) setWithdrawals(w.data);
     setLoading(false);
   }
 
-  const fxRates = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
-  const portfolioUsd = useMemo(() => {
-    if (!holdings.length || !(fxRates.usd > 0)) return 0;
-    return holdings.reduce((sum, h) => sum + holdingValueTRY(h, fxRates), 0) / fxRates.usd;
-  }, [holdings, fxRates]);
+  const fx = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
+  const eurRate = fx.eur > 0 ? fx.eur : fx.usd * 1.15;
+  const portfolioEur = useMemo(() => holdings.length && eurRate > 0 ? holdings.reduce((s, h) => s + holdingValueTRY(h, fx), 0) / eurRate : 0, [holdings, fx, eurRate]);
 
-  // Bu ay çekilenler (takvim ayı)
   const monthKey = new Date().toISOString().slice(0, 7);
-  const withdrawnThisMonthUsd = withdrawals
-    .filter(w => String(w.withdrawn_at).slice(0, 7) === monthKey)
-    .reduce((sum, w) => sum + Number(w.amount_usd), 0);
-  const salaryUsd = salary?.salaryUSD ?? 0;
-  // Çekilebilir = birikmiş hak (Mart'tan beri tüm ayların maaşları − tüm çekimler).
-  // Bu ayın maaşı bilgi; hak birikir, çekmediğin ay kaybolmaz.
-  const remainingUsd = accrual ? accrual.availableUSD : Math.max(0, salaryUsd - withdrawnThisMonthUsd);
-  const amount = Math.min(remainingUsd, Math.max(0, parseFloat(amountInput) || remainingUsd));
+  const withdrawnThisMonthEur = withdrawals.filter(w => String(w.withdrawn_at).slice(0, 7) === monthKey).reduce((s, w) => s + Number(w.amount_usd) * (fx.usd / eurRate), 0);
+  const salaryEur = salary?.salaryEUR ?? 0;
+  const remainingEur = Math.max(0, salaryEur - withdrawnThisMonthEur);
+  const amountEur = Math.min(remainingEur, Math.max(0, parseFloat(amountInput) || remainingEur));
 
-  // Likit kaynaklar
   const cashSources = useMemo(() => holdings
     .filter(h => h.asset_type === 'currency' && h.quantity > 0 && h.current_price > 0)
-    .map(h => ({
-      symbol: h.symbol,
-      quantity: h.quantity,
-      valueUsd: fxRates.usd > 0 ? holdingValueTRY(h, fxRates) / fxRates.usd : 0,
-      ccyDisplay: h.symbol === 'EURO' ? 'EUR' : h.symbol,
-      unitsPerUsd: fxRates.usd > 0 ? fxRates.usd / h.current_price : 0,
-    }))
-    .filter(s => s.valueUsd >= 100)
-    .sort((a, b) => b.valueUsd - a.valueUsd), [holdings, fxRates]);
-
+    .map(h => ({ symbol: h.symbol, quantity: h.quantity, valueEur: eurRate > 0 ? holdingValueTRY(h, fx) / eurRate : 0, ccyDisplay: h.symbol === 'EURO' ? 'EUR' : h.symbol, unitsPerEur: h.current_price > 0 ? eurRate / h.current_price : 0 }))
+    .filter(s => s.valueEur >= 100).sort((a, b) => b.valueEur - a.valueEur), [holdings, fx, eurRate]);
   const selectedSource = cashSources.find(s => s.symbol === sourceSymbol) || cashSources[0];
-  const sourceQty = selectedSource ? amount * selectedSource.unitsPerUsd : 0;
-  const sourceSufficient = selectedSource ? selectedSource.valueUsd >= amount : false;
-  const canWithdraw = remainingUsd > 0 && amount > 0;
+  const sourceQty = selectedSource ? amountEur * selectedSource.unitsPerEur : 0;
+  const sourceSufficient = selectedSource ? selectedSource.valueEur >= amountEur : false;
+  const canWithdraw = remainingEur > 0 && amountEur > 0;
 
   async function handleWithdraw() {
     if (!canWithdraw || !selectedSource || !sourceSufficient) return;
-    const sourceHolding = holdings.find(h => h.symbol === selectedSource.symbol && h.asset_type === 'currency');
-    if (!sourceHolding) return;
-    const newQty = Math.max(0, sourceHolding.quantity - sourceQty);
-    const afterUsd = remainingUsd - amount; // bu aydan kalan hak
-
-    // Tercih: tek transaction (withdraw_salary RPC); PGRST202 ise iki-adımlı telafi
+    const h = holdings.find(x => x.symbol === selectedSource.symbol && x.asset_type === 'currency'); if (!h) return;
+    const newQty = Math.max(0, h.quantity - sourceQty);
+    const amountUsd = amountEur * eurRate / fx.usd;
     const { error: rpcErr } = await supabase.rpc('withdraw_salary', {
-      p_holding_id: sourceHolding.id,
-      p_new_quantity: newQty,
-      p_amount_usd: amount,
-      p_reservoir_after_usd: afterUsd,
-      p_portfolio_value_usd: portfolioUsd,
-      p_source_symbol: selectedSource.symbol,
-      p_source_quantity_deducted: sourceQty,
+      p_holding_id: h.id, p_new_quantity: newQty, p_amount_usd: amountUsd, p_reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd,
+      p_portfolio_value_usd: portfolioEur * eurRate / fx.usd, p_source_symbol: selectedSource.symbol, p_source_quantity_deducted: sourceQty,
     });
     if (rpcErr && rpcErr.code !== 'PGRST202') { alert('Çekim başarısız: ' + rpcErr.message); return; }
     if (rpcErr) {
-      const { error: updErr } = await supabase.from('holdings').update({ quantity: newQty }).eq('id', sourceHolding.id);
-      if (updErr) { alert('Kaynak holding güncellenemedi: ' + updErr.message); return; }
-      const { error } = await supabase.from('salary_withdrawals').insert({
-        amount_usd: amount, reservoir_after_usd: afterUsd, portfolio_value_usd: portfolioUsd,
-        source_symbol: selectedSource.symbol, source_quantity_deducted: sourceQty,
-      });
-      if (error) {
-        const { error: rbErr } = await supabase.from('holdings').update({ quantity: sourceHolding.quantity }).eq('id', sourceHolding.id);
-        alert('Çekim kaydedilemedi: ' + error.message + (rbErr ? ` — DİKKAT: ${selectedSource.symbol} miktarı geri alınamadı, elle düzeltin: ${sourceHolding.quantity}` : ' (geri alındı)'));
-        return;
-      }
+      const { error: u } = await supabase.from('holdings').update({ quantity: newQty }).eq('id', h.id); if (u) { alert('Kaynak güncellenemedi: ' + u.message); return; }
+      const { error } = await supabase.from('salary_withdrawals').insert({ amount_usd: amountUsd, reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd, portfolio_value_usd: portfolioEur * eurRate / fx.usd, source_symbol: selectedSource.symbol, source_quantity_deducted: sourceQty, note: `€${fmt(amountEur)} maaş` });
+      if (error) { await supabase.from('holdings').update({ quantity: h.quantity }).eq('id', h.id); alert('Çekim kaydedilemedi: ' + error.message); return; }
     }
-    setConfirmWithdraw(false);
-    await loadAll();
-    window.location.reload();
+    setConfirmWithdraw(false); await loadAll(); window.location.reload();
   }
 
-  if (loading) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6">
-        <p className="text-slate-400 text-sm">Cüzdan yükleniyor...</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6"><p className="text-slate-400 text-sm">Cüzdan yükleniyor...</p></div>;
 
   return (
     <div className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 rounded-2xl shadow-sm border-2 border-emerald-200 dark:border-emerald-900 overflow-hidden">
-      <div className="px-5 py-4 border-b border-emerald-200 dark:border-emerald-900 flex items-center gap-2">
-        <Wallet className="text-emerald-600 dark:text-emerald-400" size={22} />
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Kâr Cüzdanı</h3>
+      <div className="px-5 py-4 border-b border-emerald-200 dark:border-emerald-900 flex items-center justify-between">
+        <div className="flex items-center gap-2"><Wallet className="text-emerald-600 dark:text-emerald-400" size={22} /><h3 className="text-lg font-bold text-gray-900 dark:text-white">Kâr Cüzdanı</h3></div>
+        <span className="text-[11px] text-slate-500 dark:text-gray-400">euro cetveli</span>
       </div>
 
-      {/* Bu ayın maaşı — tek ölçü */}
-      <div className={`mx-5 mt-4 rounded-xl p-4 border ${salaryUsd > 0
-        ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900'
-        : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'}`}>
-        <div className="flex items-center gap-2 mb-1">
-          <Gauge size={16} className={salaryUsd > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'} />
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">Bu Ayın Dinamik Maaşı</p>
-        </div>
+      <div className={`mx-5 mt-4 rounded-xl p-4 border ${salaryEur > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'}`}>
+        <div className="flex items-center gap-2 mb-1"><Gauge size={16} className={salaryEur > 0 ? 'text-blue-600' : 'text-amber-600'} /><p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">Bu Ayın Dinamik Maaşı</p></div>
         {salary ? (
           <>
-            <p className={`text-3xl font-bold ${salaryUsd > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>
-              ${fmt(salaryUsd)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
-            </p>
-            <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-              {salary.monthLabel} dolar kârı <strong>{salary.profitUSD >= 0 ? '+' : '−'}${fmt(Math.abs(salary.profitUSD))}</strong> (servet ${fmt(salary.startWealthUSD)} → ${fmt(salary.endWealthUSD)}) × 0,85.
-              {salary.realizedTRY !== 0 && ` Satış kârı ${fmt(salary.realizedTRY)} TL dahil.`}
-              {salaryUsd === 0 && ' Kâr yok → bu ay maaş yok; fark yastıktan.'}
-            </p>
+            <p className={`text-3xl font-bold ${salaryEur > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>€{fmt(salaryEur)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span></p>
+            <div className="text-xs text-slate-600 dark:text-gray-300 mt-2 space-y-0.5">
+              <p>{salary.monthLabel}: servet €{fmt(salary.startWealthEUR)} → €{fmt(salary.endWealthEUR)}, dış para hariç kâr <strong>{sgn(salary.profitEUR)}€{fmt(salary.profitEUR)}</strong></p>
+              <p>− enflasyon payı (%2/yıl) €{fmt(salary.inflationEUR)} = reel <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
+              <p>→ çekilebilir €{fmt(salary.withdrawableEUR)} × 0,85 = <strong>€{fmt(salary.salaryEUR)}</strong>{salaryEur === 0 && ' — bu ay maaş yok, fark yastıktan'}</p>
+            </div>
           </>
-        ) : (
-          <p className="text-sm text-amber-700 dark:text-amber-300">Geçen aya ait kayıt bulunamadı.</p>
-        )}
+        ) : <p className="text-sm text-amber-700 dark:text-amber-300">Geçen aya ait kayıt bulunamadı.</p>}
       </div>
 
       <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2">
-          <p className="text-xs text-slate-500 dark:text-gray-400 uppercase tracking-wide mb-1">💰 Birikmiş Çekilmemiş Hak</p>
-          <p className={`text-4xl font-bold ${remainingUsd > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-gray-500'}`}>
-            ${fmt(remainingUsd)}
-          </p>
-          <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-            {accrual
-              ? `${accrual.fromLabel}'tan beri ${accrual.months} ayın net kârı $${fmt(accrual.netProfitUSD)} × 0,85 = $${fmt(accrual.earnedUSD)} − çekilen $${fmt(accrual.withdrawnUSD)}`
-              : 'Geçmiş aylar hesaplanıyor…'}
-          </p>
-          {accrual && accrual.deficitUSD > 0 && (
-            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-              Açık: ${fmt(accrual.deficitUSD)} — zarar aylar birikmişi aştı; yeni kâr önce bu açığı kapatır, sonra hak doğar.
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div><p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(withdrawnThisMonthEur)}</p></div>
+            <div><p className="text-slate-500 dark:text-gray-400">Kalan hak</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
+            <div><p className="text-slate-500 dark:text-gray-400">Portföy</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(portfolioEur)}</p></div>
+          </div>
+          {accrual && (
+            <p className="text-xs text-slate-500 dark:text-gray-400 mt-3">
+              {accrual.fromLabel}'dan beri {accrual.months} ay: kâr {sgn(accrual.nominalEUR)}€{fmt(accrual.nominalEUR)} − enflasyon €{fmt(accrual.inflationEUR)} = reel {sgn(accrual.realEUR)}€{fmt(accrual.realEUR)}
+              {accrual.deficitEUR > 0 && <> · <span className="text-amber-700 dark:text-amber-300">açık −€{fmt(accrual.deficitEUR)}, yeni kâr önce bunu kapatır</span></>}
             </p>
           )}
-          <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
-            <div>
-              <p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p>
-              <p className="font-bold text-gray-900 dark:text-white">${fmt(withdrawnThisMonthUsd)}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 dark:text-gray-400">Toplam çekilen</p>
-              <p className="font-bold text-gray-900 dark:text-white">${fmt(accrual?.withdrawnUSD ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 dark:text-gray-400">Portföy</p>
-              <p className="font-bold text-gray-900 dark:text-white">${fmt(portfolioUsd)}</p>
-            </div>
-          </div>
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
-            <AlertCircle size={14} className="text-slate-500 dark:text-gray-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-slate-600 dark:text-gray-300">
-              Kural: net kârın %85'i çekilebilir. Zarar aylar birikmişten düşer (ana paraya dokunulmaz), çekmediğin hak birikir; sıfır ayda birikmişten çek.
-            </p>
+            <AlertCircle size={14} className="text-slate-500 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Kur hareketi kâr değildir. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Sıfır ayda yastıktan geçin.</p>
           </div>
         </div>
 
-        {/* Çekim paneli */}
         <div className="bg-white dark:bg-gray-900/50 rounded-xl p-4 border border-emerald-200 dark:border-emerald-900 flex flex-col">
           <p className="text-xs text-slate-500 dark:text-gray-400 uppercase tracking-wide mb-2">💸 Maaş Çek</p>
-          <div className="flex items-center gap-1 mb-2">
-            <span className="text-lg font-bold">$</span>
-            <input
-              type="number"
-              value={amountInput}
-              placeholder={fmt(remainingUsd)}
-              onChange={(e) => setAmountInput(e.target.value)}
-              className="w-full px-2 py-1 text-xl font-bold bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded"
-            />
-          </div>
-          <p className="text-[10px] text-slate-500 dark:text-gray-400 mb-2">Boş bırakırsan birikmiş hakkın tamamı (${fmt(remainingUsd)}).</p>
-
+          <div className="flex items-center gap-1 mb-2"><span className="text-lg font-bold">€</span>
+            <input type="number" value={amountInput} placeholder={fmt(remainingEur)} onChange={(e) => setAmountInput(e.target.value)} className="w-full px-2 py-1 text-xl font-bold bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded" /></div>
+          <p className="text-[10px] text-slate-500 dark:text-gray-400 mb-2">Boş bırakırsan kalan hakkın tamamı (€{fmt(remainingEur)}).</p>
           {canWithdraw && cashSources.length > 0 && (
             <div className="mb-2">
               <label className="text-[10px] text-slate-500 dark:text-gray-400 uppercase tracking-wide">Kaynak</label>
-              <select
-                value={sourceSymbol}
-                onChange={(e) => setSourceSymbol(e.target.value)}
-                className="w-full mt-0.5 px-2 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded"
-              >
-                {cashSources.map((s) => (
-                  <option key={s.symbol} value={s.symbol}>
-                    {s.ccyDisplay} — {s.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} (${fmt(s.valueUsd)})
-                  </option>
-                ))}
+              <select value={sourceSymbol} onChange={(e) => setSourceSymbol(e.target.value)} className="w-full mt-0.5 px-2 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded">
+                {cashSources.map((s) => <option key={s.symbol} value={s.symbol}>{s.ccyDisplay} — {s.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} (€{fmt(s.valueEur)})</option>)}
               </select>
-              {selectedSource && (
-                <p className="text-[10px] text-slate-500 dark:text-gray-400 mt-0.5">
-                  Düşülecek: <strong>{sourceQty.toFixed(0)} {selectedSource.ccyDisplay}</strong>
-                </p>
-              )}
+              {selectedSource && <p className="text-[10px] text-slate-500 dark:text-gray-400 mt-0.5">Düşülecek: <strong>{sourceQty.toFixed(0)} {selectedSource.ccyDisplay}</strong></p>}
             </div>
           )}
-
           {confirmWithdraw ? (
             <div className="space-y-2">
-              <p className="text-xs text-slate-700 dark:text-gray-300">
-                <strong>${fmt(amount)}</strong> çekilecek → {selectedSource?.ccyDisplay} pozisyonundan <strong>{sourceQty.toFixed(0)}</strong> düşer. Kalan hak: ${fmt(remainingUsd - amount)}
-              </p>
+              <p className="text-xs text-slate-700 dark:text-gray-300"><strong>€{fmt(amountEur)}</strong> çekilecek → {selectedSource?.ccyDisplay} pozisyonundan <strong>{sourceQty.toFixed(0)}</strong> düşer.</p>
               <div className="flex gap-2">
                 <button onClick={handleWithdraw} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-lg">✓ Onayla</button>
-                <button onClick={() => setConfirmWithdraw(false)} className="flex-1 py-2 bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600 text-sm font-semibold rounded-lg">İptal</button>
+                <button onClick={() => setConfirmWithdraw(false)} className="flex-1 py-2 bg-slate-200 dark:bg-gray-700 text-sm font-semibold rounded-lg">İptal</button>
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => setConfirmWithdraw(true)}
-              disabled={!canWithdraw || !sourceSufficient}
-              className={`mt-auto py-3 rounded-lg font-bold text-sm transition-colors ${canWithdraw && sourceSufficient
-                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md'
-                : 'bg-slate-200 dark:bg-gray-700 text-slate-400 dark:text-gray-500 cursor-not-allowed'}`}
-            >
-              {!canWithdraw ? 'Birikmiş hak yok' : !sourceSufficient ? `Kaynak yetersiz (${selectedSource?.ccyDisplay})` : `💸 $${fmt(amount)} Çek`}
+            <button onClick={() => setConfirmWithdraw(true)} disabled={!canWithdraw || !sourceSufficient}
+              className={`mt-auto py-3 rounded-lg font-bold text-sm ${canWithdraw && sourceSufficient ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md' : 'bg-slate-200 dark:bg-gray-700 text-slate-400 cursor-not-allowed'}`}>
+              {!canWithdraw ? 'Bu ay hak yok' : !sourceSufficient ? `Kaynak yetersiz (${selectedSource?.ccyDisplay})` : `💸 €${fmt(amountEur)} Çek`}
             </button>
           )}
         </div>
@@ -266,15 +151,9 @@ export default function KarCuzdani({ holdings }: Props) {
           <div className="max-h-32 overflow-y-auto space-y-1">
             {withdrawals.slice(0, 5).map((w) => (
               <div key={w.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-white/60 dark:bg-gray-900/30 border border-slate-200 dark:border-gray-700">
-                <span className="text-slate-600 dark:text-gray-400 w-20">
-                  {new Date(w.withdrawn_at).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}
-                </span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">-${Number(w.amount_usd).toFixed(0)}</span>
-                {w.source_symbol && (
-                  <span className="text-[10px] text-slate-500 dark:text-gray-500 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-gray-800">
-                    {Number(w.source_quantity_deducted).toFixed(0)} {w.source_symbol === 'EURO' ? 'EUR' : w.source_symbol}
-                  </span>
-                )}
+                <span className="text-slate-600 dark:text-gray-400 w-20">{new Date(w.withdrawn_at).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{w.note || `-$${Number(w.amount_usd).toFixed(0)}`}</span>
+                {w.source_symbol && <span className="text-[10px] text-slate-500 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-gray-800">{Number(w.source_quantity_deducted).toFixed(0)} {w.source_symbol === 'EURO' ? 'EUR' : w.source_symbol}</span>}
               </div>
             ))}
           </div>

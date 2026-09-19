@@ -182,7 +182,7 @@ export default function DailyReportPage() {
                 {/* 2026-09-19: AI'nın 'Güvenli/Dengeli maaş' tahminleri KALDIRILDI — tek ölçü: geçen ayın kârı × 0,85 */}
                 <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3 col-span-2">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Bu Ayın Dinamik Maaşı</p>
-                  <p className="text-lg font-bold text-brand-600">${formatMoney(dynSalary?.salaryUSD ?? 0)} <span className="text-xs">/ay</span></p>
+                  <p className="text-lg font-bold text-brand-600">€{formatMoney(dynSalary?.salaryEUR ?? 0)} <span className="text-xs">/ay</span></p>
                   <p className="text-[10px] text-gray-400">{dynSalary ? `${dynSalary.monthLabel} kârı × 0,85` : 'geçen ayın kârı × 0,85'}</p>
                 </div>
               </div>
@@ -396,19 +396,19 @@ export default function DailyReportPage() {
                       <div className="grid grid-cols-3 gap-2">
                         <div>
                           <p className="text-[10px] uppercase text-gray-400">Servet</p>
-                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">${formatMoney(row.startWealthUSD)} → ${formatMoney(row.endWealthUSD)}</p>
+                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">€{formatMoney(row.startWealthEUR)} → €{formatMoney(row.endWealthEUR)}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] uppercase text-gray-400">Ay kârı $</p>
-                          <p className={`text-sm font-bold ${row.profitUSD >= 0 ? 'text-accent-600' : 'text-red-600'}`}>{row.profitUSD >= 0 ? '+' : '−'}${formatMoney(Math.abs(row.profitUSD))}</p>
+                          <p className="text-[10px] uppercase text-gray-400">Ay kârı €</p>
+                          <p className={`text-sm font-bold ${row.profitEUR >= 0 ? 'text-accent-600' : 'text-red-600'}`}>{row.profitEUR >= 0 ? '+' : '−'}€{formatMoney(Math.abs(row.profitEUR))}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase text-gray-400">Maaş (×0,85)</p>
-                          <p className="text-sm font-bold text-brand-600">{row.salaryUSD > 0 ? `$${formatMoney(row.salaryUSD)}` : '$0'}</p>
+                          <p className="text-sm font-bold text-brand-600">{row.salaryEUR > 0 ? `€${formatMoney(row.salaryEUR)}` : '€0'}</p>
                         </div>
                       </div>
-                      {row.realizedTRY !== 0 && (
-                        <p className="text-[10px] text-gray-400 mt-1">satış kârı {row.realizedTRY > 0 ? '+' : ''}{formatMoney(row.realizedTRY)} TL dahil</p>
+                      {row.carryInEUR < 0 && (
+                        <p className="text-[10px] text-amber-600 mt-1">devreden açık −€{formatMoney(Math.abs(row.carryInEUR))} · enflasyon payı €{formatMoney(row.inflationEUR)}</p>
                       )}
                     </div>
                   ))}
