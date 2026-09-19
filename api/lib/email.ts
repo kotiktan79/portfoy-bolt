@@ -64,7 +64,7 @@ export interface DailySnapshot {
   wealthEUR: number; wealthTRY: number; eurRate: number;
   dayGainEUR: number; dayGainPct: number;
   weekGainEUR: number; weekGainPct: number;
-  mtdGainEUR: number; mtdInflationEUR: number; mtdRealEUR: number; carryInEUR: number;
+  mtdGainEUR: number; mtdInflationEUR: number; mtdRealEUR: number; carryInEUR: number; carryResetApplied?: boolean;
   salaryEUR: number; salaryMonthLabel: string; salaryBasisLabel: string;   // bu ayın maaşı = geçen ay (basis) çekilebilir × 0,85
   projectedSalaryEUR: number; nextMonthLabel: string;                      // MTD'ye göre gelecek ay ön izleme
   healthOk: boolean;
@@ -126,6 +126,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
           <div>
             <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;">Devreden açık</div>
             <div style="font-size:14px;font-weight:700;color:${d.carryInEUR < 0 ? '#dc2626' : '#059669'};">${seur(d.carryInEUR)}</div>
+            ${d.carryResetApplied ? '<div style="font-size:10px;color:#059669;">eski açık Nisan öncesi kâr yastığıyla sıfırlandı</div>' : ''}
           </div>
           <div>
             <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;">${d.nextMonthLabel} ön izleme</div>

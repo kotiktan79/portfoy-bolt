@@ -214,6 +214,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         weekGainEUR: eur.weekGainEUR, weekGainPct: eur.weekGainPct,
         mtdGainEUR: eur.mtd?.gainEUR || 0, mtdInflationEUR: eur.mtd?.inflationEUR || 0, mtdRealEUR: eur.mtd?.realGainEUR || 0,
         carryInEUR: eur.mtd?.carryInEUR || 0,
+        carryResetApplied: !!eur.mtd?.carryResetApplied,
         salaryEUR, salaryMonthLabel: monthLabelTR(todayStr.slice(0, 7)), salaryBasisLabel: eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—',
         projectedSalaryEUR, nextMonthLabel: monthLabelTR(nextYM),
         healthOk: eur.health.ok,

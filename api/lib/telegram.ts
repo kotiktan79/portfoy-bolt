@@ -60,7 +60,9 @@ export function buildDailyTelegram(d: DailySnapshot): string {
     `${arrow(d.mtdGainEUR)} Bu ay: ${seur(d.mtdGainEUR)} nominal · reel ${seur(d.mtdRealEUR)}`,
     ``,
     `💸 ${escapeHtml(d.salaryMonthLabel)} maaşı: <b>${eur(d.salaryEUR)}</b> (${escapeHtml(d.salaryBasisLabel)} çekilebilir × 0,85)`,
-    d.carryInEUR < 0 ? `⛔ Devreden açık ${seur(d.carryInEUR)} → ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}` : `➡️ ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}`,
+    d.carryInEUR < 0
+      ? `⛔ Devreden açık ${seur(d.carryInEUR)} → ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}`
+      : `➡️ ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}${d.carryResetApplied ? ' (eski açık Nisan öncesi kâr yastığıyla sıfırlandı)' : ''}`,
   ];
   if (!d.healthOk) lines.push('', '⚠️ Kur serisi güncel değil — rakamlar güvenilmez olabilir.');
   if (d.topPick) {
@@ -97,7 +99,8 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
     `🗓️ <b>${escapeHtml(m.monthLabel)} kapanışı</b>`,
     `${arrow(m.gainEUR)} Nominal kâr: ${seur(m.gainEUR)} · servet ${eur(m.startWealthEUR)} → ${eur(m.endWealthEUR)}`,
     `Enflasyon payı −${eur(m.inflationEUR)} → reel ${seur(m.realGainEUR)}`,
-    m.carryResetApplied ? 'Eski açık Nisan öncesi kâr yastığıyla sıfırlandı' : `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
+    ...(m.carryResetApplied ? ['Eski açık Nisan öncesi kâr yastığıyla sıfırlandı'] : []),
+    `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
     ``,
     `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (çekilebilir ${eur(m.withdrawableEUR)} × 0,85)`,
   ];

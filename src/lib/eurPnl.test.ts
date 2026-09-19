@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeRateSeries, eurGainBetween, fxDriftTRY, monthlyRows } from './eurPnl';
+import { makeRateSeries, eurGainBetween, fxDriftTRY, monthlyRows, CARRY_RESET_MONTH } from './eurPnl';
 
 const eur = makeRateSeries([{ date: '2026-08-01', rate: 54.7 }, { date: '2026-08-31', rate: 55.94 }], 55);
 const usd = makeRateSeries([{ date: '2026-08-01', rate: 47.5 }, { date: '2026-08-31', rate: 48.25 }], 48);
@@ -182,5 +182,36 @@ describe('zarar devri sıfırlama (CARRY_RESET_MONTH)', () => {
     ];
     const rows = monthlyRows(artida, 0, 0.85, '2026-09');
     expect(rows.find(r => r.month === '2026-09')!.carryResetApplied).toBeUndefined();
+  });
+});
+
+describe('üretim varsayılanı: CARRY_RESET_MONTH', () => {
+  it('4. argüman verilmeden de sıfırlama uygulanır ve ay sabiti 2026-09', () => {
+    expect(CARRY_RESET_MONTH).toBe('2026-09');
+    const daily = [
+      { date: '2026-08-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-08-31', gainEUR: -1_000, wealthEUR: 99_000 },
+      { date: '2026-09-30', gainEUR: 600, wealthEUR: 99_600 },
+    ];
+    const rows = monthlyRows(daily, 0);           // üretim yolu
+    const eyl = rows.find(r => r.month === '2026-09')!;
+    expect(eyl.carryResetApplied).toBe(true);
+    expect(eyl.salaryEUR).toBeCloseTo(0.85 * 600, 6);
+  });
+  it('sıfırlama geçmiş ayları BOZMAZ (Eylül öncesi satırlar birebir aynı)', () => {
+    const daily = [
+      { date: '2026-06-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-06-30', gainEUR: -400, wealthEUR: 99_600 },
+      { date: '2026-07-31', gainEUR: -300, wealthEUR: 99_300 },
+      { date: '2026-08-31', gainEUR: 200, wealthEUR: 99_500 },
+      { date: '2026-09-30', gainEUR: 500, wealthEUR: 100_000 },
+    ];
+    const ile = monthlyRows(daily, 0.02, 0.85, '2026-09');
+    const siz = monthlyRows(daily, 0.02, 0.85, null);
+    for (const ym of ['2026-06', '2026-07', '2026-08']) {
+      expect(JSON.stringify(ile.find(r => r.month === ym))).toBe(JSON.stringify(siz.find(r => r.month === ym)));
+    }
+    expect(siz.find(r => r.month === '2026-09')!.salaryEUR).toBe(0);      // sıfırlamasız: maaş yok
+    expect(ile.find(r => r.month === '2026-09')!.salaryEUR).toBeGreaterThan(0);
   });
 });

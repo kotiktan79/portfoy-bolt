@@ -26,7 +26,7 @@ function Badge({ gain, base }: { gain: number; base: number }) {
 
 export function DailyMonthlyPnL() {
   const [tab, setTab] = useState<Tab>('daily');
-  type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number };
+  type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number; carryResetApplied?: boolean };
   const [daily, setDaily] = useState<EurDaily[]>([]);
   const [weekly, setWeekly] = useState<Period[]>([]);
   const [monthly, setMonthly] = useState<Period[]>([]);
@@ -42,7 +42,7 @@ export function DailyMonthlyPnL() {
       const [d, w, m] = await Promise.all([getEurDaily(), getEurWeeks(), getEurMonths()]).catch((e) => { setErr(e?.message || 'veri yüklenemedi'); return [[], [], []] as const; });
       setDaily([...d].reverse());
       setWeekly([...w].map((x, i, arr) => ({ ...x, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate) })).reverse());
-      setMonthly([...m].map((x: MonthRow, i, arr) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate), inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR })).reverse());
+      setMonthly([...m].map((x: MonthRow, i, arr) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate), inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR, carryResetApplied: x.carryResetApplied })).reverse());
       setLoading(false);
     })();
   }, []);

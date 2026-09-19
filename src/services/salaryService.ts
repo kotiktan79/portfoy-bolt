@@ -61,7 +61,7 @@ export async function getDynamicSalary(): Promise<DynamicSalary | null> {
 }
 
 export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
-  const [rows, wdRes] = await Promise.all([getMonthlySalarySeries(36), supabase.from('salary_withdrawals').select('amount_usd,withdrawn_at')]);
+  const [rows, allMonths, wdRes] = await Promise.all([getMonthlySalarySeries(36), getEurMonths(), supabase.from('salary_withdrawals').select('amount_usd,withdrawn_at')]);
   if (!rows.length) return null;
   const nominalEUR = rows.reduce((s, r) => s + r.profitEUR, 0);
   const inflationEUR = rows.reduce((s, r) => s + r.inflationEUR, 0);
@@ -70,7 +70,11 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
   const withdrawnEUR = (wdRes.data || []).reduce((s, w) => s + (Number(w.amount_usd) || 0) / 1.15, 0);
   const last = rows[0];                                      // en yeni ay (reverse edilmiş)
   const available = last.withdrawableEUR * 1 - Math.max(0, withdrawnEUR - 0); // çekilebilir: son ayın devir-sonrası bakiyesi
-  return { months: rows.length, fromLabel: rows[rows.length - 1].monthLabel, nominalEUR, inflationEUR, realEUR, withdrawnEUR, availableEUR: Math.max(0, available), deficitEUR: Math.max(0, -last.carryInEUR - Math.max(0, last.realGainEUR)) };
+  // Açık = GÜNCEL devir (cari ay dahil son satırın carryOut'u). Son tam aydan hesaplanınca
+  // zarar devri sıfırlandığı ay 'açık −€1.666' yazıp sıfırlama cümlesiyle çelişiyordu (hakem 2026-09-20).
+  const curRow = allMonths[allMonths.length - 1];
+  const deficitEUR = Math.max(0, -(curRow ? curRow.carryOutEUR : Math.min(0, last.carryInEUR + last.realGainEUR)));
+  return { months: rows.length, fromLabel: rows[rows.length - 1].monthLabel, nominalEUR, inflationEUR, realEUR, withdrawnEUR, availableEUR: Math.max(0, available), deficitEUR };
 }
 
 /** Bu ay şimdiye kadar (MTD): nominal kâr, enflasyon payı, devreden açık ve gelecek ay maaş ön izlemesi. */

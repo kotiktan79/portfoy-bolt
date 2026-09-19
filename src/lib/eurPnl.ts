@@ -136,9 +136,10 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, safety 
     r.endWealthEUR = d.wealthEUR; r.lastDate = d.date; prevWealth = d.wealthEUR;
   }
   const rows = Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month));
-  let carry = 0;
+  let carry = 0, didReset = false;
   for (const r of rows) {
-    if (carryResetFrom && r.month === carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; }   // devreden açık bu ayda sıfırlanır (bkz. CARRY_RESET_MONTH)
+    // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin)
+    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; didReset = true; }
     r.inflationEUR = r.startWealthEUR * mRate;
     r.realGainEUR = r.gainEUR - r.inflationEUR;
     r.carryInEUR = carry;
