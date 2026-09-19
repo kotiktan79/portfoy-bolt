@@ -3,6 +3,8 @@ import { Wallet, Gauge, AlertCircle } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
+import { dayInTZ } from '../lib/eurPnl';
+import { currentYM } from '../services/salaryService';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
 //   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
@@ -48,8 +50,9 @@ export default function KarCuzdani({ holdings }: Props) {
   const eurRate = fx.eur > 0 ? fx.eur : fx.usd * 1.15;
   const portfolioEur = useMemo(() => holdings.length && eurRate > 0 ? holdings.reduce((s, h) => s + holdingValueTRY(h, fx), 0) / eurRate : 0, [holdings, fx, eurRate]);
 
-  const monthKey = new Date().toISOString().slice(0, 7);
-  const withdrawnThisMonthEur = withdrawals.filter(w => String(w.withdrawn_at).slice(0, 7) === monthKey).reduce((s, w) => s + Number(w.amount_usd) * (fx.usd / eurRate), 0);
+  // Ay sınırı kullanıcının saat diliminde (salaryService ile aynı kural)
+  const monthKey = currentYM();
+  const withdrawnThisMonthEur = withdrawals.filter(w => dayInTZ(String(w.withdrawn_at)).slice(0, 7) === monthKey).reduce((s, w) => s + Number(w.amount_usd) * (fx.usd / eurRate), 0);
   const salaryEur = salary?.salaryEUR ?? 0;
   const remainingEur = Math.max(0, salaryEur - withdrawnThisMonthEur);
   const amountEur = Math.min(remainingEur, Math.max(0, parseFloat(amountInput) || remainingEur));

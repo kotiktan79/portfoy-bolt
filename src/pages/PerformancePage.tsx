@@ -61,6 +61,7 @@ export default function PerformancePage() {
   const [period, setPeriod] = useState<Period>(30);
   const [allDaily, setAllDaily] = useState<EurDaily[]>([]);
   const [health, setHealth] = useState<{ ok: boolean; lastEurRateDay: string; lastSnapDay: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [benchmarkKey, setBenchmarkKey] = useState<BenchmarkKey | null>(null);
   const [benchmarkSeries, setBenchmarkSeries] = useState<BenchmarkPoint[]>([]);
@@ -73,7 +74,7 @@ export default function PerformancePage() {
       if (!cancelled) { setAllDaily(d); setHealth(h); }
     }).catch((e) => {
       // motor hatası (kur/satır) — sessiz yarım veri yerine boş seri + sağlık uyarısı
-      if (!cancelled) { setAllDaily([]); setHealth({ ok: false, lastEurRateDay: '', lastSnapDay: String(e?.message || 'hata') }); }
+      if (!cancelled) { setAllDaily([]); setHealth(null); setLoadError(e?.message || 'veri yüklenemedi'); }
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
@@ -214,6 +215,11 @@ export default function PerformancePage() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 text-xs text-red-700 dark:text-red-300">
+            Kâr verisi yüklenemedi: {loadError} — bu sayfadaki rakamlar gösterilemiyor.
+          </div>
+        )}
         {health && !health.ok && (
           <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300">
             Kur serisi {health.lastEurRateDay}'de bitiyor, kayıtlar {health.lastSnapDay}'e kadar — bu sayfadaki rakamlar güvenilmez.

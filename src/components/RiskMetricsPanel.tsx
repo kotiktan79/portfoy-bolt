@@ -21,14 +21,25 @@ export function RiskMetricsPanel() {
   const [metrics, setMetrics] = useState<RiskMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [err, setErr] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     getEurDaily()
       .then((snaps) => { if (!cancelled) setMetrics(computeRiskMetrics(snaps)); })
-      .catch(() => { if (!cancelled) setMetrics(null); })
+      .catch((e) => { if (!cancelled) { setMetrics(null); setErr(e?.message || 'risk verisi yüklenemedi'); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  if (err) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6">
+        <p className="text-sm font-semibold text-red-600">Risk metrikleri yüklenemedi</p>
+        <p className="text-xs text-red-500 mt-1">{err}</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

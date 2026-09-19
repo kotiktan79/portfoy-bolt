@@ -46,7 +46,7 @@ const fmt = (n: number) =>
 
 const eur = (n: number) => `€${fmt(n)}`;
 const seur = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${eur(n)}`;
-const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
+const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
 const arrow = (n: number) => (n > 0 ? '🟢' : n < 0 ? '🔴' : '⚪');
 
 // TEK ÖLÇÜ EUR (2026-09-19): kâr = servet farkı − dış akış; maaş = geçen ayın reel kârı × 0,85

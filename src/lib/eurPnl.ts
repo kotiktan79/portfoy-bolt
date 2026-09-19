@@ -21,7 +21,27 @@
 
 export const RELIABLE_FROM = '2026-04-06';   // EUR/USD 'api' kur serisinin başladığı gün — uygulama ve cron TEK kaynak
 export const INFLATION_EUR = 0.02;           // Euro Bölgesi HICP, yıllık, sabit (kullanıcı kararı 2026-09-19)
-export const ROW_CAP = 1000;                  // PostgREST max_rows — bir sorgu bu kadar satır dönerse kesilmiş demektir
+export const ROW_CAP = 1000;                  // PostgREST max_rows — sayfalama adımı (fetchAll)
+export const TZ = 'Europe/Bucharest';         // kullanıcının yaşadığı yer: ay sınırları buna göre
+
+/** Verilen anın YYYY-AA'sı, kullanıcının saat diliminde (UTC ayın 1'inde saat farkıyla bir ay geri atıyordu) */
+export function ymInTZ(now: Date = new Date(), tz: string = TZ): string {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit' }).formatToParts(now);
+  const y = p.find(x => x.type === 'year')!.value, m = p.find(x => x.type === 'month')!.value;
+  return `${y}-${m}`;
+}
+/** YYYY-AA → bir önceki takvim ayı */
+export function prevYMOf(ym: string): string {
+  const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+/** Bir anın kullanıcı saat dilimindeki YYYY-AA-GG'si */
+export function dayInTZ(d: Date | string, tz: string = TZ): string {
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dt);
+  const g = (t: string) => p.find(x => x.type === t)!.value;
+  return `${g('year')}-${g('month')}-${g('day')}`;
+}
 
 export interface SnapPoint { date: string; totalValue: number; totalInvestment: number }
 export interface RateSeries { rateAt(date: string): number }

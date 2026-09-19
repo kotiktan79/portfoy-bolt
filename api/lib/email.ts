@@ -56,7 +56,7 @@ const greenIfPos = (n: number) => (n >= 0 ? '#059669' : '#dc2626');
 // ============================================================
 const eur = (n: number, dec = 0) => `€${fmt(Math.abs(n), dec)}`;
 const seur = (n: number, dec = 0) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${eur(n, dec)}`;
-const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
+const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
 
 export interface DailySnapshot {
   date: string;

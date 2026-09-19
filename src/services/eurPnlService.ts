@@ -15,13 +15,16 @@ const dailyRows = (rows: Array<{ day: string; rate: number }> | null) => (rows |
 /** PostgREST max_rows=1000 tavanını sayfalayarak aşar (.range tek başına YETMEZ — tavan sunucuda).
  *  Hata fırlatır: sessizce yarım seriyle yanlış kâr hesaplamaktansa ekran boş kalsın (çağıranlar catch eder). */
 async function fetchAll<T>(name: string, build: () => any): Promise<T[]> {
+  // Sunucu max_rows'u ROW_CAP'ten KÜÇÜK olabilir → 'kısa sayfa = bitti' varsayımı seriyi sessizce yarım bırakır.
+  // Bu yüzden boş sayfa görene kadar devam edilir (fazladan tek istek, karşılığında kesilme riski yok).
   const out: T[] = [];
-  for (let from = 0; ; from += ROW_CAP) {
+  for (let from = 0; ; ) {
     const { data, error } = await build().range(from, from + ROW_CAP - 1);
     if (error) throw new Error(`eurPnl ${name}: ${error.message}`);
     const rows = (data || []) as T[];
+    if (rows.length === 0) return out;
     out.push(...rows);
-    if (rows.length < ROW_CAP) return out;
+    from += rows.length;
     if (out.length > 200_000) throw new Error(`eurPnl ${name}: beklenmedik satır sayısı`);
   }
 }
@@ -33,12 +36,12 @@ async function load(): Promise<EurModel> {
   const [snaps, eurRates, usdRates, txs, cashSells, holds] = await Promise.all([
     fetchAll<{ snapshot_date: string; total_value: number; total_investment: number }>('snapshots', () => supabase
       .from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
-      .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false })),
+      .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).order('id', { ascending: true })),
     // exchange_rates_daily: gün başına son kur (~170 satır) — ham tablo 2.800+ satır, tavanda kesiliyordu (2026-09-19)
     fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
     fetchAll<{ day: string; rate: number }>('usd', rateQ('USD')),
-    fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true })),
-    fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true })),
+    fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true })),
+    fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
   ]);
   const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);

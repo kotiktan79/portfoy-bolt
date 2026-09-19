@@ -36,7 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: false, log });
     }
     // >= : Pazartesi snapshot günü haftaya DAHİL (taban = önceki Pazar). '>' Pazartesi kârını hiçbir haftaya saymıyordu (hakem 2026-09-19)
-    const idx = daily.findIndex(d => d.date >= weekStartStr);
+    const todayStr = today.toISOString().slice(0, 10);
+    const idx = daily.findIndex(d => d.date >= weekStartStr && d.date < todayStr);   // pencere üstten de kapalı: elle tetiklemede 8. gün sayılmasın
     if (idx < 0) {
       // Hafta içinde hiç snapshot yok → '+€0' diye OLGU yayınlamak yerine uyar
       const last = daily[daily.length - 1].date;
@@ -44,12 +45,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`Hafta penceresinde snapshot yok (son ${last}) — rakam yayınlanmadı`);
       return res.status(200).json({ success: false, log });
     }
+    const inWeek = daily.filter(d => d.date >= weekStartStr && d.date < todayStr);
     const base = idx > 0 ? daily[idx - 1].wealthEUR : daily[0].wealthEUR;
-    const weekGainEUR = idx >= 0 ? daily.slice(Math.max(idx, 1)).reduce((s, d) => s + d.gainEUR, 0) : 0;
+    const weekGainEUR = (idx === 0 ? inWeek.slice(1) : inWeek).reduce((s, d) => s + d.gainEUR, 0);
     const weekGainPct = base > 0 ? (weekGainEUR / base) * 100 : 0;
-    const wealthEUR = daily[daily.length - 1].wealthEUR;
-    const weekEndLabel = daily[daily.length - 1].date;   // veri son snapshot gününde (Pazar) biter; cron Pazartesi çalışır
-    const eurRateNow = daily[daily.length - 1].eurRate || 0;
+    const wealthEUR = inWeek.length ? inWeek[inWeek.length - 1].wealthEUR : daily[daily.length - 1].wealthEUR;
+    const weekEndLabel = inWeek.length ? inWeek[inWeek.length - 1].date : daily[daily.length - 1].date;   // veri son snapshot gününde (Pazar) biter; cron Pazartesi çalışır
+    const eurRateNow = (inWeek.length ? inWeek[inWeek.length - 1].eurRate : daily[daily.length - 1].eurRate) || 0;
     const toEUR = (tl: number) => (eurRateNow > 0 ? tl / eurRateNow : 0);
 
     // Holdings: bu hafta en iyi/kötü

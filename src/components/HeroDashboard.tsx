@@ -14,12 +14,11 @@ interface HeroDashboardProps {
   dynamicSalaryLabel?: string;
   // 2026-09-19: TEK CETVEL EURO. Kâr kartları euro motorundan gelir (HomePage geçirir):
   //   inceptionGainEUR/Pct = kuruluştan bugüne (alış günü kuruyla) — Performans sayfasıyla aynı rakam
-  //   todayGainEUR = motorun son günü (euro servet artışı − dış akış), todayWealthEUR = bugünkü servet €
+  //   todayGainEUR = motorun son günü (euro servet artışı − dış akış), prevWealthEUR = dünkü servet € (yüzde tabanı)
   // TL kâr (totalPnLTRY) artık KPI olarak gösterilmez; kur şişmesi taşır.
   inceptionGainEUR?: number;
   inceptionGainPct?: number;
   todayGainEUR?: number;
-  todayWealthEUR?: number;
   prevWealthEUR?: number;      // önceki snapshot günü serveti — günlük % TABANI (LivePage/cron/risk-monitor ile aynı)
   todayDate?: string;
   totalPnLTRY?: number;
@@ -91,7 +90,6 @@ export default function HeroDashboard({
   inceptionGainEUR,
   inceptionGainPct,
   todayGainEUR,
-  todayWealthEUR,
   prevWealthEUR,
   todayDate,
   totalPnLTRY,
@@ -110,7 +108,6 @@ export default function HeroDashboard({
   const todayEUR = todayGainEUR ?? 0;
   // Taban = önceki günün serveti. 'todayWealth − gain' akış günlerinde akış kadar sapıyordu (hakem 2026-09-19).
   const todayPct = prevWealthEUR && prevWealthEUR > 0 ? (100 * todayEUR) / prevWealthEUR : 0;
-  void todayWealthEUR;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
@@ -232,18 +229,19 @@ export default function HeroDashboard({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
-            label: 'Kuruluştan Bugüne Kâr', icon: Coins, accent: gainEUR >= 0 ? 'emerald' : 'rose',
+            // Veri gelmediyse '—' göster: '+€0' bir OLGU gibi okunur, yanlış rakamdır (hakem 2026-09-19)
+            label: 'Kuruluştan Bugüne Kâr', icon: Coins, accent: inceptionGainEUR === undefined ? 'gold' : gainEUR >= 0 ? 'emerald' : 'rose',
             valueRaw: gainEUR,
-            valueFmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
+            valueFmt: (n: number) => inceptionGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
+            subtitle: inceptionGainEUR === undefined ? 'veri yüklenemedi' : `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
             symbol: '✦',
           },
           {
             label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown,
-            accent: isPos ? 'emerald' : 'rose',
+            accent: todayGainEUR === undefined ? 'gold' : isPos ? 'emerald' : 'rose',
             valueRaw: todayEUR,
-            valueFmt: (n: number) => `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: `${isPos ? '+' : ''}${todayPct.toFixed(2)}% · euro servet, para hariç`,
+            valueFmt: (n: number) => todayGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
+            subtitle: todayGainEUR === undefined ? 'veri yüklenemedi' : `${isPos ? '+' : ''}${todayPct.toFixed(2)}% · euro servet, para hariç · taban dünkü servet`,
             symbol: isPos ? '↗' : '↘',
           },
           {

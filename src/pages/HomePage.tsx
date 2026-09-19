@@ -162,7 +162,6 @@ export default function HomePage() {
                 inceptionGainEUR={inception?.totalGainEUR}
                 inceptionGainPct={inception?.totalGainPct}
                 todayGainEUR={lastDay?.gainEUR}
-                todayWealthEUR={lastDay?.wealthEUR}
                 prevWealthEUR={prevDay?.wealthEUR}
                 todayDate={lastDay?.date}
                 totalPnLTRY={totalProfitLoss}

@@ -10,7 +10,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getEurMonths, monthLabel, RELIABLE_FROM, INFLATION_EUR } from './eurPnlService';
-import type { MonthRow } from '../lib/eurPnl';
+import { ymInTZ, prevYMOf, type MonthRow } from '../lib/eurPnl';
 export { SALARY_SAFETY } from '../lib/eurPnl';
 export const ACCRUAL_START_MONTH = RELIABLE_FROM.slice(0, 7);
 export { INFLATION_EUR };
@@ -38,14 +38,9 @@ const toRow = (r: MonthRow): DynamicSalary => ({
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
 });
 
-/** İçinde bulunulan ay, Europe/Bucharest yerel takvimine göre (UTC ayın 1'inde saat farkıyla bir ay geri atıyordu) */
-export function currentYM(now = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit' }).format(now).slice(0, 7);
-}
-function prevYM(now = new Date()): string {
-  const ym = currentYM(now); const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
-  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
-}
+/** İçinde bulunulan ay, kullanıcının saat diliminde (lib/eurPnl.ymInTZ) */
+export const currentYM = (now = new Date()) => ymInTZ(now);
+const prevYM = (now = new Date()) => prevYMOf(ymInTZ(now));
 
 export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalaryRow[]> {
   const rows = await getEurMonths();

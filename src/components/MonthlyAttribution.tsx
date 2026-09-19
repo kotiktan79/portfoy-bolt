@@ -77,11 +77,13 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   const [fxStart, setFxStart] = useState<{ eur: number; usd: number } | null>(null);
   const [fxEnd, setFxEnd] = useState<{ eur: number; usd: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setErr(null);
     const prev = prevMonth(selectedMonth);
     const periodStart = `${prev}-25`;        // önceki ayın son haftası
     const periodEnd = `${lastDayOf(selectedMonth)}T23:59:59`;
@@ -133,7 +135,10 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         setFxStart(fs); setFxEnd(fe);
         setLoading(false);
       }
-    })().catch(() => { if (!cancelled) { setMotorGainEUR(null); setLoading(false); } });   // motor/sorgu hatası: sonsuz iskelet yok
+    })().catch((e) => {
+      // Hata: eski ayın verisi YENİ ay etiketiyle görünmesin (hakem 2026-09-19)
+      if (!cancelled) { setPrices([]); setCashTx([]); setFxStart(null); setFxEnd(null); setMotorGainEUR(null); setErr(e?.message || 'veri yüklenemedi'); setLoading(false); }
+    });
 
     return () => { cancelled = true; };
   }, [selectedMonth]);
@@ -253,7 +258,12 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         </div>
       </div>
 
-      {loading ? (
+      {err ? (
+        <div className="p-6">
+          <p className="text-sm font-semibold text-red-600">Ay detayı yüklenemedi</p>
+          <p className="text-xs text-red-500 mt-1">{err}</p>
+        </div>
+      ) : loading ? (
         <div className="p-6 space-y-3">
           {[1,2,3,4].map(i => <div key={i} className="h-12 bg-slate-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
         </div>

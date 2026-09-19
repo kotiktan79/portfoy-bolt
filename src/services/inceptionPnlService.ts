@@ -27,12 +27,17 @@ export async function getInceptionPnl(): Promise<InceptionSummary | null> {
     supabase.from('transactions').select('transaction_date,realized_profit,holding_id'),
     supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell'),
   ]);
+  // Sessiz yanlış rakam yasak: kur sorgusu patlarsa eskiden EUR/TRY=50 sabitine düşüp kârı ~%12 şişiriyordu (hakem 2026-09-19)
+  for (const [name, r] of [['holdings', holdRes], ['eur', eurRes], ['usd', usdRes], ['tx', txRes], ['cashSells', cashRes]] as const) {
+    if (r.error) throw new Error(`inceptionPnl ${name}: ${r.error.message}`);
+  }
+  if (!(eurRes.data || []).length || !(usdRes.data || []).length) throw new Error('inceptionPnl: kur serisi boş — kuruluş kârı hesaplanamaz');
   const holds = holdRes.data || [];
   if (!holds.length) { _cache = { ts: Date.now(), value: null }; return null; }
   const series = (rows: Array<{ day: string; rate: number; source: string }> | null): RateSeries => {
     const m = new Map<string, number>();
     for (const r of rows || []) { const d = String(r.day).slice(0, 10); if (r.source === 'api' || !m.has(d)) m.set(d, Number(r.rate)); }  // api > ecb
-    return makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), 50);
+    return makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), NaN);   // boş seri yukarıda eleniyor; sahte sabit kur YOK
   };
   const eur = series(eurRes.data), usd = series(usdRes.data);
   const today = new Date().toISOString().slice(0, 10);

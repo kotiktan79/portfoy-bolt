@@ -95,3 +95,42 @@ describe('buildEurModel + summarizeEur (ham satır → model, uygulama = cron)',
     expect(m2.health.lastEurRateDay).toBe('2026-08-31');
   });
 });
+
+import { ymInTZ, prevYMOf, dayInTZ } from './eurPnl';
+
+describe('ay/gün sınırı (kullanıcının saat dilimi)', () => {
+  it('1 Ekim 02:00 Bükreş (= 30 Eylül 23:00 UTC) yeni aydır', () => {
+    expect(ymInTZ(new Date('2026-09-30T23:00:00Z'))).toBe('2026-10');
+    expect(prevYMOf(ymInTZ(new Date('2026-09-30T23:00:00Z')))).toBe('2026-09');
+  });
+  it('30 Eylül 23:00 Bükreş (= 20:00 UTC) hâlâ Eylül', () => {
+    expect(ymInTZ(new Date('2026-09-30T20:00:00Z'))).toBe('2026-09');
+  });
+  it('yıl sınırı: 1 Ocak 01:00 Bükreş → önceki ay Aralık', () => {
+    const ym = ymInTZ(new Date('2026-12-31T23:00:00Z'));
+    expect(ym).toBe('2027-01');
+    expect(prevYMOf(ym)).toBe('2026-12');
+  });
+  it('gün anahtarı da yerel: 30 Eylül 22:30 UTC → 1 Ekim', () => {
+    expect(dayInTZ('2026-09-30T22:30:00Z')).toBe('2026-10-01');
+  });
+});
+
+describe('günlük yüzde tabanı = önceki günün serveti (akış olan gün)', () => {
+  it('€10.000 yeni para giren günde yüzde akışla şişmez', () => {
+    const rates = ['2026-08-30', '2026-08-31'].map(d => ({ recorded_at: d, rate: 50 }));
+    const model = buildEurModel({
+      snapshots: [
+        { snapshot_date: '2026-08-30', total_value: 100_000 * 50, total_investment: 80_000 * 50 },
+        { snapshot_date: '2026-08-31', total_value: (100_000 + 10_000 + 500) * 50, total_investment: (80_000 + 10_000) * 50 },
+      ],
+      eurRates: rates, usdRates: rates, transactions: [], cashSells: [], holdings: [],
+      usdNow: 45, reliableFrom: '2026-08-30', annualInflation: 0.02,
+    });
+    const s = summarizeEur(model, '2026-08');
+    expect(s.dayGainEUR).toBeCloseTo(500, 6);
+    expect(s.prevWealthEUR).toBeCloseTo(100_000, 6);
+    expect(s.dayGainPct).toBeCloseTo(0.5, 6);           // 500 / 100.000 (taban dünkü servet)
+    expect(500 / (s.wealthEUR - s.dayGainEUR) * 100).toBeCloseTo(0.4545, 3);  // eski taban olsaydı: yanlış
+  });
+});

@@ -8,7 +8,9 @@ import { fmtEUR0, fmtSignedEUR0 } from '../lib/chartTheme';
 export function InceptionPnl() {
   const [d, setD] = useState<InceptionSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { getInceptionPnl().then(x => { setD(x); setLoading(false); }); }, []);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { getInceptionPnl().then(x => setD(x)).catch(e => setErr(e?.message || 'hesaplanamadı')).finally(() => setLoading(false)); }, []);
+  if (err) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Kuruluştan bugüne kâr hesaplanamadı</p><p className="text-xs text-red-500 mt-1">{err}</p></div>;
   if (loading) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 text-sm text-slate-400">Kuruluştan bugüne hesaplanıyor…</div>;
   if (!d) return null;
   const pos = d.totalGainEUR >= 0;
