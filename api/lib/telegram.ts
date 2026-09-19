@@ -97,7 +97,7 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
     `🗓️ <b>${escapeHtml(m.monthLabel)} kapanışı</b>`,
     `${arrow(m.gainEUR)} Nominal kâr: ${seur(m.gainEUR)} · servet ${eur(m.startWealthEUR)} → ${eur(m.endWealthEUR)}`,
     `Enflasyon payı −${eur(m.inflationEUR)} → reel ${seur(m.realGainEUR)}`,
-    `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
+    m.carryResetApplied ? 'Eski açık Nisan öncesi kâr yastığıyla sıfırlandı' : `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
     ``,
     `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (çekilebilir ${eur(m.withdrawableEUR)} × 0,85)`,
   ];

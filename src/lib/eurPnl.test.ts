@@ -143,3 +143,44 @@ describe('dayPct — tek taban kuralı (ekran ve cron aynı fonksiyonu kullanır
     expect(dayPct(-210, 148_281)).toBeCloseTo(-0.1416, 4);
   });
 });
+
+describe('zarar devri sıfırlama (CARRY_RESET_MONTH)', () => {
+  const daily = [
+    { date: '2026-07-01', gainEUR: 0, wealthEUR: 100_000 },
+    { date: '2026-07-31', gainEUR: -1_000, wealthEUR: 99_000 },
+    { date: '2026-08-31', gainEUR: -500, wealthEUR: 98_500 },
+    { date: '2026-09-30', gainEUR: 800, wealthEUR: 99_300 },
+  ];
+  it('sıfırlamasız: Eylül kârı önce açığı kapatır, maaş 0', () => {
+    const rows = monthlyRows(daily, 0, 0.85, null);
+    const eyl = rows.find(r => r.month === '2026-09')!;
+    expect(eyl.carryInEUR).toBeCloseTo(-1_500, 6);
+    expect(eyl.withdrawableEUR).toBe(0);
+    expect(eyl.salaryEUR).toBe(0);
+  });
+  it('Eylül’de sıfırlanınca: açık silinir, maaş = 0,85 × o ayın reel kârı', () => {
+    const rows = monthlyRows(daily, 0, 0.85, '2026-09');
+    const agu = rows.find(r => r.month === '2026-08')!;
+    const eyl = rows.find(r => r.month === '2026-09')!;
+    expect(agu.carryOutEUR).toBeCloseTo(-1_500, 6);      // geçmiş aylar dürüst kalır
+    expect(eyl.carryInEUR).toBe(0);
+    expect(eyl.carryResetApplied).toBe(true);
+    expect(eyl.withdrawableEUR).toBeCloseTo(800, 6);
+    expect(eyl.salaryEUR).toBeCloseTo(680, 6);
+    // sıfırlama tek seferlik: Ekim'de zarar yine devreder
+    const rows2 = monthlyRows([...daily, { date: '2026-10-31', gainEUR: -300, wealthEUR: 99_000 }], 0, 0.85, '2026-09');
+    const eki = rows2.find(r => r.month === '2026-10')!;
+    expect(eki.carryInEUR).toBe(0);
+    expect(eki.carryOutEUR).toBeCloseTo(-300, 6);
+    expect(eki.salaryEUR).toBe(0);
+  });
+  it('artıda olan devir sıfırlanmaz (yalnız açık silinir)', () => {
+    const artida = [
+      { date: '2026-08-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-08-31', gainEUR: 1_000, wealthEUR: 101_000 },
+      { date: '2026-09-30', gainEUR: 500, wealthEUR: 101_500 },
+    ];
+    const rows = monthlyRows(artida, 0, 0.85, '2026-09');
+    expect(rows.find(r => r.month === '2026-09')!.carryResetApplied).toBeUndefined();
+  });
+});

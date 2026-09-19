@@ -119,6 +119,7 @@ export default function KarCuzdani({ holdings }: Props) {
           {mtd && (
             <div className="mt-3 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-gray-300">
               <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)} · enflasyon payı €{fmt(mtd.inflationEUR)} · reel {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}
+              {mtd.carryResetApplied && <> · <span className="text-emerald-700 dark:text-emerald-300 font-semibold">Nisan öncesi kazanılan kâr yastığıyla eski açık sıfırlandı</span></>}
               {mtd.carryInEUR < 0 && <> · devreden açık −€{fmt(mtd.carryInEUR)} → kalan açık €{fmt(Math.min(0, mtd.carryInEUR + mtd.realGainEUR))}</>}
               <br />→ <span className="font-semibold">gelecek ay maaş ön izlemesi: €{fmt(mtd.projectedSalaryEUR)}</span> (ay sonuna kadar değişir)
             </div>

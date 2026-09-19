@@ -256,6 +256,7 @@ export interface MonthlySnapshot {
   gainEUR: number; inflationEUR: number; realGainEUR: number;
   carryInEUR: number; withdrawableEUR: number; carryOutEUR: number;
   salaryEUR: number;
+  carryResetApplied?: boolean;    // o ay eski açık Nisan öncesi kâr yastığıyla sıfırlandı
   realizedIncomeEUR: number;
   monthIncomeBreakdown: { type: string; amount: number }[];   // EUR
   topGainersThisMonth: { symbol: string; pnlPct: number }[];  // yerel para nominal (kuruluştan)
@@ -312,6 +313,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
           ${row('Nominal kâr', m.gainEUR)}
           ${row('Enflasyon payı (sermaye koruma)', -m.inflationEUR, true, '#64748b')}
           ${row('Reel kâr', m.realGainEUR)}
+          ${m.carryResetApplied ? `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span style="color:#475569;">Eski açık (Nisan öncesi kâr yastığıyla)</span><span style="font-weight:700;color:#059669;">sıfırlandı</span></div>` : ''}
           ${row('Devreden açık (ay başı)', m.carryInEUR, true, m.carryInEUR < 0 ? '#dc2626' : '#64748b')}
           ${row('Çekilebilir', m.withdrawableEUR, false, '#0f172a')}
           ${row('Devreden açık (ay sonu)', m.carryOutEUR, true, m.carryOutEUR < 0 ? '#dc2626' : '#64748b')}

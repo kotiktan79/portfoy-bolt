@@ -105,6 +105,7 @@ export function dailyEurGains(
 
 export interface MonthRow {
   month: string; firstDate: string; lastDate: string;
+  carryResetApplied?: boolean;   // bu ayda devreden açık sıfırlandı (yastık kuralı)
   startWealthEUR: number; endWealthEUR: number;
   gainEUR: number;            // nominal
   inflationEUR: number;       // sermaye koruma payı
@@ -117,7 +118,13 @@ export interface MonthRow {
 
 export const SALARY_SAFETY = 0.85;
 
-export function monthlyRows(daily: DailyGain[], annualInflation: number, safety = SALARY_SAFETY): MonthRow[] {
+// ZARAR DEVRİ SIFIRLAMA (kullanıcı kararı 2026-09-20, seçenek A: "açığı sıfırla, maaş yeni kârdan")
+// Gerekçe: ömür boyu EUR kâr +€18.219'un ~€18.0k'sı 6 Nisan 2026 ÖNCESİNDE oluştu (günlük seri o gün başlıyor;
+// öncesinde 3,5 ay veri boşluğu ve doğrulanamayan Şubat kayıtları var). Nisan–Ağustos'un −€3.692'lik reel açığı
+// o kazanılmış yastıkla karşılanmış sayılır; ana para yenmez. Bu aydan itibaren kural aynen işler: zarar yine devreder.
+export const CARRY_RESET_MONTH = '2026-09';
+
+export function monthlyRows(daily: DailyGain[], annualInflation: number, safety = SALARY_SAFETY, carryResetFrom: string | null = CARRY_RESET_MONTH): MonthRow[] {
   const m = new Map<string, MonthRow>();
   let prevWealth = daily.length ? daily[0].wealthEUR : 0;
   const mRate = Math.pow(1 + annualInflation, 1 / 12) - 1;
@@ -131,6 +138,7 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, safety 
   const rows = Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month));
   let carry = 0;
   for (const r of rows) {
+    if (carryResetFrom && r.month === carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; }   // devreden açık bu ayda sıfırlanır (bkz. CARRY_RESET_MONTH)
     r.inflationEUR = r.startWealthEUR * mRate;
     r.realGainEUR = r.gainEUR - r.inflationEUR;
     r.carryInEUR = carry;

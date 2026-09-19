@@ -17,6 +17,7 @@ export { INFLATION_EUR };
 
 export interface DynamicSalary {
   month: string; monthLabel: string;
+  carryResetApplied?: boolean;    // o ayda eski açık sıfırlandı (Nisan öncesi kâr yastığı)
   profitEUR: number;          // geçen ayın nominal kârı
   inflationEUR: number;       // sermaye koruma payı
   realGainEUR: number;
@@ -34,7 +35,7 @@ export interface SalaryAccrual {
 }
 
 const toRow = (r: MonthRow): DynamicSalary => ({
-  month: r.month, monthLabel: monthLabel(r.month), profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
+  month: r.month, monthLabel: monthLabel(r.month), carryResetApplied: r.carryResetApplied, profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
 });
 
@@ -73,9 +74,9 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
 }
 
 /** Bu ay şimdiye kadar (MTD): nominal kâr, enflasyon payı, devreden açık ve gelecek ay maaş ön izlemesi. */
-export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string }
+export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean }
 export async function getMonthToDate(): Promise<MonthToDate | null> {
   const rows = await getEurMonths();
   const r = rows.find(x => x.month === currentYM()); if (!r) return null;
-  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate };
+  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied };
 }

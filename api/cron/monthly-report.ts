@@ -86,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       startWealthEUR: row.startWealthEUR, endWealthEUR: row.endWealthEUR,
       gainEUR: row.gainEUR, inflationEUR: row.inflationEUR, realGainEUR: row.realGainEUR,
       carryInEUR: row.carryInEUR, withdrawableEUR: row.withdrawableEUR, carryOutEUR: row.carryOutEUR,
-      salaryEUR: row.salaryEUR,
+      salaryEUR: row.salaryEUR, carryResetApplied: row.carryResetApplied,
       realizedIncomeEUR,
       monthIncomeBreakdown,
       topGainersThisMonth,
