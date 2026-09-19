@@ -1,695 +1,134 @@
 import { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Calendar, BarChart2, ArrowUp, ArrowDown, CalendarDays } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { computePeriodChange, SnapshotLite } from '../lib/portfolioMetrics';
-import { formatCurrency, formatCurrencyUSD, getCachedUSDRate } from '../services/priceService';
-import { DEFAULT_USD_TRY_RATE } from '../config';
+import { TrendingUp, TrendingDown, Calendar, BarChart2, CalendarDays } from 'lucide-react';
+import { formatCurrency } from '../services/priceService';
+import { getUsdDaily, getUsdPeriods, type UsdDaily, type UsdPeriod } from '../services/usdPnlService';
 
-interface DayRecord {
-  date: string;
-  total_value: number;
-  total_pnl: number;
-  pnl_percentage: number;
-  daily_change: number;
-  daily_change_pct: number;
-}
-
-interface PeriodRecord {
-  key: string;
-  label: string;
-  start_pnl: number;      // dönem başı kümülatif kâr (değer − maliyet)
-  end_pnl: number;        // dönem sonu kümülatif kâr
-  change: number;         // dönem kârı = Δkâr + o dönemde realize edilen kâr
-  change_pct: number;
-  realized: number;       // dönemde satıştan gerçekleşen kâr (TRY)
-  gap_days: number;       // önceki ölçüm noktasıyla arasındaki boşluk (kayıt yoksa büyür)
-}
+// KAR/ZARAR GEÇMİŞİ — TEK CETVEL: DOLAR (2026-09-19)
+// Kâr = dolar servetin ne kadar arttı (yeni para hariç). Servet dolar gösteriliyor,
+// kâr da aynı cetvelle. TL kârını bugünkü kurla dolara çevirmek kur hareketini
+// kâr sayıyordu (portföyün ~%90'ı TL fiyatıyla kayıtlı döviz/altın/BTC).
+// Motor: lib/usdPnl.ts (test edilmiş), veri: services/usdPnlService.ts.
 
 type Tab = 'daily' | 'weekly' | 'monthly';
 
-function PnLBadge({ value, pct }: { value: number; pct: number }) {
-  const pos = value >= 0;
+const fmtUsd = (n: number) => `${n >= 0 ? '+' : '−'}$${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const pct = (gain: number, base: number) => (base > 0 ? (gain / base) * 100 : 0);
+
+function Badge({ gain, base }: { gain: number; base: number }) {
+  const pos = gain >= 0;
   return (
-    <div className={`flex items-center gap-1 text-sm font-bold ${pos ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-      {pos ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-      <span>{pos ? '+' : ''}{formatCurrency(value)} ₺</span>
-      <span className="font-semibold">({pos ? '+' : ''}{pct.toFixed(2)}%)</span>
+    <div className={`text-right ${pos ? 'text-green-600' : 'text-red-600'}`}>
+      <p className="text-base font-bold">{fmtUsd(gain)}</p>
+      <p className="text-xs">{pos ? '+' : ''}{pct(gain, base).toFixed(2)}%</p>
     </div>
   );
 }
 
-function UsdSubLine({ value, usdRate }: { value: number; usdRate: number }) {
-  const pos = value >= 0;
-  return (
-    <p className={`text-xs font-semibold mt-0.5 ${pos ? 'text-green-600/80 dark:text-green-400/80' : 'text-red-600/80 dark:text-red-400/80'}`}>
-      {pos ? '+' : ''}${formatCurrencyUSD(value, usdRate)}
-    </p>
-  );
-}
-
-// Pazartesi başlangıçlı haftanın ISO key'i (YYYY-WNN) ve label'i
-function weekKeyAndLabel(dateStr: string): { key: string; label: string } {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = (d.getDay() + 6) % 7; // Pzt=0
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - day);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-
-  // ISO week numarası
-  const tmp = new Date(Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate()));
-  const dayNum = (tmp.getUTCDay() + 6) % 7;
-  tmp.setUTCDate(tmp.getUTCDate() - dayNum + 3);
-  const firstThu = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 4));
-  const week = 1 + Math.round(((tmp.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
-
-  const fmt = (x: Date) =>
-    `${String(x.getDate()).padStart(2, '0')}.${String(x.getMonth() + 1).padStart(2, '0')}`;
-  return {
-    key: `${tmp.getUTCFullYear()}-W${String(week).padStart(2, '0')}`,
-    label: `${fmt(monday)} – ${fmt(sunday)} ${sunday.getFullYear()}`,
-  };
-}
-
 export function DailyMonthlyPnL() {
   const [tab, setTab] = useState<Tab>('daily');
-  const [dailyRecords, setDailyRecords] = useState<DayRecord[]>([]);
-  const [weeklyRecords, setWeeklyRecords] = useState<PeriodRecord[]>([]);
-  const [monthlyRecords, setMonthlyRecords] = useState<PeriodRecord[]>([]);
+  const [daily, setDaily] = useState<UsdDaily[]>([]);
+  const [weekly, setWeekly] = useState<UsdPeriod[]>([]);
+  const [monthly, setMonthly] = useState<UsdPeriod[]>([]);
   const [loading, setLoading] = useState(true);
-  const [usdRate, setUsdRate] = useState(DEFAULT_USD_TRY_RATE);
 
   useEffect(() => {
-    loadData();
-    getCachedUSDRate().then(setUsdRate);
+    (async () => {
+      setLoading(true);
+      const [d, w, m] = await Promise.all([getUsdDaily(), getUsdPeriods('weekly'), getUsdPeriods('monthly')]);
+      setDaily([...d].reverse()); setWeekly([...w].reverse()); setMonthly([...m].reverse());
+      setLoading(false);
+    })();
   }, []);
 
-  async function loadData() {
-    setLoading(true);
-    const { data: rawData, error } = await supabase
-      .from('portfolio_snapshots')
-      .select('snapshot_date, total_value, total_investment, total_pnl, pnl_percentage, total_deposits, total_withdrawals, created_at')
-      .order('snapshot_date', { ascending: true })
-      .order('created_at', { ascending: false });
+  const fmtDate = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
 
-    if (error || !rawData) {
-      setLoading(false);
-      return;
-    }
-
-    // Defansif: aynı tarihte birden çok satır varsa en yenisini tut
-    const dedup = new Map<string, typeof rawData[0]>();
-    for (const r of rawData) {
-      if (!dedup.has(r.snapshot_date)) dedup.set(r.snapshot_date, r);
-    }
-    const data = Array.from(dedup.values()).sort(
-      (a, b) => a.snapshot_date.localeCompare(b.snapshot_date)
-    );
-
-    // ---- REALİZE KÂR (2026-09-04 düzeltmesi) ----
-    // Kâr = değer − maliyet. Satış yapılınca kâğıt üstündeki kâr snapshot'tan SİLİNİR,
-    // dolayısıyla Δkâr o ayı olduğundan kötü gösteriyordu (ör. Temmuz'daki EURO satışı
-    // 41.782 ₺ kâr getirdi ama ay +75.322 görünüyordu; doğrusu +117.104).
-    // İki kaynak: cash_transactions notundaki "(Kar/Zarar: X ₺)" ve transactions.realized_profit.
-    // Aynı satış iki yerde olabilir (EKGYO) → tarih+tutar anahtarıyla mükerrer elenir.
-    const realizedByDate = new Map<string, number>();
-    const seenRz = new Set<string>();
-    const [cashSellRes, rzTxRes, holdRes, eurRes] = await Promise.all([
-      supabase.from('cash_transactions').select('created_at, currency, notes').eq('transaction_type', 'sell'),
-      supabase.from('transactions').select('transaction_date, realized_profit, holding_id'),
-      supabase.from('holdings').select('id, currency'),
-      supabase.from('exchange_rates').select('rate, recorded_at').eq('from_currency', 'EUR').eq('to_currency', 'TRY').order('recorded_at', { ascending: false }).limit(1),
-    ]);
-    const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
-    const eurNow = Number(eurRes.data?.[0]?.rate) || usdNow * 1.16;
-    const ccyById = new Map<string, string>(
-      (holdRes.data || []).map((h) => [String(h.id), String(h.currency || 'TRY').toUpperCase()])
-    );
-    const toTRY = (amt: number, ccy: string) =>
-      amt * (ccy === 'TRY' ? 1 : ccy === 'USD' ? usdNow : ccy === 'EUR' ? eurNow : 0);
-    const addRz = (d: string, tl: number) => {
-      if (!Number.isFinite(tl) || tl === 0) return;
-      realizedByDate.set(d, (realizedByDate.get(d) || 0) + tl);
-    };
-    for (const c of cashSellRes.data || []) {
-      const m = String(c.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/);
-      if (!m) continue;
-      const d = String(c.created_at).slice(0, 10);
-      const tl = toTRY(Number(m[1]), String(c.currency || 'TRY').toUpperCase());
-      addRz(d, tl);
-      seenRz.add(`${d}|${Math.round(tl)}`);
-    }
-    for (const t of rzTxRes.data || []) {
-      const rp = Number(t.realized_profit) || 0;
-      if (!rp) continue;
-      const d = String(t.transaction_date).slice(0, 10);
-      const tl = toTRY(rp, ccyById.get(String(t.holding_id)) || 'TRY');
-      if (seenRz.has(`${d}|${Math.round(tl)}`)) continue;
-      addRz(d, tl);
-    }
-
-    const daily: DayRecord[] = data.map((row, i) => {
-      const prev = i > 0 ? data[i - 1] : null;
-      const period = i === 0
-        ? { changeTRY: 0, changePct: 0 }
-        : computePeriodChange(row, prev, 100);
-      return {
-        date: row.snapshot_date,
-        total_value: Number(row.total_value),
-        total_pnl: Number(row.total_pnl),
-        pnl_percentage: Number(row.pnl_percentage),
-        daily_change: period.changeTRY,
-        daily_change_pct: period.changePct,
-      };
-    });
-
-    // Generic gruplayıcı: snapshot satırlarını verilen key/label fonksiyonuna göre periyoda topla.
-    // KÂR-BAZLI: her periyodun değişimi = lastSnapshotInPeriod.pnl − lastSnapshotInPreviousPeriod.pnl.
-    // Deposit/withdraw'a HİÇ bakmıyoruz — yeni para hem değeri hem maliyeti eşit artırır,
-    // dolayısıyla kâr deltası yapısal olarak temizdir (computePeriodChange ile aynı mantık).
-    type SnapRow = SnapshotLite & { date: string };
-    type Bucket = { label: string; rows: SnapRow[] };
-    const groupBy = (keyFn: (date: string) => { key: string; label: string }): PeriodRecord[] => {
-      const map = new Map<string, Bucket>();
-      for (const row of data) {
-        const { key, label } = keyFn(row.snapshot_date);
-        if (!map.has(key)) map.set(key, { label, rows: [] });
-        map.get(key)!.rows.push({
-          date: row.snapshot_date,
-          total_value: row.total_value,
-          total_investment: row.total_investment,
-          total_pnl: row.total_pnl,
-        });
-      }
-      const out: PeriodRecord[] = [];
-      const keys = Array.from(map.keys()).sort();
-      let prevLastRow: SnapRow | null = null;
-      const pnlOf = (r: SnapRow) => (Number(r.total_value) || 0) - (Number(r.total_investment) || 0);
-      for (const k of keys) {
-        const { label, rows } = map.get(k)!;
-        const lastRow = rows[rows.length - 1];
-        const startRow = prevLastRow ?? rows[0];
-        // dönemde realize edilen kâr: (dönem başı, dönem sonu] aralığındaki satışlar
-        let realized = 0;
-        for (const [d, tl] of realizedByDate) {
-          if (d > startRow.date && d <= lastRow.date) realized += tl;
-        }
-        const period = prevLastRow
-          ? computePeriodChange(lastRow, prevLastRow, 100)
-          : { changeTRY: 0, changePct: 0 };
-        const change = period.changeTRY + (prevLastRow ? realized : 0);
-        const base = Number(startRow.total_value) || 0;
-        out.push({
-          key: k,
-          label,
-          start_pnl: pnlOf(startRow),
-          end_pnl: pnlOf(lastRow),
-          change,
-          change_pct: base > 0 ? (change / base) * 100 : 0,
-          realized: prevLastRow ? realized : 0,
-          gap_days: Math.round(
-            (new Date(lastRow.date + 'T00:00:00').getTime() - new Date(startRow.date + 'T00:00:00').getTime()) / 86400000
-          ),
-        });
-        prevLastRow = lastRow;
-      }
-      return out;
-    };
-
-    const monthly = groupBy((d) => {
-      const key = d.substring(0, 7);
-      const [year, mon] = key.split('-');
-      const monthNames = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-      return { key, label: `${monthNames[parseInt(mon) - 1]} ${year}` };
-    });
-
-    const weekly = groupBy(weekKeyAndLabel);
-
-    setDailyRecords([...daily].reverse());
-    setWeeklyRecords([...weekly].reverse());
-    setMonthlyRecords([...monthly].reverse());
-    setLoading(false);
-  }
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
-  };
-
-  const totals = dailyRecords.length > 0 ? (() => {
-    const asc = [...dailyRecords].reverse(); // dailyRecords UI'da yeni-eski, hesap için eski-yeni
-    const bestDay = dailyRecords.reduce((best, d) => d.daily_change > best.daily_change ? d : best, dailyRecords[0]);
-    const worstDay = dailyRecords.reduce((worst, d) => d.daily_change < worst.daily_change ? d : worst, dailyRecords[0]);
-    const positiveDays = dailyRecords.filter(d => d.daily_change > 0).length;
-    const negativeDays = dailyRecords.filter(d => d.daily_change < 0).length;
-    const winRate = positiveDays + negativeDays > 0 ? (positiveDays / (positiveDays + negativeDays)) * 100 : 0;
-
-    // Max drawdown: değeri pikten ne kadar düşmüş, en kötüsü
-    let peak = asc[0]?.total_value || 0;
-    let maxDD = 0;
-    for (const d of asc) {
-      if (d.total_value > peak) peak = d.total_value;
-      const dd = peak > 0 ? ((d.total_value - peak) / peak) * 100 : 0;
-      if (dd < maxDD) maxDD = dd;
-    }
-
-    // YTD: yılbaşından beri değişim
-    const currentYear = new Date().getFullYear();
-    const ytdFirst = asc.find(d => d.date.startsWith(String(currentYear)));
-    const latest = asc[asc.length - 1];
-    const ytdPct = ytdFirst && ytdFirst.total_value > 0
-      ? ((latest.total_value - ytdFirst.total_value) / ytdFirst.total_value) * 100
-      : 0;
-    const ytdChange = ytdFirst ? latest.total_value - ytdFirst.total_value : 0;
-
-    // Streak: en son üst üste kaç gün aynı yönde
-    let streak = 0;
-    let streakSign = 0;
-    for (const d of dailyRecords) {
-      const sign = d.daily_change > 0 ? 1 : d.daily_change < 0 ? -1 : 0;
-      if (sign === 0) break;
-      if (streakSign === 0) streakSign = sign;
-      if (sign !== streakSign) break;
-      streak++;
-    }
-
-    return { bestDay, worstDay, positiveDays, negativeDays, winRate, maxDD, ytdPct, ytdChange, streak, streakSign };
-  })() : null;
-
-  // Heatmap için son 84 günü (12 hafta) grid'e koy. Bugün sağ-alt köşede.
-  const heatmapData = (() => {
-    if (dailyRecords.length === 0) return null;
-    const map = new Map<string, number>();
-    for (const d of dailyRecords) map.set(d.date, d.daily_change_pct);
-    const days: { date: string; pct: number | null }[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    for (let i = 83; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      days.push({ date: dateStr, pct: map.has(dateStr) ? map.get(dateStr)! : null });
-    }
-    // 12 sütun × 7 satır. Pazartesi ilk satır.
-    const firstDay = new Date(days[0].date + 'T00:00:00');
-    const firstDow = (firstDay.getDay() + 6) % 7; // Pzt=0
-    const padded: typeof days = Array(firstDow).fill({ date: '', pct: null }).concat(days);
-    const cols: (typeof days)[] = [];
-    for (let i = 0; i < padded.length; i += 7) cols.push(padded.slice(i, i + 7));
-    return cols;
-  })();
-
-  function heatColor(pct: number | null): string {
-    if (pct === null) return 'bg-slate-100 dark:bg-gray-700/40';
-    if (pct === 0) return 'bg-slate-200 dark:bg-gray-600';
-    const abs = Math.min(Math.abs(pct), 2); // 2%+ = en koyu
-    const intensity = Math.ceil((abs / 2) * 4); // 1-4 arası ton
-    const palette = pct > 0
-      ? ['bg-green-200', 'bg-green-300', 'bg-green-500', 'bg-green-700']
-      : ['bg-red-200', 'bg-red-300', 'bg-red-500', 'bg-red-700'];
-    return palette[Math.max(0, Math.min(3, intensity - 1))] + ' dark:opacity-90';
-  }
+  const renderPeriod = (rows: UsdPeriod[]) => (
+    <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[640px] overflow-y-auto">
+      {rows.length === 0 ? <p className="text-center text-slate-400 py-10">Henüz veri yok</p> : rows.map((r) => {
+        const pos = r.gainUSD >= 0;
+        return (
+          <div key={r.key} className={`p-4 border-l-4 ${pos ? 'border-l-green-500' : 'border-l-red-500'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${pos ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                  {pos ? <TrendingUp size={16} className="text-green-600" /> : <TrendingDown size={16} className="text-red-600" />}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{r.label}</p>
+                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                    servet ${r.startWealthUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })} → ${r.endWealthUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                    {r.realizedTRY !== 0 && <span className="ml-1 text-slate-400">(satış kârı {formatCurrency(r.realizedTRY)} ₺ dahil)</span>}
+                    {r.gapDays > 45 && <span className="ml-1 text-amber-600">⚠ {r.gapDays} günlük dönem — arada kayıt yok</span>}
+                  </p>
+                </div>
+              </div>
+              <Badge gain={r.gainUSD} base={r.startWealthUSD} />
+            </div>
+            <div className="w-full bg-slate-100 dark:bg-gray-700 rounded-full h-1.5 mt-2">
+              <div className={`h-1.5 rounded-full ${pos ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${Math.min(Math.abs(pct(r.gainUSD, r.startWealthUSD)) * 10, 100)}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
-      <div className="p-5 border-b border-slate-200 dark:border-gray-700">
-        <div className="flex items-center gap-2 mb-4">
-          <BarChart2 className="text-brand-600 dark:text-brand-400" size={22} />
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Kar/Zarar Geçmişi</h3>
+          <span className="text-[11px] text-slate-500 dark:text-gray-400">dolar bazlı · yeni para hariç</span>
         </div>
-
         <div className="flex gap-2">
-          <button
-            onClick={() => setTab('daily')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
-              tab === 'daily'
-                ? 'bg-brand-600 text-white border-brand-600'
-                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-brand-400'
-            }`}
-          >
-            <Calendar size={15} />
-            Günlük
-          </button>
-          <button
-            onClick={() => setTab('weekly')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
-              tab === 'weekly'
-                ? 'bg-brand-600 text-white border-brand-600'
-                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-brand-400'
-            }`}
-          >
-            <CalendarDays size={15} />
-            Haftalık
-          </button>
-          <button
-            onClick={() => setTab('monthly')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
-              tab === 'monthly'
-                ? 'bg-brand-600 text-white border-brand-600'
-                : 'bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-gray-600 hover:border-brand-400'
-            }`}
-          >
-            <BarChart2 size={15} />
-            Aylık
-          </button>
+          {([['daily', 'Günlük', Calendar], ['weekly', 'Haftalık', CalendarDays], ['monthly', 'Aylık', BarChart2]] as const).map(([k, label, Icon]) => (
+            <button key={k} onClick={() => setTab(k)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === k ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300'}`}>
+              <Icon size={14} /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {loading ? (
-        <div className="p-6 space-y-3">
-          {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="h-16 bg-slate-100 dark:bg-gray-700 rounded-xl animate-pulse" />
-          ))}
-        </div>
-      ) : (
+      {loading ? <p className="text-center text-slate-400 py-10">Yükleniyor…</p> : (
         <>
           {tab === 'daily' && (
-            <div>
-              {totals && (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 bg-slate-50 dark:bg-gray-900/30 border-b border-slate-200 dark:border-gray-700">
-                    <div className="text-center">
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">YTD (Yılbaşından)</p>
-                      <p className={`text-lg font-bold ${totals.ytdPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {totals.ytdPct >= 0 ? '+' : ''}{totals.ytdPct.toFixed(2)}%
-                      </p>
-                      <p className={`text-xs font-semibold ${totals.ytdPct >= 0 ? 'text-green-600/80' : 'text-red-600/80'}`}>
-                        {totals.ytdPct >= 0 ? '+' : ''}{formatCurrency(totals.ytdChange)} ₺
-                      </p>
+            <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[640px] overflow-y-auto">
+              {daily.slice(0, 60).map((d) => {
+                const pos = d.gainUSD >= 0;
+                return (
+                  <div key={d.date} className={`p-3 flex items-center justify-between border-l-4 ${pos ? 'border-l-green-500' : 'border-l-red-500'}`}>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{fmtDate(d.date)}</p>
+                      <p className="text-xs text-slate-500 dark:text-gray-400">servet ${d.wealthUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })} · kur {d.usdRate.toFixed(2)}</p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Maks. Drawdown</p>
-                      <p className="text-lg font-bold text-red-600">
-                        {totals.maxDD.toFixed(2)}%
-                      </p>
-                      <p className="text-xs text-slate-400">pikten en kötü düşüş</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Win Rate</p>
-                      <p className="text-lg font-bold text-brand-600 dark:text-brand-400">
-                        {totals.winRate.toFixed(0)}%
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {totals.positiveDays}↑ / {totals.negativeDays}↓
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">Streak</p>
-                      <p className={`text-lg font-bold ${totals.streakSign >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {totals.streak} gün
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {totals.streakSign > 0 ? 'üst üste yeşil' : totals.streakSign < 0 ? 'üst üste kırmızı' : '—'}
-                      </p>
-                    </div>
+                    <Badge gain={d.gainUSD} base={d.wealthUSD - d.gainUSD} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50/50 dark:bg-gray-900/20 border-b border-slate-200 dark:border-gray-700">
-                    <div className="text-center">
-                      <p className="text-xs text-slate-500 dark:text-gray-400">En İyi Gün</p>
-                      <p className="text-sm font-bold text-green-600">+{formatCurrency(totals.bestDay.daily_change)} ₺ ({totals.bestDay.daily_change_pct.toFixed(2)}%)</p>
-                      <p className="text-xs text-slate-400">{formatDate(totals.bestDay.date)}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-slate-500 dark:text-gray-400">En Kötü Gün</p>
-                      <p className="text-sm font-bold text-red-600">{formatCurrency(totals.worstDay.daily_change)} ₺ ({totals.worstDay.daily_change_pct.toFixed(2)}%)</p>
-                      <p className="text-xs text-slate-400">{formatDate(totals.worstDay.date)}</p>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {heatmapData && (
-                <div className="p-4 border-b border-slate-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-slate-600 dark:text-gray-300 uppercase tracking-wide">
-                      Son 12 Hafta · Günlük Hareket
-                    </p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                      <span>az</span>
-                      <div className="w-2.5 h-2.5 rounded bg-red-700" />
-                      <div className="w-2.5 h-2.5 rounded bg-red-300" />
-                      <div className="w-2.5 h-2.5 rounded bg-slate-200 dark:bg-gray-600" />
-                      <div className="w-2.5 h-2.5 rounded bg-green-300" />
-                      <div className="w-2.5 h-2.5 rounded bg-green-700" />
-                      <span>çok</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-1 overflow-x-auto pb-1">
-                    {heatmapData.map((col, ci) => (
-                      <div key={ci} className="flex flex-col gap-1">
-                        {col.map((cell, ri) => (
-                          <div
-                            key={ri}
-                            title={cell.date ? `${cell.date}: ${cell.pct !== null ? (cell.pct >= 0 ? '+' : '') + cell.pct.toFixed(2) + '%' : 'veri yok'}` : ''}
-                            className={`w-3 h-3 rounded-sm ${heatColor(cell.pct)}`}
-                          />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[520px] overflow-y-auto">
-                {dailyRecords.length === 0 ? (
-                  <p className="text-center text-slate-400 dark:text-gray-500 py-10">Henüz günlük veri yok</p>
-                ) : (
-                  dailyRecords.map((rec) => {
-                    const pos = rec.daily_change >= 0;
-                    return (
-                      <div
-                        key={rec.date}
-                        className={`flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors ${
-                          pos ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${pos ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                            {pos ? <TrendingUp size={16} className="text-green-600" /> : <TrendingDown size={16} className="text-red-600" />}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatDate(rec.date)}</p>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">Değer: {formatCurrency(rec.total_value)} ₺</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <PnLBadge value={rec.daily_change} pct={rec.daily_change_pct} />
-                          <UsdSubLine value={rec.daily_change} usdRate={usdRate} />
-                          <p className="text-xs text-slate-400 dark:text-gray-500 mt-0.5">
-                            Toplam K/Z:{' '}
-                            <span className={rec.total_pnl >= 0 ? 'text-green-600' : 'text-red-600'}>
-                              {formatCurrency(rec.total_pnl)} ₺ / ${formatCurrencyUSD(rec.total_pnl, usdRate)}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                );
+              })}
             </div>
           )}
-
-          {tab === 'weekly' && (
-            <div>
-              <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[640px] overflow-y-auto">
-                {weeklyRecords.length === 0 ? (
-                  <p className="text-center text-slate-400 dark:text-gray-500 py-10">Henüz haftalık veri yok</p>
-                ) : (
-                  weeklyRecords.map((rec) => {
-                    const pos = rec.change >= 0;
-                    const barWidth = Math.min(Math.abs(rec.change_pct) * 5, 100);
-                    return (
-                      <div
-                        key={rec.key}
-                        className={`p-4 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors border-l-4 ${pos ? 'border-l-green-500' : 'border-l-red-500'}`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${pos ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                              {pos ? <TrendingUp size={16} className="text-green-600" /> : <TrendingDown size={16} className="text-red-600" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-900 dark:text-white">{rec.label}</p>
-                              <p className="text-xs text-slate-500 dark:text-gray-400">
-                                kâr {formatCurrency(rec.start_pnl)} ₺ → {formatCurrency(rec.end_pnl)} ₺
-                                {rec.realized !== 0 && (
-                                  <span className="ml-1 text-slate-400 dark:text-gray-500">
-                                    (satış kârı {rec.realized > 0 ? '+' : ''}{formatCurrency(rec.realized)} ₺ dahil)
-                                  </span>
-                                )}
-                                {rec.gap_days > 45 && (
-                                  <span className="ml-1 text-amber-600 dark:text-amber-500">
-                                    ⚠ {rec.gap_days} günlük dönem — arada kayıt yok
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <PnLBadge value={rec.change} pct={rec.change_pct} />
-                            <UsdSubLine value={rec.change} usdRate={usdRate} />
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-gray-700 rounded-full h-1.5 mt-2">
-                          <div
-                            className={`h-1.5 rounded-full transition-all duration-500 ${pos ? 'bg-green-500' : 'bg-red-500'}`}
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {weeklyRecords.length > 0 && (
-                <div className="p-5 bg-slate-50 dark:bg-gray-900/30 border-t border-slate-200 dark:border-gray-700">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">En İyi Hafta</p>
-                      {(() => {
-                        const best = weeklyRecords.reduce((b, w) => w.change > b.change ? w : b, weeklyRecords[0]);
-                        return (
-                          <>
-                            <p className="font-bold text-green-600">+{formatCurrency(best.change)} ₺</p>
-                            <p className="text-xs font-semibold text-green-600/80">+${formatCurrencyUSD(best.change, usdRate)}</p>
-                            <p className="text-xs text-slate-400">{best.label} ({best.change_pct >= 0 ? '+' : ''}{best.change_pct.toFixed(2)}%)</p>
-                          </>
-                        );
-                      })()}
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">En Kötü Hafta</p>
-                      {(() => {
-                        const worst = weeklyRecords.reduce((w, x) => x.change < w.change ? x : w, weeklyRecords[0]);
-                        return (
-                          <>
-                            <p className="font-bold text-red-600">{formatCurrency(worst.change)} ₺</p>
-                            <p className="text-xs font-semibold text-red-600/80">${formatCurrencyUSD(worst.change, usdRate)}</p>
-                            <p className="text-xs text-slate-400">{worst.label} ({worst.change_pct >= 0 ? '+' : ''}{worst.change_pct.toFixed(2)}%)</p>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
+          {tab === 'weekly' && renderPeriod(weekly)}
           {tab === 'monthly' && (
             <div>
-              <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[640px] overflow-y-auto">
-                {monthlyRecords.length === 0 ? (
-                  <p className="text-center text-slate-400 dark:text-gray-500 py-10">Henüz aylık veri yok</p>
-                ) : (
-                  monthlyRecords.map((rec) => {
-                    const pos = rec.change >= 0;
-                    const barWidth = Math.min(Math.abs(rec.change_pct) * 3, 100);
-                    return (
-                      <div
-                        key={rec.key}
-                        className={`p-4 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors border-l-4 ${pos ? 'border-l-green-500' : 'border-l-red-500'}`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${pos ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                              {pos ? <TrendingUp size={16} className="text-green-600" /> : <TrendingDown size={16} className="text-red-600" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-900 dark:text-white">{rec.label}</p>
-                              <p className="text-xs text-slate-500 dark:text-gray-400">
-                                kâr {formatCurrency(rec.start_pnl)} ₺ → {formatCurrency(rec.end_pnl)} ₺
-                                {rec.realized !== 0 && (
-                                  <span className="ml-1 text-slate-400 dark:text-gray-500">
-                                    (satış kârı {rec.realized > 0 ? '+' : ''}{formatCurrency(rec.realized)} ₺ dahil)
-                                  </span>
-                                )}
-                                {rec.gap_days > 45 && (
-                                  <span className="ml-1 text-amber-600 dark:text-amber-500">
-                                    ⚠ {rec.gap_days} günlük dönem — arada kayıt yok
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <PnLBadge value={rec.change} pct={rec.change_pct} />
-                            <UsdSubLine value={rec.change} usdRate={usdRate} />
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-gray-700 rounded-full h-1.5 mt-2">
-                          <div
-                            className={`h-1.5 rounded-full transition-all duration-500 ${pos ? 'bg-green-500' : 'bg-red-500'}`}
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {monthlyRecords.length > 0 && (
-                <div className="p-5 bg-slate-50 dark:bg-gray-900/30 border-t border-slate-200 dark:border-gray-700">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">En İyi Ay</p>
-                      {(() => {
-                        const best = monthlyRecords.reduce((b, m) => m.change > b.change ? m : b, monthlyRecords[0]);
-                        return (
-                          <>
-                            <p className="font-bold text-green-600">+{formatCurrency(best.change)} ₺</p>
-                            <p className="text-xs font-semibold text-green-600/80">+${formatCurrencyUSD(best.change, usdRate)}</p>
-                            <p className="text-xs text-slate-400">{best.label} ({best.change_pct >= 0 ? '+' : ''}{best.change_pct.toFixed(2)}%)</p>
-                          </>
-                        );
-                      })()}
+              {renderPeriod(monthly)}
+              {monthly.length > 0 && (() => {
+                const rows = monthly.filter(m => m.key >= '2026-03');
+                const tot = rows.reduce((s, m) => s + m.gainUSD, 0);
+                const posM = rows.filter(m => m.gainUSD > 0).length;
+                return (
+                  <div className="p-5 bg-slate-50 dark:bg-gray-900/30 border-t border-slate-200 dark:border-gray-700">
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mb-2">📈 Toplam (Mart 2026'dan beri, {rows.length} ay)</p>
+                    <div className="flex items-baseline gap-4">
+                      <p className={`text-2xl font-bold ${tot >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{fmtUsd(tot)}</p>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posM}/{rows.length} ay kâr</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mb-1">En Kötü Ay</p>
-                      {(() => {
-                        const worst = monthlyRecords.reduce((w, m) => m.change < w.change ? m : w, monthlyRecords[0]);
-                        return (
-                          <>
-                            <p className="font-bold text-red-600">{formatCurrency(worst.change)} ₺</p>
-                            <p className="text-xs font-semibold text-red-600/80">${formatCurrencyUSD(worst.change, usdRate)}</p>
-                            <p className="text-xs text-slate-400">{worst.label} ({worst.change_pct >= 0 ? '+' : ''}{worst.change_pct.toFixed(2)}%)</p>
-                          </>
-                        );
-                      })()}
-                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
+                      Kâr = dolar servetin artışı; kur hareketi kâr sayılmaz. Dinamik maaş = geçen ayın kârı × 0,85 (Kâr Cüzdanı).
+                    </p>
                   </div>
-                  {(() => {
-                    // 2026-09-19: maaş = geçen ayın kârı × 0,85 (kullanıcı kararı, tek ölçü).
-                    // Bu tablodaki aylık kâr rakamı o hesabın kaynağıdır; maaş rakamının
-                    // kendisi Kâr Cüzdanı / rapor sayfasında (salaryService) gösterilir.
-                    const totalTry = monthlyRecords.reduce((sum, m) => sum + m.change, 0);
-                    const posMonths = monthlyRecords.filter((m) => m.change > 0).length;
-                    return (
-                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-gray-700">
-                        <p className="text-xs text-slate-500 dark:text-gray-400 mb-2">📈 Toplam kâr ({monthlyRecords.length} ay)</p>
-                        <div className="flex items-baseline gap-4">
-                          <div>
-                            <p className={`text-2xl font-bold ${totalTry >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {totalTry >= 0 ? '+' : ''}{formatCurrency(totalTry)} ₺
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">yatırımların kazancı (TL)</p>
-                          </div>
-                          <div className="border-l border-slate-300 dark:border-gray-700 pl-4">
-                            <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posMonths}/{monthlyRecords.length} ay</p>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">kâr getirdi</p>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-3 leading-relaxed">
-                          Dinamik maaş = geçen ayın kârı × 0,85. Bu tablodaki aylık kâr o hesabın kaynağıdır; bu ayın maaşını <b>Kâr Cüzdanı</b> gösterir.
-                        </p>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </>
@@ -697,3 +136,4 @@ export function DailyMonthlyPnL() {
     </div>
   );
 }
+export default DailyMonthlyPnL;

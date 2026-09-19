@@ -68,7 +68,7 @@ export default function IncomeWidget() {
         <div className="flex gap-4">
           <div>
             <p className="text-[10px] text-gray-400">{salary ? `${salary.monthLabel} kârı × 0,85` : 'Bu ay'}</p>
-            <p className="text-sm font-bold text-accent-600">${formatMoney(salary?.salaryUSD ?? 0)} <span className="text-[10px] font-normal text-gray-400">/ay · {formatMoney(salary?.salaryTRY ?? 0)} TL</span></p>
+            <p className="text-sm font-bold text-accent-600">${formatMoney(salary?.salaryUSD ?? 0)} <span className="text-[10px] font-normal text-gray-400">/ay</span></p>
           </div>
           {data.monthlyIncome > 0 && (
             <div>

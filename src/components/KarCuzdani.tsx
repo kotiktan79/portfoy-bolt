@@ -149,10 +149,9 @@ export default function KarCuzdani({ holdings }: Props) {
           <>
             <p className={`text-3xl font-bold ${salaryUsd > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>
               ${fmt(salaryUsd)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span>
-              <span className="text-sm font-normal text-slate-500 dark:text-gray-400 ml-2">≈ {fmt(salary.salaryTRY)} TL</span>
             </p>
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-              {salary.monthLabel} kârı <strong>{salary.profitTRY >= 0 ? '+' : ''}{fmt(salary.profitTRY)} TL</strong> (≈ ${fmt(salary.profitUSD)}) × 0,85.
+              {salary.monthLabel} dolar kârı <strong>{salary.profitUSD >= 0 ? '+' : '−'}${fmt(Math.abs(salary.profitUSD))}</strong> (servet ${fmt(salary.startWealthUSD)} → ${fmt(salary.endWealthUSD)}) × 0,85.
               {salary.realizedTRY !== 0 && ` Satış kârı ${fmt(salary.realizedTRY)} TL dahil.`}
               {salaryUsd === 0 && ' Kâr yok → bu ay maaş yok; fark yastıktan.'}
             </p>
@@ -170,9 +169,14 @@ export default function KarCuzdani({ holdings }: Props) {
           </p>
           <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
             {accrual
-              ? `${accrual.fromLabel}'tan beri ${accrual.months} ayın maaşları $${fmt(accrual.earnedUSD)} − çekilen $${fmt(accrual.withdrawnUSD)}`
+              ? `${accrual.fromLabel}'tan beri ${accrual.months} ayın net kârı $${fmt(accrual.netProfitUSD)} × 0,85 = $${fmt(accrual.earnedUSD)} − çekilen $${fmt(accrual.withdrawnUSD)}`
               : 'Geçmiş aylar hesaplanıyor…'}
           </p>
+          {accrual && accrual.deficitUSD > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+              Açık: ${fmt(accrual.deficitUSD)} — zarar aylar birikmişi aştı; yeni kâr önce bu açığı kapatır, sonra hak doğar.
+            </p>
+          )}
           <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
             <div>
               <p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p>
@@ -190,7 +194,7 @@ export default function KarCuzdani({ holdings }: Props) {
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
             <AlertCircle size={14} className="text-slate-500 dark:text-gray-400 mt-0.5 shrink-0" />
             <p className="text-[11px] text-slate-600 dark:text-gray-300">
-              Kural: her ay kâr varsa %85'i o ayın maaşı, kâr yoksa 0. Çekmediğin hak birikir, kaybolmaz; sıfır ayda birikmişten çek.
+              Kural: net kârın %85'i çekilebilir. Zarar aylar birikmişten düşer (ana paraya dokunulmaz), çekmediğin hak birikir; sıfır ayda birikmişten çek.
             </p>
           </div>
         </div>
