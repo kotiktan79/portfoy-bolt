@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { TARGET_PCT } from '../config/portfolioPolicy';
 import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
@@ -261,15 +262,11 @@ export function calculateRebalance(
   return allocations.sort((a, b) => b.value - a.value);
 }
 
+// TEK KAYNAK: src/config/portfolioPolicy.ts (hisse 50 / eurobond 25 / fon 5 / altın 10 / kripto 5 / nakit 5).
+// Eski sabit tablo (hisse 40 / kripto 20 / döviz 15 / fon 15 / eurobond 5 / altın 5) ana sayfada
+// 'Hedefe Ulaşma Planı' ile ÇELİŞEN öneriler üretiyordu ('altın sat, ₺1,3M BTC al') — denetim 2026-09-20.
 export function getDefaultTargetAllocations(): Record<string, number> {
-  return {
-    stock: 40,
-    crypto: 20,
-    currency: 15,
-    fund: 15,
-    eurobond: 5,
-    commodity: 5,
-  };
+  return { ...TARGET_PCT };
 }
 
 export interface AdvancedMetrics {
