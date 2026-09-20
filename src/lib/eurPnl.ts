@@ -132,6 +132,12 @@ export const CARRY_RESET_MONTH = '2026-09';
 export const POOL_CAP_EUR = 3000;        // ≈3 aylık geçim
 export const MONTHLY_CAP_EUR = 1000;     // geçim planı: aylık üst sınır
 
+/** Şu an çekilebilecek maaş: havuzun %85'i, aylık tavanla sınırlı.
+ *  TEK KAYNAK — cüzdan, cron, e-posta, Telegram ve panel aynı fonksiyonu kullanır.
+ *  Taban KAPANMIŞ son ayın havuzudur: bitmemiş ayın kârı henüz geri dönebilir, ona karşı ödeme yapılmaz. */
+export const entitlementEUR = (poolEUR: number, safety = SALARY_SAFETY, monthlyCap = MONTHLY_CAP_EUR) =>
+  Math.min(monthlyCap, safety * Math.max(0, poolEUR));
+
 export interface MonthlyOpts {
   safety?: number;                       // 0,85 güvenlik payı
   carryResetFrom?: string | null;        // zarar devri sıfırlama ayı
@@ -315,7 +321,9 @@ export interface EurSummary {
   dayGainEUR: number; dayGainPct: number;          // son snapshot günü, önceki servete göre
   weekGainEUR: number; weekGainPct: number;        // son 7 takvim günü (akış düzeltilmiş)
   mtd: MonthRow | null;                            // içinde bulunulan ay
-  lastFull: MonthRow | null;                       // bir önceki ay → salaryEUR = bu ayın maaşı
+  lastFull: MonthRow | null;                       // bir önceki (kapanmış) ay
+  entitlementEUR: number;                          // ŞU AN çekilebilecek maaş (kapanmış havuzdan)
+  poolEUR: number;                                 // kapanmış son ayın havuz bakiyesi (+ havuz, − açık)
   health: EurHealth;
 }
 export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
@@ -332,11 +340,13 @@ export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
     if (idx >= 0) { const start = Math.max(idx, 1); weekBase = d[start - 1].wealthEUR; for (let i = start; i < n; i++) weekGainEUR += d[i].gainEUR; }
   }
   const prevYM = (() => { const y = Number(todayYM.slice(0, 4)), m = Number(todayYM.slice(5, 7)); const p = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; return p; })();
+  const lastFull = model.months.find(m => m.month === prevYM) || null;
+  const poolEUR = lastFull ? lastFull.carryOutEUR : 0;
   return {
     asOf: last?.date || '', prevWealthEUR: prev?.wealthEUR || 0, wealthEUR: last?.wealthEUR || 0, wealthTRY: last?.totalValueTRY || 0, eurRate: last?.eurRate || 0, usdRate: last?.usdRate || 0,
     dayGainEUR, dayGainPct, weekGainEUR, weekGainPct: weekBase > 0 ? (weekGainEUR / weekBase) * 100 : 0,
     mtd: model.months.find(m => m.month === todayYM) || null,
-    lastFull: model.months.find(m => m.month === prevYM) || null,
+    lastFull, poolEUR, entitlementEUR: entitlementEUR(poolEUR),
     health: model.health,
   };
 }

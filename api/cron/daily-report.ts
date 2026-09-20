@@ -68,11 +68,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let eur: EurSummary | null = null;
     try {
       eur = await loadEurSummary(supabase, todayStr);
-      log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)} (dün ${fmtEUR(eur.prevWealthEUR)}), gün ${fmtSignedEUR(eur.dayGainEUR)} = %${eur.dayGainPct.toFixed(2)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.lastFull?.salaryEUR || 0)}, kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
+      log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)} (dün ${fmtEUR(eur.prevWealthEUR)}), gün ${fmtSignedEUR(eur.dayGainEUR)} = %${eur.dayGainPct.toFixed(2)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.entitlementEUR)} (havuz ${fmtSignedEUR(eur.poolEUR)}), kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
     } catch (e: any) {
       log.push(`EUR motoru HATA: ${e.message}`);
     }
-    const salaryEUR = eur?.lastFull?.salaryEUR || 0;
+    const salaryEUR = eur?.entitlementEUR || 0;      // TEK TABAN: kapanmış havuz × 0,85 (aylık tavanla) — cüzdanla aynı
     const projectedSalaryEUR = eur?.mtd?.salaryEUR || 0;
 
     // FX kurları — holdings'teki USD/EUR pozisyonlarından; yoksa live API.
@@ -616,7 +616,7 @@ function buildPortfolioContext(
   const passiveYearlyTRY = Object.entries(byType).reduce((sum, [type, d]) => sum + d.value * (yieldByType[type] || 0), 0);
   const passiveMonthlyEUR = E(passiveYearlyTRY) / 12;
 
-  const salaryEUR = eur?.lastFull?.salaryEUR || 0;
+  const salaryEUR = eur?.entitlementEUR || 0;   // AI bağlamı da cüzdanla aynı tabanı görsün
   const withdrawalRatePctYearly = eur && eur.wealthEUR > 0 ? (salaryEUR * 12 / eur.wealthEUR) * 100 : 0;
   const eurBlock = eur ? `
 EUR KÂR MOTORU (tek ölçü; servet farkı − dış akış; kur farkı kâr DEĞİL):
@@ -624,7 +624,8 @@ Servet: ${fmtEUR(eur.wealthEUR)} (≈ ₺${Math.round(eur.wealthTRY).toLocaleStr
 Son gün: ${fmtSignedEUR(eur.dayGainEUR)} (${eur.dayGainPct >= 0 ? '+' : ''}${eur.dayGainPct.toFixed(2)}%)
 Son 7 gün: ${fmtSignedEUR(eur.weekGainEUR)} (${eur.weekGainPct >= 0 ? '+' : ''}${eur.weekGainPct.toFixed(2)}%)
 Bu ay (MTD): nominal ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, enflasyon payı −${fmtEUR(eur.mtd?.inflationEUR || 0)}, reel ${fmtSignedEUR(eur.mtd?.realGainEUR || 0)}, devreden açık ${fmtSignedEUR(eur.mtd?.carryInEUR || 0)} → gelecek ay maaş ön izleme ${fmtEUR(eur.mtd?.salaryEUR || 0)}
-Geçen ay (${eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—'}): nominal ${fmtSignedEUR(eur.lastFull?.gainEUR || 0)}, reel ${fmtSignedEUR(eur.lastFull?.realGainEUR || 0)}, çekilebilir ${fmtEUR(eur.lastFull?.withdrawableEUR || 0)} → BU AYIN MAAŞI ${fmtEUR(salaryEUR)} (= çekilebilir × 0,85)
+Geçen ay (${eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—'}): nominal ${fmtSignedEUR(eur.lastFull?.gainEUR || 0)}, reel ${fmtSignedEUR(eur.lastFull?.realGainEUR || 0)}
+KÂR HAVUZU (kapanmış aylardan birikmiş, çekilenler düşülmüş): ${fmtSignedEUR(eur.poolEUR)} → ŞU AN ÇEKİLEBİLİR MAAŞ ${fmtEUR(salaryEUR)} (= havuz × 0,85, aylık tavan €${LIVING_CAP_EUR})
 Yıllık çekim oranı (maaş×12 / servet): %${withdrawalRatePctYearly.toFixed(1)} (sürdürülebilir ≤%6)` : `
 EUR KÂR MOTORU: veri alınamadı — kâr/maaş yorumu YAPMA.`;
 
@@ -635,7 +636,7 @@ ${eurBlock}
 Pozisyon Sayısı: ${holdings.length}
 
 KULLANICININ HEDEFİ — TOTAL RETURN (Maaş + Büyüme):
-Maaş kuralı: geçen ayın reel EUR kârı × 0,85; zarar aylarında maaş 0, açık devreder (ana paraya dokunulmaz). Geçim üst sınırı ~€${LIVING_CAP_EUR}/ay.
+Maaş kuralı: çekilmeyen reel kâr havuzda birikir (tavan €3.000); çekim hakkı = havuz × 0,85, aylık en fazla €${LIVING_CAP_EUR}. Zarar havuzu eritir, eksiye düşerse maaş 0 (ana paraya dokunulmaz).
 Strateji: Total Return — gelir + sermaye büyümesi + denge (saf gelir DEĞİL)
 Tahmini pasif gelir: ~${e0(passiveMonthlyEUR)}/ay — temettü+kupon+staking (yield varsayımıyla)
 Beklenen yıllık toplam getiri (EUR): global hisse %6-9, kısa USD hazine %3,5-4, altın %3-5, kripto oynak

@@ -10,7 +10,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getEurMonths, monthLabel, RELIABLE_FROM, INFLATION_EUR } from './eurPnlService';
-import { ymInTZ, prevYMOf, type MonthRow } from '../lib/eurPnl';
+import { ymInTZ, prevYMOf, entitlementEUR, type MonthRow } from '../lib/eurPnl';
 export { SALARY_SAFETY, POOL_CAP_EUR, MONTHLY_CAP_EUR } from '../lib/eurPnl';
 export const ACCRUAL_START_MONTH = RELIABLE_FROM.slice(0, 7);
 export { INFLATION_EUR };
@@ -19,6 +19,7 @@ export interface DynamicSalary {
   month: string; monthLabel: string;
   carryResetApplied?: boolean;    // o ayda eski açık sıfırlandı (Nisan öncesi kâr yastığı)
   poolOutEUR?: number;            // ay sonu havuz bakiyesi (+) ya da açık (−)
+  entitlementEUR?: number;        // ŞU AN çekilebilecek (havuz × 0,85, aylık tavanla)
   poolSpilloverEUR?: number;      // havuz tavanını aşıp portföyde kalan
   profitEUR: number;          // geçen ayın nominal kârı
   inflationEUR: number;       // sermaye koruma payı
@@ -39,7 +40,7 @@ export interface SalaryAccrual {
 const toRow = (r: MonthRow): DynamicSalary => ({
   month: r.month, monthLabel: monthLabel(r.month), carryResetApplied: r.carryResetApplied, profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
-  poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR,
+  poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR, entitlementEUR: entitlementEUR(r.carryOutEUR),
 });
 
 /** İçinde bulunulan ay, kullanıcının saat diliminde (lib/eurPnl.ymInTZ) */

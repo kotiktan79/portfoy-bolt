@@ -54,10 +54,11 @@ export default function KarCuzdani({ holdings }: Props) {
   // Ay sınırı kullanıcının saat diliminde (salaryService ile aynı kural)
   const monthKey = currentYM();
   const withdrawnThisMonthEur = withdrawals.filter(w => dayInTZ(String(w.withdrawn_at)).slice(0, 7) === monthKey).reduce((s, w) => s + Number(w.amount_usd) * (fx.usd / eurRate), 0);
-  const salaryEur = salary?.salaryEUR ?? 0;
-  // Havuz = cari ayın (MTD) ay sonu bakiyesi; çekim hakkı havuzdan ve aylık tavandan gelir
-  const poolEur = mtd?.poolOutEUR ?? salary?.poolOutEUR ?? 0;
-  const entitlementEur = Math.min(MONTHLY_CAP_EUR, 0.85 * Math.max(0, poolEur));
+  // TEK TABAN: çekim hakkı KAPANMIŞ son ayın havuzundan (motor hesaplıyor; bitmemiş ayın kârı geri dönebilir).
+  // Havuz zaten çekilenler düşülmüş bakiyedir → burada SADECE bu ay çekilenler düşülür (çift sayım yok).
+  const poolEur = salary?.poolOutEUR ?? 0;
+  const entitlementEur = salary?.entitlementEUR ?? 0;
+  const mtdPoolEur = mtd?.poolOutEUR ?? 0;               // bu ay şimdiye kadar biriken (ay kapanınca hak olur)
   const remainingEur = Math.max(0, entitlementEur - withdrawnThisMonthEur);
   const amountEur = Math.min(remainingEur, Math.max(0, parseFloat(amountInput) || remainingEur));
 
@@ -75,15 +76,20 @@ export default function KarCuzdani({ holdings }: Props) {
     const h = holdings.find(x => x.symbol === selectedSource.symbol && x.asset_type === 'currency'); if (!h) return;
     const newQty = Math.max(0, h.quantity - sourceQty);
     const amountUsd = amountEur * eurRate / fx.usd;
+    // Çekilen adedin gerçekleşmiş K/Z'si (TL): motor bunu akış düzeltmesi olarak okur, yoksa çekim SAHTE ZARAR görünür
+    const realizedTry = sourceQty * ((Number(h.current_price) || 0) - (Number(h.purchase_price) || 0)) * (String(h.currency || 'TRY').toUpperCase() === 'TRY' ? 1 : (fx[String(h.currency).toLowerCase() as 'usd' | 'eur'] ?? 1));
     const { error: rpcErr } = await supabase.rpc('withdraw_salary', {
       p_holding_id: h.id, p_new_quantity: newQty, p_amount_usd: amountUsd, p_reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd,
       p_portfolio_value_usd: portfolioEur * eurRate / fx.usd, p_source_symbol: selectedSource.symbol, p_source_quantity_deducted: sourceQty,
+      p_realized_try: realizedTry, p_note: `€${fmt(amountEur)} maaş`,
     });
     if (rpcErr && rpcErr.code !== 'PGRST202') { alert('Çekim başarısız: ' + rpcErr.message); return; }
     if (rpcErr) {
       const { error: u } = await supabase.from('holdings').update({ quantity: newQty }).eq('id', h.id); if (u) { alert('Kaynak güncellenemedi: ' + u.message); return; }
       const { error } = await supabase.from('salary_withdrawals').insert({ amount_usd: amountUsd, reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd, portfolio_value_usd: portfolioEur * eurRate / fx.usd, source_symbol: selectedSource.symbol, source_quantity_deducted: sourceQty, note: `€${fmt(amountEur)} maaş` });
       if (error) { await supabase.from('holdings').update({ quantity: h.quantity }).eq('id', h.id); alert('Çekim kaydedilemedi: ' + error.message); return; }
+      // RPC yoksa realize satırını istemci yazar (kâr motoru çekimi zarar sanmasın)
+      await supabase.from('cash_transactions').insert({ transaction_type: 'sell', type: 'sell', amount: sourceQty, currency: 'TRY', related_holding_id: h.id, notes: `€${fmt(amountEur)} maaş (Kar/Zarar: ${realizedTry.toFixed(2)} ₺)` });
     }
     setConfirmWithdraw(false); await loadAll(); window.location.reload();
   }
@@ -98,15 +104,16 @@ export default function KarCuzdani({ holdings }: Props) {
         <span className="text-[11px] text-slate-500 dark:text-gray-400">euro cetveli</span>
       </div>
 
-      <div className={`mx-5 mt-4 rounded-xl p-4 border ${salaryEur > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'}`}>
-        <div className="flex items-center gap-2 mb-1"><Gauge size={16} className={salaryEur > 0 ? 'text-blue-600' : 'text-amber-600'} /><p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">Bu Ayın Dinamik Maaşı</p></div>
+      <div className={`mx-5 mt-4 rounded-xl p-4 border ${entitlementEur > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'}`}>
+        <div className="flex items-center gap-2 mb-1"><Gauge size={16} className={entitlementEur > 0 ? 'text-blue-600' : 'text-amber-600'} /><p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">Şu An Çekebileceğin Maaş</p></div>
         {salary ? (
           <>
-            <p className={`text-3xl font-bold ${salaryEur > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>€{fmt(salaryEur)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span></p>
+            <p className={`text-3xl font-bold ${entitlementEur > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>€{fmt(entitlementEur)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span></p>
             <div className="text-xs text-slate-600 dark:text-gray-300 mt-2 space-y-0.5">
               <p>{salary.monthLabel}: servet €{fmt(salary.startWealthEUR)} → €{fmt(salary.endWealthEUR)}, dış para hariç kâr <strong>{sgn(salary.profitEUR)}€{fmt(salary.profitEUR)}</strong></p>
               <p>− enflasyon payı (%2/yıl) €{fmt(salary.inflationEUR)} = reel <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
-              <p>→ çekilebilir €{fmt(salary.withdrawableEUR)} × 0,85 = <strong>€{fmt(salary.salaryEUR)}</strong>{salaryEur === 0 && ' — bu ay maaş yok, fark yastıktan'}</p>
+              <p>→ havuz €{fmt(poolEur)} × 0,85{0.85 * Math.max(0, poolEur) > MONTHLY_CAP_EUR ? `, aylık tavan €${fmt(MONTHLY_CAP_EUR)}` : ''} = <strong>€{fmt(entitlementEur)}</strong>{entitlementEur === 0 && ' — bu ay maaş yok, fark yastıktan'}</p>
+              <p className="text-slate-500 dark:text-gray-400">Bu ay ({mtd?.monthLabel ?? '—'}) biriken: €{fmt(mtdPoolEur)} — ay kapanınca hak olur.</p>
               {salary.carryResetApplied && <p className="text-emerald-700 dark:text-emerald-300">Bu ayda eski açık, Nisan öncesi kazanılan kâr yastığıyla sıfırlandı.</p>}
             </div>
           </>
@@ -120,7 +127,7 @@ export default function KarCuzdani({ holdings }: Props) {
             <div><p className="text-slate-500 dark:text-gray-400">Kalan hak</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Portföy</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(portfolioEur)}</p></div>
             <div className="col-span-3 mt-1 p-2 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-emerald-200 dark:border-emerald-900">
-              <p className="text-slate-500 dark:text-gray-400">Kâr havuzu <span className="text-[10px]">(çekilmeyen kâr birikir · tavan €{fmt(POOL_CAP_EUR)} · aylık çekim tavanı €{fmt(MONTHLY_CAP_EUR)})</span></p>
+              <p className="text-slate-500 dark:text-gray-400">Kâr havuzu <span className="text-[10px]">(kapanmış aylardan birikmiş · tavan €{fmt(POOL_CAP_EUR)} · aylık çekim tavanı €{fmt(MONTHLY_CAP_EUR)})</span></p>
               <p className={`font-bold text-base ${poolEur > 0 ? 'text-emerald-600 dark:text-emerald-400' : poolEur < 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
                 {poolEur < 0 ? `−€${fmt(poolEur)} açık` : `€${fmt(poolEur)}`}
                 {(mtd?.poolSpilloverEUR ?? 0) > 0 && <span className="text-[11px] font-normal text-slate-500 dark:text-gray-400"> · tavanı aşan €{fmt(mtd!.poolSpilloverEUR!)} portföyde kaldı</span>}

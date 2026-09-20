@@ -54,7 +54,7 @@ describe('eurPnl', () => {
   });
 });
 
-import { buildEurModel, summarizeEur } from './eurPnl';
+import { buildEurModel, summarizeEur, entitlementEUR } from './eurPnl';
 
 describe('buildEurModel + summarizeEur (ham satır → model, uygulama = cron)', () => {
   const snaps = [
@@ -252,5 +252,42 @@ describe('kâr havuzu (tavanlı)', () => {
     expect(eki.carryInEUR).toBeCloseTo(600, 6);
     expect(eki.carryOutEUR).toBeCloseTo(-400, 6);
     expect(eki.salaryEUR).toBe(0);
+  });
+});
+
+describe('çekim hakkı tek taban + çekim muhasebesi', () => {
+  it('entitlementEUR: havuzun %85i, aylık tavanla sınırlı, eksi havuzda 0', () => {
+    expect(entitlementEUR(-500)).toBe(0);
+    expect(entitlementEUR(105.31)).toBeCloseTo(89.51, 2);
+    expect(entitlementEUR(2_000)).toBe(1_000);          // 0,85×2.000 = 1.700 → tavan
+    expect(entitlementEUR(1_176.47)).toBeCloseTo(1_000, 2);
+  });
+  it('summarizeEur: taban KAPANMIŞ ay (bitmemiş ayın kârı hak sayılmaz)', () => {
+    const rates = ['2026-08-31', '2026-09-30'].map(d => ({ recorded_at: d, rate: 50 }));
+    const model = buildEurModel({
+      snapshots: [
+        { snapshot_date: '2026-08-31', total_value: 100_000 * 50, total_investment: 100_000 * 50 },
+        { snapshot_date: '2026-09-30', total_value: 101_000 * 50, total_investment: 100_000 * 50 },
+      ],
+      eurRates: rates, usdRates: rates, transactions: [], cashSells: [], holdings: [],
+      usdNow: 45, reliableFrom: '2026-08-31', annualInflation: 0,
+    });
+    const s = summarizeEur(model, '2026-09');
+    expect(s.mtd?.gainEUR).toBeCloseTo(1_000, 6);      // Eylül kârı var
+    expect(s.poolEUR).toBe(0);                          // ama kapanmış ay (Ağustos) havuzu 0
+    expect(s.entitlementEUR).toBe(0);                   // → şu an çekilebilir 0
+    expect(s.mtd?.salaryEUR).toBeCloseTo(850, 6);       // ay kapanınca 0,85×1.000
+  });
+  it('çekim havuzdan BİR kez düşer (UI ayrıca düşmemeli)', () => {
+    const daily = [
+      { date: '2026-09-30', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-10-31', gainEUR: 1_000, wealthEUR: 101_000 },
+    ];
+    const rows = monthlyRows(daily, 0, { carryResetFrom: null, withdrawnByMonth: new Map([['2026-10', 400]]) });
+    const eki = rows.find(r => r.month === '2026-10')!;
+    expect(eki.salaryEUR).toBeCloseTo(850, 6);          // hak: çekim ÖNCESİ bakiyeden
+    expect(eki.carryOutEUR).toBeCloseTo(600, 6);        // havuz: 1.000 − 400
+    // Kalan hak = hak − o ay çekilen = 850 − 400 = 450 (çift düşüm yok)
+    expect(eki.salaryEUR - (eki.withdrawnEUR ?? 0)).toBeCloseTo(450, 6);
   });
 });

@@ -59,7 +59,7 @@ export function buildDailyTelegram(d: DailySnapshot): string {
     `${arrow(d.weekGainEUR)} 7 gün: ${seur(d.weekGainEUR)} (${spct(d.weekGainPct)})`,
     `${arrow(d.mtdGainEUR)} Bu ay: ${seur(d.mtdGainEUR)} nominal · reel ${seur(d.mtdRealEUR)}`,
     ``,
-    `💸 ${escapeHtml(d.salaryMonthLabel)} maaşı: <b>${eur(d.salaryEUR)}</b> (${escapeHtml(d.salaryBasisLabel)} çekilebilir × 0,85)`,
+    `💸 Çekilebilir maaş: <b>${eur(d.salaryEUR)}</b> (kâr havuzu × 0,85, aylık tavan €1.000)`,
     d.carryInEUR < 0
       ? `⛔ Devreden açık ${seur(d.carryInEUR)} → ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}`
       : `➡️ ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}${d.carryResetApplied ? ' (eski açık Nisan öncesi kâr yastığıyla sıfırlandı)' : ''}`,

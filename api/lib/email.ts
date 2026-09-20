@@ -115,7 +115,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Dinamik Maaş — ${d.salaryMonthLabel}</div>
         <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;">
           <div style="font-size:24px;font-weight:800;color:${d.salaryEUR > 0 ? '#059669' : '#64748b'};">${eur(d.salaryEUR)}</div>
-          <div style="font-size:12px;color:#64748b;">= ${d.salaryBasisLabel} çekilebilir reel kârı × 0,85</div>
+          <div style="font-size:12px;color:#64748b;">= kâr havuzu × 0,85 (aylık tavan €1.000) · havuz ${d.salaryBasisLabel} sonu itibarıyla</div>
         </div>
         <div style="display:flex;gap:18px;margin-top:12px;">
           <div>
