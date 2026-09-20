@@ -3,7 +3,7 @@ import { Wallet, Gauge, AlertCircle } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
-import { dayInTZ } from '../lib/eurPnl';
+import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR } from '../lib/eurPnl';
 import { currentYM } from '../services/salaryService';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
@@ -55,7 +55,10 @@ export default function KarCuzdani({ holdings }: Props) {
   const monthKey = currentYM();
   const withdrawnThisMonthEur = withdrawals.filter(w => dayInTZ(String(w.withdrawn_at)).slice(0, 7) === monthKey).reduce((s, w) => s + Number(w.amount_usd) * (fx.usd / eurRate), 0);
   const salaryEur = salary?.salaryEUR ?? 0;
-  const remainingEur = Math.max(0, salaryEur - withdrawnThisMonthEur);
+  // Havuz = cari ayın (MTD) ay sonu bakiyesi; çekim hakkı havuzdan ve aylık tavandan gelir
+  const poolEur = mtd?.poolOutEUR ?? salary?.poolOutEUR ?? 0;
+  const entitlementEur = Math.min(MONTHLY_CAP_EUR, 0.85 * Math.max(0, poolEur));
+  const remainingEur = Math.max(0, entitlementEur - withdrawnThisMonthEur);
   const amountEur = Math.min(remainingEur, Math.max(0, parseFloat(amountInput) || remainingEur));
 
   const cashSources = useMemo(() => holdings
@@ -116,6 +119,13 @@ export default function KarCuzdani({ holdings }: Props) {
             <div><p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(withdrawnThisMonthEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Kalan hak</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Portföy</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(portfolioEur)}</p></div>
+            <div className="col-span-3 mt-1 p-2 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-emerald-200 dark:border-emerald-900">
+              <p className="text-slate-500 dark:text-gray-400">Kâr havuzu <span className="text-[10px]">(çekilmeyen kâr birikir · tavan €{fmt(POOL_CAP_EUR)} · aylık çekim tavanı €{fmt(MONTHLY_CAP_EUR)})</span></p>
+              <p className={`font-bold text-base ${poolEur > 0 ? 'text-emerald-600 dark:text-emerald-400' : poolEur < 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
+                {poolEur < 0 ? `−€${fmt(poolEur)} açık` : `€${fmt(poolEur)}`}
+                {(mtd?.poolSpilloverEUR ?? 0) > 0 && <span className="text-[11px] font-normal text-slate-500 dark:text-gray-400"> · tavanı aşan €{fmt(mtd!.poolSpilloverEUR!)} portföyde kaldı</span>}
+              </p>
+            </div>
           </div>
           {mtd && (
             <div className="mt-3 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-gray-300">

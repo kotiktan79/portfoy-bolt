@@ -112,8 +112,10 @@ export interface MonthRow {
   realGainEUR: number;        // gain − inflation
   carryInEUR: number;         // ay başı devreden açık (≤0)
   withdrawableEUR: number;    // max(0, carryIn + realGain)
-  carryOutEUR: number;        // min(0, carryIn + realGain)
-  salaryEUR: number;          // 0,85 × withdrawable
+  carryOutEUR: number;        // ay sonu bakiye: havuz (+, tavanlı) ya da devreden açık (−)
+  salaryEUR: number;          // min(aylık tavan, 0,85 × havuz)
+  withdrawnEUR?: number;      // o ay gerçekten çekilen maaş
+  poolSpilloverEUR?: number;  // havuz tavanını aşıp portföyde kalan kısım
 }
 
 export const SALARY_SAFETY = 0.85;
@@ -124,7 +126,28 @@ export const SALARY_SAFETY = 0.85;
 // o kazanılmış yastıkla karşılanmış sayılır; ana para yenmez. Bu aydan itibaren kural aynen işler: zarar yine devreder.
 export const CARRY_RESET_MONTH = '2026-09';
 
-export function monthlyRows(daily: DailyGain[], annualInflation: number, safety = SALARY_SAFETY, carryResetFrom: string | null = CARRY_RESET_MONTH): MonthRow[] {
+// KÂR HAVUZU (kullanıcı kararı 2026-09-20): zarar devrediyordu ama artıda kalan kâr devretmiyordu — asimetrikti.
+// Artık tek bakiye: her ay reel kâr eklenir, çekilen düşülür. Artı bakiye TAVANA kadar devreder (havuz),
+// tavanı aşan kısım portföyde kalır ve çalışmaya devam eder (düşüşte toplu çekim cazibesi doğmasın).
+export const POOL_CAP_EUR = 3000;        // ≈3 aylık geçim
+export const MONTHLY_CAP_EUR = 1000;     // geçim planı: aylık üst sınır
+
+export interface MonthlyOpts {
+  safety?: number;                       // 0,85 güvenlik payı
+  carryResetFrom?: string | null;        // zarar devri sıfırlama ayı
+  poolCapEUR?: number;                   // havuz tavanı: üstü portföyde kalır, çalışmaya devam eder
+  monthlyCapEUR?: number;                // aylık çekim tavanı (geçim planı)
+  withdrawnByMonth?: Map<string, number> | null;   // o ay gerçekten çekilen maaş (EUR) — havuzdan düşer
+}
+
+export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: MonthlyOpts | number = {}, carryResetFromLegacy: string | null = CARRY_RESET_MONTH): MonthRow[] {
+  // Eski imza (safety, carryResetFrom) geriye dönük desteklenir
+  const o: MonthlyOpts = typeof opts === 'number' ? { safety: opts, carryResetFrom: carryResetFromLegacy } : opts;
+  const safety = o.safety ?? SALARY_SAFETY;
+  const carryResetFrom = o.carryResetFrom === undefined ? CARRY_RESET_MONTH : o.carryResetFrom;
+  const poolCap = o.poolCapEUR ?? POOL_CAP_EUR;
+  const monthlyCap = o.monthlyCapEUR ?? MONTHLY_CAP_EUR;
+  const withdrawn = o.withdrawnByMonth ?? null;
   const m = new Map<string, MonthRow>();
   let prevWealth = daily.length ? daily[0].wealthEUR : 0;
   const mRate = Math.pow(1 + annualInflation, 1 / 12) - 1;
@@ -142,10 +165,15 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, safety 
     if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; didReset = true; }
     r.inflationEUR = r.startWealthEUR * mRate;
     r.realGainEUR = r.gainEUR - r.inflationEUR;
-    r.carryInEUR = carry;
+    r.carryInEUR = carry;                                    // havuz (+) ya da devreden açık (−)
     const bal = carry + r.realGainEUR;
-    r.withdrawableEUR = Math.max(0, bal); r.carryOutEUR = Math.min(0, bal);
-    r.salaryEUR = safety * r.withdrawableEUR;
+    r.withdrawableEUR = Math.max(0, bal);                    // havuzdaki para
+    r.salaryEUR = Math.min(monthlyCap, safety * r.withdrawableEUR);   // bu ay çekilebilecek maaş
+    const paid = withdrawn?.get(r.month) ?? 0;               // gerçekten çekilen (çekmezsen havuzda kalır)
+    const after = bal - Math.max(0, paid);
+    r.withdrawnEUR = Math.max(0, paid);
+    r.carryOutEUR = after > 0 ? Math.min(poolCap, after) : after;     // artı bakiye TAVANA kadar devreder, açık tamamen devreder
+    r.poolSpilloverEUR = after > poolCap ? after - poolCap : 0;       // tavanı aşan kısım portföyde kalır
     carry = r.carryOutEUR;
   }
   return rows;
@@ -159,6 +187,42 @@ export interface EurDaily extends DailyGain { totalValueTRY: number; eurRate: nu
 export interface EurHealth { ok: boolean; lastEurRateDay: string; lastSnapDay: string }
 export interface EurModel { daily: EurDaily[]; months: MonthRow[]; health: EurHealth }
 
+/** salary_withdrawals USD tutuyor (eski şema) → çekim GÜNÜNÜN kurlarıyla EUR'ya çevrilip aya toplanır. */
+export function withdrawnMap(
+  rows: Array<{ withdrawn_at: string; amount_usd: number | string | null }>,
+  eurRates: Array<{ recorded_at: string; rate: number }>,
+  usdRates: Array<{ recorded_at: string; rate: number }>,
+): Map<string, number> {
+  const eur = makeRateSeries(eurRates.map(r => ({ date: r.recorded_at, rate: r.rate })), NaN);
+  const usd = makeRateSeries(usdRates.map(r => ({ date: r.recorded_at, rate: r.rate })), NaN);
+  const m = new Map<string, number>();
+  for (const w of rows) {
+    const d = dayInTZ(String(w.withdrawn_at)); if (!d) continue;
+    const u = usd.rateAt(d), e = eur.rateAt(d);
+    if (!Number.isFinite(u) || !Number.isFinite(e) || e <= 0) continue;
+    const amt = (Number(w.amount_usd) || 0) * u / e;
+    if (amt > 0) m.set(d.slice(0, 7), (m.get(d.slice(0, 7)) || 0) + amt);
+  }
+  return m;
+}
+
+/** PostgREST max_rows=1000 tavanını sayfalayarak aşar (.range tek başına YETMEZ — tavan sunucuda).
+ *  Hata fırlatır: sessizce yarım seriyle yanlış kâr hesaplamaktansa ekran boş kalsın (çağıranlar catch eder). */
+export async function fetchAll<T>(name: string, build: () => any): Promise<T[]> {
+  // Sunucu max_rows'u ROW_CAP'ten KÜÇÜK olabilir → 'kısa sayfa = bitti' varsayımı seriyi sessizce yarım bırakır.
+  // Bu yüzden boş sayfa görene kadar devam edilir (fazladan tek istek, karşılığında kesilme riski yok).
+  const out: T[] = [];
+  for (let from = 0; ; ) {
+    const { data, error } = await build().range(from, from + ROW_CAP - 1);
+    if (error) throw new Error(`eurPnl ${name}: ${error.message}`);
+    const rows = (data || []) as T[];
+    if (rows.length === 0) return out;
+    out.push(...rows);
+    from += rows.length;
+    if (out.length > 200_000) throw new Error(`eurPnl ${name}: beklenmedik satır sayısı`);
+  }
+}
+
 export interface EurModelInput {
   /** snapshot_date ASC, created_at DESC sıralı (gün içi son kayıt önce) — sadece reliableFrom ve sonrası */
   snapshots: Array<{ snapshot_date: string; total_value: number | string | null; total_investment: number | string | null }>;
@@ -170,6 +234,8 @@ export interface EurModelInput {
   usdNow: number;            // seri boşsa yedek
   reliableFrom: string;
   annualInflation: number;
+  /** ay → o ay çekilen maaş (EUR); havuzdan düşülür. Yoksa çekim yok sayılır. */
+  withdrawnByMonth?: Map<string, number> | null;
 }
 
 export function buildEurModel(inp: EurModelInput): EurModel {
@@ -235,7 +301,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
 
   const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay);
   const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
-  const months = monthlyRows(daily, inp.annualInflation);
+  const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
   const health: EurHealth = { ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay, lastEurRateDay: E.lastDay, lastSnapDay };
   return { daily, months, health };

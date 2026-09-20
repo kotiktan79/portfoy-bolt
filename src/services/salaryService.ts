@@ -11,13 +11,15 @@
 import { supabase } from '../lib/supabase';
 import { getEurMonths, monthLabel, RELIABLE_FROM, INFLATION_EUR } from './eurPnlService';
 import { ymInTZ, prevYMOf, type MonthRow } from '../lib/eurPnl';
-export { SALARY_SAFETY } from '../lib/eurPnl';
+export { SALARY_SAFETY, POOL_CAP_EUR, MONTHLY_CAP_EUR } from '../lib/eurPnl';
 export const ACCRUAL_START_MONTH = RELIABLE_FROM.slice(0, 7);
 export { INFLATION_EUR };
 
 export interface DynamicSalary {
   month: string; monthLabel: string;
   carryResetApplied?: boolean;    // o ayda eski açık sıfırlandı (Nisan öncesi kâr yastığı)
+  poolOutEUR?: number;            // ay sonu havuz bakiyesi (+) ya da açık (−)
+  poolSpilloverEUR?: number;      // havuz tavanını aşıp portföyde kalan
   profitEUR: number;          // geçen ayın nominal kârı
   inflationEUR: number;       // sermaye koruma payı
   realGainEUR: number;
@@ -37,6 +39,7 @@ export interface SalaryAccrual {
 const toRow = (r: MonthRow): DynamicSalary => ({
   month: r.month, monthLabel: monthLabel(r.month), carryResetApplied: r.carryResetApplied, profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
+  poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR,
 });
 
 /** İçinde bulunulan ay, kullanıcının saat diliminde (lib/eurPnl.ymInTZ) */
@@ -78,9 +81,9 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
 }
 
 /** Bu ay şimdiye kadar (MTD): nominal kâr, enflasyon payı, devreden açık ve gelecek ay maaş ön izlemesi. */
-export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean }
+export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean; poolOutEUR?: number; poolSpilloverEUR?: number }
 export async function getMonthToDate(): Promise<MonthToDate | null> {
   const rows = await getEurMonths();
   const r = rows.find(x => x.month === currentYM()); if (!r) return null;
-  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied };
+  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied, poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR };
 }

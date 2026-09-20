@@ -3,7 +3,7 @@
 // Satır limiti: PostgREST max_rows=1000 tavanı .range()'i EZER → kur serisi exchange_rates_daily görünümünden okunur,
 // diğer tablolar fetchAll() ile sayfalanır.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildEurModel, summarizeEur, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
+import { buildEurModel, summarizeEur, withdrawnMap, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
 
 export { RELIABLE_FROM, INFLATION_EUR };
 export type { EurModel, EurSummary, MonthRow };
@@ -28,7 +28,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
   const dailyRows = (rows: Array<{ day: string; rate: number }>) => rows.map(r => ({ recorded_at: String(r.day), rate: Number(r.rate) }));
   const rateQ = (ccy: 'EUR' | 'USD') => () => supabase.from('exchange_rates_daily').select('day,rate')
     .eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true });
-  const [snaps, eurRates, usdRates, txs, cashSells, holds] = await Promise.all([
+  const [snaps, eurRates, usdRates, txs, cashSells, holds, withdrawals] = await Promise.all([
     fetchAll<any>('snapshots', () => supabase.from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
       .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).order('id', { ascending: true })),
     fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
@@ -36,12 +36,14 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
+    fetchAll<any>('withdrawals', () => supabase.from('salary_withdrawals').select('withdrawn_at,amount_usd').order('withdrawn_at', { ascending: true })),
   ]);
   const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : 45;
   return buildEurModel({
     snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
     transactions: txs, cashSells, holdings: holds,
     usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
+    withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
   });
 }
 

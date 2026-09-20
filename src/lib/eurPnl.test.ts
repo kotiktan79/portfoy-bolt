@@ -167,12 +167,12 @@ describe('zarar devri sıfırlama (CARRY_RESET_MONTH)', () => {
     expect(eyl.carryResetApplied).toBe(true);
     expect(eyl.withdrawableEUR).toBeCloseTo(800, 6);
     expect(eyl.salaryEUR).toBeCloseTo(680, 6);
-    // sıfırlama tek seferlik: Ekim'de zarar yine devreder
-    const rows2 = monthlyRows([...daily, { date: '2026-10-31', gainEUR: -300, wealthEUR: 99_000 }], 0, 0.85, '2026-09');
+    // sıfırlama tek seferlik; havuz kuralı: Eylül'ün çekilmemiş €800'ü Ekim'e DEVREDER
+    const rows2 = monthlyRows([...daily, { date: '2026-10-31', gainEUR: -300, wealthEUR: 99_000 }], 0, { safety: 0.85, carryResetFrom: '2026-09' });
     const eki = rows2.find(r => r.month === '2026-10')!;
-    expect(eki.carryInEUR).toBe(0);
-    expect(eki.carryOutEUR).toBeCloseTo(-300, 6);
-    expect(eki.salaryEUR).toBe(0);
+    expect(eki.carryInEUR).toBeCloseTo(800, 6);
+    expect(eki.carryOutEUR).toBeCloseTo(500, 6);        // 800 − 300 zarar
+    expect(eki.salaryEUR).toBeCloseTo(0.85 * 500, 6);
   });
   it('artıda olan devir sıfırlanmaz (yalnız açık silinir)', () => {
     const artida = [
@@ -213,5 +213,44 @@ describe('üretim varsayılanı: CARRY_RESET_MONTH', () => {
     }
     expect(siz.find(r => r.month === '2026-09')!.salaryEUR).toBe(0);      // sıfırlamasız: maaş yok
     expect(ile.find(r => r.month === '2026-09')!.salaryEUR).toBeGreaterThan(0);
+  });
+});
+
+describe('kâr havuzu (tavanlı)', () => {
+  const mk = (gains: Array<[string, number]>) => {
+    const out = [{ date: '2026-08-31', gainEUR: 0, wealthEUR: 100_000 }];
+    let w = 100_000;
+    for (const [d, g] of gains) { w += g; out.push({ date: d, gainEUR: g, wealthEUR: w }); }
+    return out;
+  };
+  it('çekilmeyen kâr havuzda birikir, aylık tavan €1.000', () => {
+    const rows = monthlyRows(mk([['2026-09-30', 900], ['2026-10-31', 900], ['2026-11-30', 900]]), 0, { carryResetFrom: null });
+    const [eyl, eki, kas] = ['2026-09', '2026-10', '2026-11'].map(k => rows.find(r => r.month === k)!);
+    expect(eyl.carryOutEUR).toBeCloseTo(900, 6);                 // çekilmedi → havuzda
+    expect(eki.carryInEUR).toBeCloseTo(900, 6);
+    expect(eki.withdrawableEUR).toBeCloseTo(1_800, 6);
+    expect(eki.salaryEUR).toBeCloseTo(1_000, 6);                 // 0,85 × 1.800 = 1.530 → aylık tavan 1.000
+    expect(kas.carryInEUR).toBeCloseTo(1_800, 6);
+  });
+  it('havuz tavanı €3.000: fazlası portföyde kalır', () => {
+    const rows = monthlyRows(mk([['2026-09-30', 2_500], ['2026-10-31', 2_500]]), 0, { carryResetFrom: null });
+    const eki = rows.find(r => r.month === '2026-10')!;
+    expect(eki.carryOutEUR).toBeCloseTo(3_000, 6);
+    expect(eki.poolSpilloverEUR).toBeCloseTo(2_000, 6);          // 5.000 − 3.000
+  });
+  it('çekilen maaş havuzdan düşer', () => {
+    const w = new Map([['2026-09', 500]]);
+    const rows = monthlyRows(mk([['2026-09-30', 900], ['2026-10-31', 0]]), 0, { carryResetFrom: null, withdrawnByMonth: w });
+    const eyl = rows.find(r => r.month === '2026-09')!, eki = rows.find(r => r.month === '2026-10')!;
+    expect(eyl.withdrawnEUR).toBe(500);
+    expect(eyl.carryOutEUR).toBeCloseTo(400, 6);
+    expect(eki.carryInEUR).toBeCloseTo(400, 6);
+  });
+  it('zarar önce havuzu yer, sonra açığa döner', () => {
+    const rows = monthlyRows(mk([['2026-09-30', 600], ['2026-10-31', -1_000]]), 0, { carryResetFrom: null });
+    const eki = rows.find(r => r.month === '2026-10')!;
+    expect(eki.carryInEUR).toBeCloseTo(600, 6);
+    expect(eki.carryOutEUR).toBeCloseTo(-400, 6);
+    expect(eki.salaryEUR).toBe(0);
   });
 });
