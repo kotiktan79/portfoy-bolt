@@ -24,7 +24,7 @@ describe('projectFire', () => {
       safeWithdrawalRatePct: 4,
     });
     expect(p.yearsToTarget).toBeNull();
-    expect(p.yearByYear).toHaveLength(25);
+    expect(p.yearByYear).toHaveLength(40);   // ufuk 25→40 yıl (katkısız gerçekçi süreler 17-21 yıl)
     expect(p.yearByYear[24].endOfYearValue).toBeCloseTo(100_000, 6);
     expect(p.inflationAdjustedTarget).toBe(p.targetPortfolio); // ulaşılmadıysa faktör 1
   });
@@ -83,5 +83,21 @@ describe('projectFire', () => {
     expect(p.targetPortfolio).toBe(0);
     expect(p.yearsToTarget).toBeNull();
     expect(p.yearByYear.every(y => !y.reachedTarget)).toBe(true);
+  });
+});
+
+import { projectFire as pf } from './fireProjectionService';
+describe('projectFire — hedef REEL (enflasyonla büyür), dürüst süre', () => {
+  it('€148k, katkı 0, %4 getiri, €1.000/ay @ %3,5 SWR, enflasyon %2 → nominal hedef 21 yıl, reel hedef daha geç', () => {
+    const nominal = pf({ currentValue: 148_249, monthlyContribution: 0, annualReturnPct: 4, targetMonthlyIncome: 1000, safeWithdrawalRatePct: 3.5, annualInflationPct: 0 });
+    const real = pf({ currentValue: 148_249, monthlyContribution: 0, annualReturnPct: 4, targetMonthlyIncome: 1000, safeWithdrawalRatePct: 3.5, annualInflationPct: 2 });
+    expect(nominal.targetPortfolio).toBeCloseTo(342_857, 0);
+    expect(nominal.yearsToTarget).toBe(21);
+    // aynı alım gücü için: reel büyüme %4−%2 = %2/yıl → 148k→343k ≈ 42 yıl → 40 yıllık ufukta ULAŞILMIYOR (null)
+    expect(real.yearsToTarget === null || real.yearsToTarget > 21).toBe(true);
+  });
+  it('kasadan aktarım katkı sayılmaz: katkı 0 varsayılanı ile 8% bile "2-3 yıl" vermez', () => {
+    const p = pf({ currentValue: 148_249, monthlyContribution: 0, annualReturnPct: 8, targetMonthlyIncome: 1000, safeWithdrawalRatePct: 3.5, annualInflationPct: 2 });
+    expect(p.yearsToTarget === null || p.yearsToTarget >= 10).toBe(true);
   });
 });

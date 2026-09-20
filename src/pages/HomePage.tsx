@@ -32,7 +32,10 @@ import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
 import { getEurDaily, type EurDaily } from '../services/eurPnlService';
 // Dinamik Maaş kart alt yazısı: sıfırın SEBEBİNİ göster (devreden açık) — hakem/tarama bulgusu
-const salaryLabel = (d: DynamicSalary) => d.carryInEUR < 0 ? `${d.monthLabel}: reel kâr ${d.realGainEUR >= 0 ? '+' : '−'}€${Math.round(Math.abs(d.realGainEUR))}, devreden açık −€${Math.round(Math.abs(d.carryInEUR))} → çekilebilir €${Math.round(d.withdrawableEUR)} × 0,85` : `${d.monthLabel} çekilebilir reel kârı × 0,85`;
+// Havuz kuralı: hak = kapanmış son ayın havuzu × 0,85 (aylık tavan €1.000)
+const salaryLabel = (d: DynamicSalary) => (d.poolOutEUR ?? 0) < 0
+  ? `${d.monthLabel} sonu havuz −€${Math.round(Math.abs(d.poolOutEUR ?? 0))} açık → maaş yok (${d.monthLabel} reel ${d.realGainEUR >= 0 ? '+' : '−'}€${Math.round(Math.abs(d.realGainEUR))})`
+  : `havuz €${Math.round(d.poolOutEUR ?? 0)} × 0,85 (${d.monthLabel} sonu)`;
 
 
 // Lazy loaded components (charts, modals - loaded on demand)
@@ -161,7 +164,7 @@ export default function HomePage() {
                 dailyChange={livePnlData?.daily.change}
                 dailyChangePct={livePnlData?.daily.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
-                dynamicSafeMaxUSD={dynamic?.salaryEUR}
+                dynamicSafeMaxUSD={dynamic?.entitlementEUR}
                 dynamicSalaryLabel={dynamic ? salaryLabel(dynamic) : undefined}
                 inceptionGainEUR={inception?.totalGainEUR}
                 inceptionGainPct={inception?.totalGainPct}

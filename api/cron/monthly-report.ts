@@ -5,6 +5,7 @@ import { sendTelegram, buildMonthlyTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, monthLabelTR, fmtEUR, fmtSignedEUR } from '../lib/eurEngine.js';
+import { entitlementEUR } from '../../src/lib/eurPnl.js';
 
 // AYLIK RAPOR — TEK ÖLÇÜ EUR (2026-09-19). Her ayın 1'i 07:00 UTC: geçen ayın kârı (servet farkı − dış akış),
 // enflasyon payı, zarar devri ve BU AYIN MAAŞI (= geçen ayın çekilebilir reel kârı × 0,85) ilan edilir.
@@ -44,7 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`EUR motorunda ${reportYM} satırı yok, rapor atlandı.`);
       return res.status(200).json({ success: false, log });
     }
-    log.push(`EUR motoru: ${monthLabel} kâr ${fmtSignedEUR(row.gainEUR)}, reel ${fmtSignedEUR(row.realGainEUR)}, maaş ${fmtEUR(row.salaryEUR)}, kur ${model.health.ok ? 'güncel' : 'ESKİ'}`);
+    const entitlement = entitlementEUR(row.carryOutEUR);   // TEK TABAN: ay sonu havuzu × 0,85 (cüzdanla aynı)
+    log.push(`EUR motoru: ${monthLabel} kâr ${fmtSignedEUR(row.gainEUR)}, reel ${fmtSignedEUR(row.realGainEUR)}, havuz ${fmtSignedEUR(row.carryOutEUR)} → maaş ${fmtEUR(entitlement)}, kur ${model.health.ok ? 'güncel' : 'ESKİ'}`);
     const eurRateAtEnd = model.daily.filter(d => d.date <= monthEnd).pop()?.eurRate || model.daily[model.daily.length - 1]?.eurRate || 0;
     const toEUR = (tl: number) => (eurRateAtEnd > 0 ? tl / eurRateAtEnd : 0);
 
@@ -86,11 +88,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       startWealthEUR: row.startWealthEUR, endWealthEUR: row.endWealthEUR,
       gainEUR: row.gainEUR, inflationEUR: row.inflationEUR, realGainEUR: row.realGainEUR,
       carryInEUR: row.carryInEUR, withdrawableEUR: row.withdrawableEUR, carryOutEUR: row.carryOutEUR,
-      salaryEUR: row.salaryEUR, carryResetApplied: row.carryResetApplied,
+      salaryEUR: entitlement, carryResetApplied: row.carryResetApplied,
       realizedIncomeEUR,
       monthIncomeBreakdown,
       topGainersThisMonth,
-      yearRows: model.months.filter(r => r.month <= reportYM).map(r => ({ month: monthLabelTR(r.month), gainEUR: r.gainEUR, salaryEUR: r.salaryEUR })),
+      yearRows: model.months.filter(r => r.month <= reportYM).map(r => ({ month: monthLabelTR(r.month), gainEUR: r.gainEUR, salaryEUR: entitlementEUR(r.carryOutEUR) })),
       diagnosisAi: lastReport?.portfolio_diagnosis || '',
       healthOk: model.health.ok,
     };
@@ -102,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     log.push(tgRes.sent ? `Telegram gönderildi` : `Telegram atlandı: ${tgRes.reason}`);
 
     await sendPushToAll({
-      title: `💸 ${snapshot.salaryMonthLabel} maaşı: ${fmtEUR(row.salaryEUR)}`,
+      title: `💸 ${snapshot.salaryMonthLabel} maaşı: ${fmtEUR(entitlement)}`,
       body: `${monthLabel}: nominal ${fmtSignedEUR(row.gainEUR)} · reel ${fmtSignedEUR(row.realGainEUR)} · devir ${fmtSignedEUR(row.carryOutEUR)}`,
       url: '/performance',
       tag: 'monthly-report',

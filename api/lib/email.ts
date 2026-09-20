@@ -325,7 +325,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">${m.salaryMonthLabel} Maaşı</div>
         <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;">
           <div style="font-size:28px;font-weight:800;color:${m.salaryEUR > 0 ? '#059669' : '#64748b'};">${eur(m.salaryEUR)}</div>
-          <div style="font-size:13px;color:#64748b;">= çekilebilir ${eur(m.withdrawableEUR)} × 0,85</div>
+          <div style="font-size:13px;color:#64748b;">= ay sonu havuzu ${seur(m.carryOutEUR)} × 0,85 (aylık tavan €1.000)</div>
         </div>
         ${m.salaryEUR === 0 ? `<div style="font-size:12px;color:#7f1d1d;margin-top:6px;">Bu ay maaş yok: açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.</div>` : ''}
       `)}

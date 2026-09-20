@@ -102,7 +102,7 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
     ...(m.carryResetApplied ? ['Eski açık Nisan öncesi kâr yastığıyla sıfırlandı'] : []),
     `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
     ``,
-    `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (çekilebilir ${eur(m.withdrawableEUR)} × 0,85)`,
+    `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (ay sonu havuzu ${seur(m.carryOutEUR)} × 0,85, aylık tavan €1.000)`,
   ];
   if (m.salaryEUR === 0) lines.push(`⛔ Maaş yok — açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.`);
   lines.push('', `💰 Kaydedilen gelir: ${seur(m.realizedIncomeEUR)}`);

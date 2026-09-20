@@ -222,7 +222,7 @@ export default function DailyReportPage() {
                 {/* 2026-09-19: AI'nın 'Güvenli/Dengeli maaş' tahminleri KALDIRILDI — tek ölçü: geçen ayın kârı × 0,85 */}
                 <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-3 col-span-2">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Bu Ayın Dinamik Maaşı</p>
-                  <p className="text-lg font-bold text-brand-600">{dynSalary ? `€${formatMoney(dynSalary.salaryEUR)}` : '—'} {dynSalary && <span className="text-xs">/ay</span>}</p>
+                  <p className="text-lg font-bold text-brand-600">{dynSalary ? `€${formatMoney(dynSalary.entitlementEUR ?? 0)}` : '—'} {dynSalary && <span className="text-xs">/ay</span>}</p>
                   <p className="text-[10px] text-gray-400">{dynSalary
                     ? (dynSalary.withdrawableEUR > 0
                       ? `${dynSalary.monthLabel} çekilebilir reel kârı €${formatMoney(dynSalary.withdrawableEUR)} × 0,85`

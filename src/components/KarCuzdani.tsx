@@ -71,20 +71,25 @@ export default function KarCuzdani({ holdings }: Props) {
   const sourceSufficient = selectedSource ? selectedSource.valueEur >= amountEur : false;
   const canWithdraw = remainingEur > 0 && amountEur > 0;
 
+  const [busy, setBusy] = useState(false);
   async function handleWithdraw() {
-    if (!canWithdraw || !selectedSource || !sourceSufficient) return;
+    if (busy || !canWithdraw || !selectedSource || !sourceSufficient) return;
     const h = holdings.find(x => x.symbol === selectedSource.symbol && x.asset_type === 'currency'); if (!h) return;
-    const newQty = Math.max(0, h.quantity - sourceQty);
+    setBusy(true);
+    try {
     const amountUsd = amountEur * eurRate / fx.usd;
     // Çekilen adedin gerçekleşmiş K/Z'si (TL): motor bunu akış düzeltmesi olarak okur, yoksa çekim SAHTE ZARAR görünür
     const realizedTry = sourceQty * ((Number(h.current_price) || 0) - (Number(h.purchase_price) || 0)) * (String(h.currency || 'TRY').toUpperCase() === 'TRY' ? 1 : (fx[String(h.currency).toLowerCase() as 'usd' | 'eur'] ?? 1));
+    // v3: miktar sunucuda GÖRELİ düşülür (bayat ekran state'i başka bir çekimi geri almasın); yetersizse hata döner
     const { error: rpcErr } = await supabase.rpc('withdraw_salary', {
-      p_holding_id: h.id, p_new_quantity: newQty, p_amount_usd: amountUsd, p_reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd,
-      p_portfolio_value_usd: portfolioEur * eurRate / fx.usd, p_source_symbol: selectedSource.symbol, p_source_quantity_deducted: sourceQty,
+      p_holding_id: h.id, p_source_quantity_deducted: sourceQty, p_amount_usd: amountUsd, p_reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd,
+      p_portfolio_value_usd: portfolioEur * eurRate / fx.usd, p_source_symbol: selectedSource.symbol,
       p_realized_try: realizedTry, p_note: `€${fmt(amountEur)} maaş`,
     });
     if (rpcErr && rpcErr.code !== 'PGRST202') { alert('Çekim başarısız: ' + rpcErr.message); return; }
     if (rpcErr) {
+      // RPC yoksa yedek yol (v3 canlıda kurulu; bu dal yalnız şema geri alınırsa çalışır)
+      const newQty = Math.max(0, h.quantity - sourceQty);
       const { error: u } = await supabase.from('holdings').update({ quantity: newQty }).eq('id', h.id); if (u) { alert('Kaynak güncellenemedi: ' + u.message); return; }
       const { error } = await supabase.from('salary_withdrawals').insert({ amount_usd: amountUsd, reservoir_after_usd: (remainingEur - amountEur) * eurRate / fx.usd, portfolio_value_usd: portfolioEur * eurRate / fx.usd, source_symbol: selectedSource.symbol, source_quantity_deducted: sourceQty, note: `€${fmt(amountEur)} maaş` });
       if (error) { await supabase.from('holdings').update({ quantity: h.quantity }).eq('id', h.id); alert('Çekim kaydedilemedi: ' + error.message); return; }
@@ -92,6 +97,7 @@ export default function KarCuzdani({ holdings }: Props) {
       await supabase.from('cash_transactions').insert({ transaction_type: 'sell', type: 'sell', amount: sourceQty, currency: 'TRY', related_holding_id: h.id, notes: `€${fmt(amountEur)} maaş (Kar/Zarar: ${realizedTry.toFixed(2)} ₺)` });
     }
     setConfirmWithdraw(false); await loadAll(); window.location.reload();
+    } finally { setBusy(false); }
   }
 
   if (loadError) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Maaş verisi yüklenemedi</p><p className="text-xs text-red-500 mt-1">{loadError}</p><button onClick={loadAll} className="mt-3 text-xs underline text-red-600">Tekrar dene</button></div>;
@@ -112,8 +118,10 @@ export default function KarCuzdani({ holdings }: Props) {
             <div className="text-xs text-slate-600 dark:text-gray-300 mt-2 space-y-0.5">
               <p>{salary.monthLabel}: servet €{fmt(salary.startWealthEUR)} → €{fmt(salary.endWealthEUR)}, dış para hariç kâr <strong>{sgn(salary.profitEUR)}€{fmt(salary.profitEUR)}</strong></p>
               <p>− enflasyon payı (%2/yıl) €{fmt(salary.inflationEUR)} = reel <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
-              <p>→ havuz €{fmt(poolEur)} × 0,85{0.85 * Math.max(0, poolEur) > MONTHLY_CAP_EUR ? `, aylık tavan €${fmt(MONTHLY_CAP_EUR)}` : ''} = <strong>€{fmt(entitlementEur)}</strong>{entitlementEur === 0 && ' — bu ay maaş yok, fark yastıktan'}</p>
-              <p className="text-slate-500 dark:text-gray-400">Bu ay ({mtd?.monthLabel ?? '—'}) biriken: €{fmt(mtdPoolEur)} — ay kapanınca hak olur.</p>
+              {poolEur < 0
+                ? <p>→ havuz <strong>−€{fmt(poolEur)} açık</strong> → maaş €0 — bu ay maaş yok, fark yastıktan</p>
+                : <p>→ havuz €{fmt(poolEur)} × 0,85{0.85 * poolEur > MONTHLY_CAP_EUR ? `, aylık tavan €${fmt(MONTHLY_CAP_EUR)}` : ''} = <strong>€{fmt(entitlementEur)}</strong>{entitlementEur === 0 && ' — bu ay maaş yok'}</p>}
+              {mtd && <p className="text-slate-500 dark:text-gray-400">Bu ay ({mtd.monthLabel}) reel kâr {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)} → ay sonu havuzu {mtdPoolEur < 0 ? `−€${fmt(mtdPoolEur)} açık` : `€${fmt(mtdPoolEur)}`}{mtdPoolEur > 0 && ` → ay kapanınca × 0,85 = €${fmt(mtd.projectedSalaryEUR)} hak`}</p>}
               {salary.carryResetApplied && <p className="text-emerald-700 dark:text-emerald-300">Bu ayda eski açık, Nisan öncesi kazanılan kâr yastığıyla sıfırlandı.</p>}
             </div>
           </>
@@ -172,7 +180,7 @@ export default function KarCuzdani({ holdings }: Props) {
             <div className="space-y-2">
               <p className="text-xs text-slate-700 dark:text-gray-300"><strong>€{fmt(amountEur)}</strong> çekilecek → {selectedSource?.ccyDisplay} pozisyonundan <strong>{sourceQty.toFixed(0)}</strong> düşer.</p>
               <div className="flex gap-2">
-                <button onClick={handleWithdraw} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-lg">✓ Onayla</button>
+                <button onClick={handleWithdraw} disabled={busy} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold rounded-lg">{busy ? 'İşleniyor…' : '✓ Onayla'}</button>
                 <button onClick={() => setConfirmWithdraw(false)} className="flex-1 py-2 bg-slate-200 dark:bg-gray-700 text-sm font-semibold rounded-lg">İptal</button>
               </div>
             </div>

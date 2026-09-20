@@ -31,7 +31,7 @@ export interface FireProjection {
   yearByYear: YearProjection[];
 }
 
-const PROJECTION_YEARS = 25;
+const PROJECTION_YEARS = 40;
 
 export function projectFire(inputs: FireInputs): FireProjection {
   const {
@@ -68,7 +68,9 @@ export function projectFire(inputs: FireInputs): FireProjection {
     }
 
     cumulativeContributions += yearContributions;
-    const reachedTarget = targetPortfolio > 0 && value >= targetPortfolio;
+    // Hedef REEL: y yıl sonra aynı alım gücü için hedef (1+π)^y kadar büyür — nominal hedefe 'ulaştım' demek yanıltıcıdır
+    const realTarget = targetPortfolio * Math.pow(1 + annualInflationPct / 100, y);
+    const reachedTarget = targetPortfolio > 0 && value >= realTarget;
     if (yearsToTarget === null && reachedTarget) yearsToTarget = y;
 
     yearByYear.push({
