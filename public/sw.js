@@ -1,5 +1,7 @@
-const CACHE_NAME = 'portfolio-tracker-v11';
-const RUNTIME_CACHE = 'runtime-cache-v11';
+// __BUILD_ID__ her build'de vite.config.ts (sw-build-id) tarafından benzersiz değerle değiştirilir.
+const BUILD_ID = '__BUILD_ID__';
+const CACHE_NAME = 'portfolio-tracker-' + BUILD_ID;
+const RUNTIME_CACHE = 'runtime-cache-' + BUILD_ID;
 
 const STATIC_ASSETS = [
   '/',

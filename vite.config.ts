@@ -1,8 +1,27 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+
+// Her build'de sw.js'e benzersiz BUILD_ID yazar → SW dosyası her deploy'da değişir → istemcideki
+// otomatik yenileme (pwaService controllerchange) tetiklenir. 2026-09-20: sw.js değişmeyince PWA
+// eski JS'i bellekte çalıştırmaya devam ediyordu ('güncellememişsin, aynı görünüyor').
+function swBuildId(): Plugin {
+  return {
+    name: 'sw-build-id',
+    apply: 'build',
+    closeBundle() {
+      const f = 'dist/sw.js';
+      if (!existsSync(f)) return;
+      let id = String(Date.now());
+      try { id = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() + '-' + Date.now().toString(36); } catch { /* git yoksa zaman damgası */ }
+      writeFileSync(f, readFileSync(f, 'utf8').replace(/__BUILD_ID__/g, id));
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), swBuildId()],
   test: {
     globals: true,
     environment: 'jsdom',
