@@ -23,6 +23,9 @@ interface HeroDashboardProps {
   prevWealthEUR?: number;      // önceki snapshot günü serveti — günlük % TABANI (LivePage/cron/risk-monitor ile aynı)
   eurState?: 'loading' | 'ok' | 'error';   // motor verisi: yüklenirken 'hesaplanıyor…', hatada 'veri yüklenemedi'
   todayDate?: string;
+  liveGainEUR?: number;        // ANLIK: son snapshot'tan şu ana (canlı fiyatlar, aynı formül)
+  liveSince?: string;          // son snapshot günü
+  closeWealthEUR?: number;     // son kapanış serveti — anlık yüzdenin tabanı (LivePage ile aynı)
   totalPnLTRY?: number;
   totalPnLPct?: number;
 }
@@ -95,6 +98,9 @@ export default function HeroDashboard({
   prevWealthEUR,
   eurState = 'ok',
   todayDate,
+  liveGainEUR,
+  liveSince,
+  closeWealthEUR,
   totalPnLTRY,
   totalPnLPct,
 }: HeroDashboardProps) {
@@ -111,6 +117,8 @@ export default function HeroDashboard({
   const todayEUR = todayGainEUR ?? 0;
   // Taban = önceki günün serveti. 'todayWealth − gain' akış günlerinde akış kadar sapıyordu (hakem 2026-09-19).
   const todayPct = dayPct(todayEUR, prevWealthEUR);
+  // Anlık yüzdenin tabanı = son kapanış serveti (LivePage ile aynı taban)
+  const todayWealthForPct = closeWealthEUR ?? 0;
   const missingNote = eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…';
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
@@ -189,21 +197,22 @@ export default function HeroDashboard({
               </span>
               <span className="font-serif italic text-sm ml-1 opacity-60">USD</span>
             </p>
-            {todayGainEUR !== undefined && (
+            {liveGainEUR !== undefined && (
               <motion.div
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.4, type: 'spring', stiffness: 200 }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border-2 ${
-                  isPos
+                  liveGainEUR >= 0
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                     : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                 }`}
+                title="Anlık: son snapshot'tan şu ana, canlı fiyatlarla — euro, para giriş/çıkışı ve kur farkı hariç"
               >
-                {isPos ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
-                {isPos ? '+' : '−'}€{fmtUSD(Math.abs(todayEUR))}
+                {liveGainEUR >= 0 ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
+                {liveGainEUR >= 0 ? '+' : '−'}€{fmtUSD(Math.abs(liveGainEUR))}
                 <span className="opacity-70">·</span>
-                <span>{isPos ? '+' : ''}{todayPct.toFixed(2)}% {todayDate ? `(${todayDate.slice(5).replace('-', '/')})` : 'bugün'}</span>
+                <span>{todayWealthForPct > 0 ? `${liveGainEUR >= 0 ? '+' : ''}${dayPct(liveGainEUR, todayWealthForPct).toFixed(2)}% ` : ''}anlık{liveSince ? ` (${liveSince.slice(5).replace('-', '/')} kapanışından beri)` : ''}</span>
               </motion.div>
             )}
           </div>
@@ -241,7 +250,7 @@ export default function HeroDashboard({
             symbol: '✦',
           },
           {
-            label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown,
+            label: todayDate ? `Kapanış ${todayDate.slice(5).replace('-', '/')}` : 'Son Gün', icon: isPos ? TrendingUp : TrendingDown,
             accent: todayGainEUR === undefined ? 'gold' : isPos ? 'emerald' : 'rose',
             valueRaw: todayEUR,
             valueFmt: (n: number) => todayGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,

@@ -44,7 +44,7 @@ export function dayInTZ(d: Date | string, tz: string = TZ): string {
   return `${g('year')}-${g('month')}-${g('day')}`;
 }
 
-export interface SnapPoint { date: string; totalValue: number; totalInvestment: number }
+export interface SnapPoint { date: string; totalValue: number; totalInvestment: number; createdAt?: string }
 export interface RateSeries { rateAt(date: string): number }
 
 export function makeRateSeries(points: Array<{ date: string; rate: number }>, fallback: number): RateSeries {
@@ -191,7 +191,11 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
 // ------------------------------------------------------------------------------------
 export interface EurDaily extends DailyGain { totalValueTRY: number; eurRate: number; usdRate: number }
 export interface EurHealth { ok: boolean; lastEurRateDay: string; lastSnapDay: string }
-export interface EurModel { daily: EurDaily[]; months: MonthRow[]; health: EurHealth }
+export interface EurModel {
+  daily: EurDaily[]; months: MonthRow[]; health: EurHealth;
+  lastSnapshot: SnapPoint | null;          // canlı (gün içi) kâr için taban
+  foreignCostsAtLast: ForeignCost[];       // son snapshot günündeki döviz maliyetleri (drift için)
+}
 
 /** salary_withdrawals USD tutuyor (eski şema) → çekim GÜNÜNÜN kurlarıyla EUR'ya çevrilip aya toplanır. */
 export function withdrawnMap(
@@ -231,7 +235,7 @@ export async function fetchAll<T>(name: string, build: () => any): Promise<T[]> 
 
 export interface EurModelInput {
   /** snapshot_date ASC, created_at DESC sıralı (gün içi son kayıt önce) — sadece reliableFrom ve sonrası */
-  snapshots: Array<{ snapshot_date: string; total_value: number | string | null; total_investment: number | string | null }>;
+  snapshots: Array<{ snapshot_date: string; total_value: number | string | null; total_investment: number | string | null; created_at?: string | null }>;
   eurRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
   usdRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
   transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null }>;
@@ -249,7 +253,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   // gün → en son snapshot
   const byDay = new Map<string, SnapPoint>();
   for (const s of inp.snapshots) if (!byDay.has(s.snapshot_date) && Number(s.total_value) > 0)
-    byDay.set(s.snapshot_date, { date: s.snapshot_date, totalValue: Number(s.total_value), totalInvestment: Number(s.total_investment) || 0 });
+    byDay.set(s.snapshot_date, { date: s.snapshot_date, totalValue: Number(s.total_value), totalInvestment: Number(s.total_investment) || 0, createdAt: s.created_at ? String(s.created_at) : undefined });
   const snaps = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
   const snapDays = snaps.map(s => s.date);
 
@@ -310,7 +314,8 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
   const health: EurHealth = { ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay, lastEurRateDay: E.lastDay, lastSnapDay };
-  return { daily, months, health };
+  const lastSnapshot = snaps.length ? snaps[snaps.length - 1] : null;
+  return { daily, months, health, lastSnapshot, foreignCostsAtLast: lastSnapshot ? costsOn(lastSnapshot.date) : [] };
 }
 
 /** Rapor/cron özeti: son gün, son 7 gün, bu ay (MTD), geçen tam ay (= bu ayın maaşı). Saf; tarih dışarıdan verilir. */
@@ -349,4 +354,37 @@ export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
     lastFull, poolEUR, entitlementEUR: entitlementEUR(poolEUR),
     health: model.health,
   };
+}
+
+
+// ------------------------------------------------------------------------------------
+// CANLI (GÜN İÇİ) KÂR — son snapshot'tan şu ana, AYNI formülle (servet farkı − akış, kur-drift arındırılmış).
+// Eski 'anlık' rakam TL'ydi ve kur şişmesi taşıyordu; bu sürüm euro cetveliyle motorun devamıdır.
+// Snapshot alındığında (18:00 UTC) motorun o günkü gainEUR'üne yakınsar, sonra sıfırdan başlar.
+// ------------------------------------------------------------------------------------
+export interface LiveHolding { currency?: string | null; quantity: number | string | null; current_price?: number | string | null; purchase_price?: number | string | null }
+export interface LiveGainInput {
+  holdings: LiveHolding[];
+  usdNow: number; eurNow: number;        // şu anki kurlar (snapshot cron'u ile aynı kaynak: USD/EURO pozisyon fiyatı)
+  realizedTodayTRY?: number;             // son snapshot ZAMANINDAN sonra gerçekleşen satış K/Z (TL)
+}
+export interface LiveGain { gainEUR: number; wealthEUR: number; sinceDate: string; totalValueTRY: number }
+
+export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | null {
+  const last = model.lastSnapshot; if (!last) return null;
+  const fxNow = (c: string | null | undefined) => { const cur = String(c || 'TRY').toUpperCase(); return cur === 'USD' ? inp.usdNow : cur === 'EUR' ? inp.eurNow : 1; };
+  // daily-snapshot.ts tryValueOf ile aynı: USD/EUR kurla, diğerleri ham
+  let V = 0, I = 0;
+  for (const h of inp.holdings) {
+    const q = Number(h.quantity) || 0, cp = Number(h.current_price) || Number(h.purchase_price) || 0, pp = Number(h.purchase_price) || 0, f = fxNow(h.currency);
+    V += q * cp * f; I += q * pp * f;
+  }
+  const lastDaily = model.daily[model.daily.length - 1];
+  const eurLast = lastDaily?.eurRate || inp.eurNow, usdLast = lastDaily?.usdRate || inp.usdNow;
+  // eurGainBetween ile aynı cebir, doğrudan (aynı gün içinde de çalışsın diye tarih yerine kurlar verilir):
+  //   g = V/e_now − V0/e_0 − (ΔI − drift − realize)/e_now ;  drift = Σ maliyet_native × (kur_now − kur_0)
+  const drift = model.foreignCostsAtLast.reduce((d, c) => d + c.costNative * ((c.currency === 'USD' ? inp.usdNow - usdLast : inp.eurNow - eurLast)), 0);
+  const flowTRY = (I - last.totalInvestment) - drift - (inp.realizedTodayTRY || 0);
+  const gainEUR = V / inp.eurNow - last.totalValue / eurLast - flowTRY / inp.eurNow;
+  return { gainEUR, wealthEUR: V / inp.eurNow, sinceDate: last.date, totalValueTRY: V };
 }

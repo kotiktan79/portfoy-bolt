@@ -291,3 +291,41 @@ describe('çekim hakkı tek taban + çekim muhasebesi', () => {
     expect(eki.salaryEUR - (eki.withdrawnEUR ?? 0)).toBeCloseTo(450, 6);
   });
 });
+
+import { liveEurGain, type EurModel } from './eurPnl';
+describe('canlı (gün içi) kâr — son snapshot’tan şu ana, aynı formül', () => {
+  const rates = ['2026-09-18', '2026-09-19'].map(d => ({ recorded_at: d, rate: 50 }));
+  const base: EurModel = buildEurModel({
+    snapshots: [
+      { snapshot_date: '2026-09-18', total_value: 2_000 * 50, total_investment: 2_000 * 50 },
+      { snapshot_date: '2026-09-19', total_value: 2_000 * 50, total_investment: 2_000 * 50 },   // €2.000 EUR nakit
+    ],
+    eurRates: rates, usdRates: rates.map(r => ({ ...r, rate: 45 })), transactions: [], cashSells: [],
+    holdings: [{ id: 1, currency: 'EUR', quantity: 2000, purchase_price: 1, created_at: '2026-08-01' }],
+    usdNow: 45, reliableFrom: '2026-09-18', annualInflation: 0,
+  });
+  const eurHold = { currency: 'EUR', quantity: 2000, current_price: 1, purchase_price: 1 };
+  it('fiyat değişmedi, kur değişti → kâr 0 (kur farkı kâr değil)', () => {
+    const g = liveEurGain(base, { holdings: [eurHold], usdNow: 46, eurNow: 52 })!;
+    expect(g.gainEUR).toBeCloseTo(0, 6);
+    expect(g.wealthEUR).toBeCloseTo(2000, 6);
+  });
+  it('bir TL hissesi %5 yükseldi → kâr = artışın euro karşılığı', () => {
+    const stock = { currency: 'TRY', quantity: 100, current_price: 105, purchase_price: 100 };   // dün 100 idi
+    const m: EurModel = { ...base, lastSnapshot: { date: '2026-09-19', totalValue: 2_000 * 50 + 100 * 100, totalInvestment: 2_000 * 50 + 100 * 100 } };
+    const g = liveEurGain(m, { holdings: [eurHold, stock], usdNow: 45, eurNow: 50 })!;
+    expect(g.gainEUR).toBeCloseTo(500 / 50, 6);   // +500 TL = €10
+  });
+  it('bugün yeni alım (dış para) kâr değil', () => {
+    const bought = { currency: 'TRY', quantity: 10, current_price: 1000, purchase_price: 1000 };   // bugün 10.000 TL alındı
+    const g = liveEurGain(base, { holdings: [eurHold, bought], usdNow: 45, eurNow: 50 })!;
+    expect(g.gainEUR).toBeCloseTo(0, 6);
+  });
+  it('bugün satış: realize geri eklenir, kâr değişmez', () => {
+    // dünkü 100 adet × 100 TL hisse bugün 110'dan satıldı (adet 0), hasılat TL nakit olarak portföyde (currency TRY pozisyonu)
+    const cash = { currency: 'TRY', quantity: 11_000, current_price: 1, purchase_price: 1 };
+    const m: EurModel = { ...base, lastSnapshot: { date: '2026-09-19', totalValue: 2_000 * 50 + 100 * 100, totalInvestment: 2_000 * 50 + 100 * 100 } };
+    const g = liveEurGain(m, { holdings: [eurHold, cash], usdNow: 45, eurNow: 50, realizedTodayTRY: 1_000 })!;
+    expect(g.gainEUR).toBeCloseTo(1000 / 50, 6);   // +1.000 TL realize = €20
+  });
+});

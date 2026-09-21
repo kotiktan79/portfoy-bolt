@@ -18,7 +18,8 @@ import { usePortfolio } from '../contexts/PortfolioContext';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
-import { getEurDaily, type EurDaily } from '../services/eurPnlService';
+import { getEurDaily, getLiveEurGain, type EurDaily } from '../services/eurPnlService';
+import type { LiveGain } from '../lib/eurPnl';
 import { dayPct } from '../lib/eurPnl';
 
 
@@ -57,6 +58,14 @@ export default function LivePage() {
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
   const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [live, setLive] = useState<LiveGain | null>(null);
+  // ANLIK kâr: fiyatlar her tazelendiğinde (holdings) yeniden — motorla aynı formül
+  useEffect(() => {
+    if (!holdings.length) return;
+    let cancelled = false;
+    getLiveEurGain(holdings).then(g => { if (!cancelled) setLive(g); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [holdings]);
   const loadEur = () => {
     Promise.all([
       getInceptionPnl().then(setInception),
@@ -101,6 +110,10 @@ export default function LivePage() {
   // Taban = önceki snapshot günü serveti (cron summarizeEur / risk-monitor ile aynı; akış günlerinde 'servet − kâr' farklı çıkıyordu)
   const dailyPct = dayPct(dailyChange, prevDay?.wealthEUR);
   const isPos = dailyChange >= 0;
+  // ANLIK rozet: son snapshot (kapanış) → şu an; yüzde tabanı kapanış serveti
+  const liveGain = live?.gainEUR ?? 0;
+  const livePct = dayPct(liveGain, lastDay?.wealthEUR);
+  const liveIsPos = liveGain >= 0;
 
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
@@ -195,21 +208,22 @@ export default function LivePage() {
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               className={`inline-flex flex-col items-end gap-0.5 sm:gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-xl md:rounded-2xl border-2 flex-shrink-0 ${
-                isPos ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-rose-500/50 bg-rose-500/10'
+                liveIsPos ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-rose-500/50 bg-rose-500/10'
               }`}
+              title="Anlık: son kapanıştan (snapshot) şu ana, canlı fiyatlarla — euro; para giriş/çıkışı ve kur farkı hariç"
             >
               <div
-                className={`flex items-center gap-1 sm:gap-2 font-black ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}
+                className={`flex items-center gap-1 sm:gap-2 font-black ${liveIsPos ? 'text-emerald-400' : 'text-rose-400'}`}
                 style={{ fontSize: 'clamp(1.25rem, 3vw, 2.5rem)' }}
               >
-                {isPos ? <ArrowUpRight className="w-[1em] h-[1em]" /> : <ArrowDownRight className="w-[1em] h-[1em]" />}
-                <span className="tabular-nums tracking-[-0.02em]">{lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}%` : '—'}</span>
+                {liveIsPos ? <ArrowUpRight className="w-[1em] h-[1em]" /> : <ArrowDownRight className="w-[1em] h-[1em]" />}
+                <span className="tabular-nums tracking-[-0.02em]">{live ? `${liveIsPos ? '+' : ''}${livePct.toFixed(2)}%` : '—'}</span>
               </div>
               <span
-                className={`tabular-nums ${isPos ? 'text-emerald-300' : 'text-rose-300'}`}
+                className={`tabular-nums ${liveIsPos ? 'text-emerald-300' : 'text-rose-300'}`}
                 style={{ fontSize: 'clamp(0.7rem, 1vw, 1rem)' }}
               >
-                {lastDay ? `${isPos ? '+' : '−'}€${fmtUSD(Math.abs(dailyChange))} son gün (${lastDay.date.slice(5).replace('-', '/')})` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…')}
+                {live ? `${liveIsPos ? '+' : '−'}€${fmtUSD(Math.abs(liveGain))} anlık (${live.sinceDate.slice(5).replace('-', '/')} kapanışından beri)` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…')}
               </span>
             </motion.div>
           </div>
@@ -261,7 +275,7 @@ export default function LivePage() {
             // Veri gelmediyse '—': '+€0' bir olgu gibi okunur (hakem 2026-09-19)
             { label: 'Kuruluştan Bugüne Kâr', icon: DollarSign, color: !inception ? 'gold' : inception.totalGainEUR >= 0 ? 'emerald' : 'rose',
               value: inception?.totalGainEUR ?? 0, fmt: (n: number) => inception ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: inception ? `${inception.totalGainPct >= 0 ? '+' : ''}${inception.totalGainPct.toFixed(1)}% · alış günü kuruyla` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
-            { label: 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: !lastDay ? 'gold' : isPos ? 'emerald' : 'rose',
+            { label: lastDay ? `Kapanış ${lastDay.date.slice(5).replace('-', '/')}` : 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: !lastDay ? 'gold' : isPos ? 'emerald' : 'rose',
               value: dailyChange, fmt: (n: number) => lastDay ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç · taban dünkü servet` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },

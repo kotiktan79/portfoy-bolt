@@ -60,7 +60,7 @@ async function load(): Promise<EurModel> {
 export async function getEurDaily(): Promise<EurDaily[]> { return (await load()).daily; }
 export async function getEurMonths(): Promise<MonthRow[]> { return (await load()).months; }
 export async function getEurPnlHealth() { return (await load()).health; }
-export function invalidateEurPnlCache() { _cache = null; }
+export function invalidateEurPnlCache() { _cache = null; _rzCache = null; }
 
 const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 export const monthLabel = (ym: string) => `${MONTHS_TR[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -78,4 +78,46 @@ export async function getEurWeeks(): Promise<Array<{ key: string; label: string;
     const r = m.get(k)!; if (i > 0) r.gainEUR += d.gainEUR; r.endWealthEUR = d.wealthEUR; r.lastDate = d.date; prev = d.wealthEUR;
   });
   return Array.from(m.values()).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/** CANLI (gün içi) kâr: son snapshot'tan şu ana, motorla aynı formül; fiyatlar güncel holdings'ten.
+ *  Realize (bugünkü satışlar) küçük bir sorguyla eklenir; 2 dk önbellek. */
+import { liveEurGain, type LiveGain } from '../lib/eurPnl';
+import { getFxRatesFromHoldings } from '../lib/fx';
+import type { Holding } from '../lib/supabase';
+let _rzCache: { ts: number; since: string; tl: number } | null = null;
+/** Son snapshot'ın ZAMAN DAMGASINDAN sonraki satışların realize'ı (TL). Sınır iki sorguda da aynı (hakem 2026-09-22:
+ *  tarih sınırı snapshot ÖNCESİ satışları da alıp realize'ı iki kez sayıyordu). */
+async function realizedSince(sinceTs: string, usdNow: number, eurNow: number, ccyById: Map<string, string>): Promise<number> {
+  if (_rzCache && _rzCache.since === sinceTs && Date.now() - _rzCache.ts < 2 * 60 * 1000) return _rzCache.tl;
+  const [c, t] = await Promise.all([
+    supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').gt('created_at', sinceTs),
+    supabase.from('transactions').select('transaction_date,realized_profit,holding_id').gt('transaction_date', sinceTs),
+  ]);
+  const toTRY = (amt: number, ccy: string) => amt * (ccy === 'TRY' ? 1 : ccy === 'USD' ? usdNow : ccy === 'EUR' ? eurNow : 0);
+  let tl = 0; const seen = new Set<string>();
+  for (const x of c.data || []) {
+    const m = String(x.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/) || String(x.notes || '').match(/K\/Z\s*\+?(-?[\d.]+)/); if (!m) continue;
+    const v = toTRY(Number(m[1]), String(x.currency || 'TRY').toUpperCase()); if (!Number.isFinite(v) || !v) continue;
+    tl += v; seen.add(`${String(x.created_at).slice(0, 10)}|${Math.round(v)}`);
+  }
+  for (const x of t.data || []) {
+    const rp = Number(x.realized_profit) || 0; if (!rp) continue;
+    const v = toTRY(rp, ccyById.get(String(x.holding_id)) || 'TRY');   // motorla aynı: holding para biriminden TL'ye
+    const k = `${String(x.transaction_date).slice(0, 10)}|${Math.round(v)}`; if (seen.has(k)) continue;
+    tl += v;
+  }
+  _rzCache = { ts: Date.now(), since: sinceTs, tl };
+  return tl;
+}
+export async function getLiveEurGain(holdings: Holding[]): Promise<LiveGain | null> {
+  if (!holdings.length) return null;
+  const model = await load();
+  if (!model.lastSnapshot) return null;
+  const fx = getFxRatesFromHoldings(holdings);
+  const eurNow = fx.eur;
+  const sinceTs = model.lastSnapshot.createdAt || (model.lastSnapshot.date + 'T18:00:00Z');   // cron 18:00 UTC; created_at yoksa yaklaşık
+  const ccyById = new Map<string, string>(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
+  const realizedTodayTRY = await realizedSince(sinceTs, fx.usd, eurNow, ccyById).catch(() => 0);
+  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY });
 }

@@ -30,7 +30,8 @@ import DividendInvestmentPlanner from '../components/DividendInvestmentPlanner';
 import HeroDashboard from '../components/HeroDashboard';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
-import { getEurDaily, type EurDaily } from '../services/eurPnlService';
+import { getEurDaily, getLiveEurGain, type EurDaily } from '../services/eurPnlService';
+import type { LiveGain } from '../lib/eurPnl';
 // Dinamik Maaş kart alt yazısı: sıfırın SEBEBİNİ göster (devreden açık) — hakem/tarama bulgusu
 // Havuz kuralı: hak = kapanmış son ayın havuzu × 0,85 (aylık tavan €1.000)
 const salaryLabel = (d: DynamicSalary) => (d.poolOutEUR ?? 0) < 0
@@ -95,6 +96,15 @@ export default function HomePage() {
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
   const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [live, setLive] = useState<LiveGain | null>(null);
+  // ANLIK kâr: fiyatlar (holdings) her tazelendiğinde yeniden — motorla aynı formül, canlı fiyatla
+  useEffect(() => {
+    if (!holdings.length) return;
+    let cancelled = false;
+    getLiveEurGain(holdings).then(g => { if (!cancelled) setLive(g); }).catch(() => {});
+    getEurDaily().then(d => { if (cancelled) return; setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [holdings]);
 
   useEffect(() => {
     // Motor verisi tek durumda izlenir: yüklenirken '…', hata olursa '—' + 'veri yüklenemedi' (asla sahte €0)
@@ -170,6 +180,9 @@ export default function HomePage() {
                 inceptionGainPct={inception?.totalGainPct}
                 todayGainEUR={lastDay?.gainEUR}
                 prevWealthEUR={prevDay?.wealthEUR}
+                liveGainEUR={live?.gainEUR}
+                liveSince={live?.sinceDate}
+                closeWealthEUR={lastDay?.wealthEUR}
                 eurState={eurState}
                 todayDate={lastDay?.date}
                 totalPnLTRY={totalProfitLoss}
