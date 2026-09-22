@@ -1,8 +1,10 @@
-// AI Araştırma Motoru — günlük cron
-// Portföy + makro + web search → Claude → JSON rapor + öneriler → DB
+// AI Araştırma — 'Araştır' sayfası butonu (zamanlanmış cron YOK)
+// EUR bağlam + web search → Claude → haber/makro özeti → ai_research_reports. Öneri üretmez.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { hasCronAuth } from '../lib/auth.js';
+import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
+import { dayInTZ } from '../../src/lib/eurPnl.js';
 
 // Vercel function timeout — Claude + web search 30-60s sürebilir
 export const config = {
@@ -16,48 +18,30 @@ function getSupabase() {
   return createClient(url, key);
 }
 
-const SYSTEM_PROMPT = `Sen Türkçe konuşan, Romanya'da yaşayan EUR-bazlı bir yatırımcının kişisel araştırma asistanısın.
-Yatırımcı profili:
-- Romanya'da ikamet, EUR ev parası, TL ve USD yabancı para
-- Türkiye'den BIST hisseleri var (TL maruziyeti = yabancı para riski)
-- ABD/Avrupa hisseleri (USD/EUR — JNJ, ASML, V3YL)
-- IB01 eurobond, EUROFON fon, altın, crypto, EUR/USD nakit pozisyonları
+// 2026-09-22: AI işlem ÖNERMEZ (kullanıcı kararı "küçült"). Eski sürüm trim/sell/buy/rotate önerisi üretip
+// ai_recommendations'a yazıyor, sayfa TRİM/SAT/AL rozetleriyle gösteriyordu. Artık: AI_RULES + tek EUR bağlam,
+// çıktı yalnız haber/makro özeti + pozisyon başına BİLGİ notu + riskler. 'recommendations' alanı yok, tabloya yazılmaz.
+const SYSTEM_PROMPT = `${AI_RULES}
 
-Görevin:
-1. Mevcut portföye + makro koşullara bakarak günlük rapor üret
-2. web_search ile son haberleri çek (BIST100, EUR/TRY, TCMB, holding'lerin son haberleri)
-3. Romanya/EUR perspektifinden değerlendir — TL ev parası DEĞİL, USD-gelirli holding'ler doğal hedge
-4. Önceki günden uygulanan/devam eden önerileri yinelemeyi azalt
-5. Aksiyon önerileri net olsun: trim/buy/sell/rotate/hold + hangi sembol + niye
+GÖREV (günlük araştırma): web_search ile son haberleri çek (BIST100 + yabancı akım, EUR/TRY ve USD/TRY, TCMB faiz/enflasyon,
+ABD/Avrupa makro, portföydeki büyük pozisyonların haberleri) ve Türkçe, kısa, somut özetle. Rakamları aşağıdaki bağlamdan al.
+Pozisyon notu = "ne oldu / neden" bilgisi; "al/sat/azalt/tut" DEĞİL.
 
-ÇIKTI: Sadece geçerli JSON döndür, başka metin yok. Format:
+ÇIKTI: Sadece geçerli JSON, başka metin yok, markdown yok:
 {
   "report_date": "YYYY-MM-DD",
-  "headline": "2-3 cümle ana mesaj",
+  "headline": "2-3 cümle: bugün portföyü ne etkiledi",
   "macro_summary": {
-    "bist100": "BIST endeks durumu, son hafta yön",
-    "eur_try": "Kur durumu, 3-6 ay outlook",
-    "tcmb": "Faiz / enflasyon görünüm",
+    "bist100": "endeks durumu, son hafta yön, yabancı akım",
+    "eur_try": "kur hareketi ve sebebi (kur artışı kâr DEĞİL — TL varlıkların euro değerine etkisi)",
+    "tcmb": "faiz / enflasyon görünümü",
     "global": "ABD/Avrupa makro önemli not"
   },
-  "per_holding_view": [
-    { "symbol": "TUPRS", "action": "hold", "view": "kısa görüş + sebep" }
-  ],
-  "recommendations": [
-    {
-      "action": "trim|sell|buy|rotate|hold|watch",
-      "symbol": "TICKER",
-      "target_amount": 500,
-      "target_currency": "EUR",
-      "priority": 1,
-      "reason": "Niye bu öneri (2-3 cümle, somut)"
-    }
-  ],
-  "risks": ["Risk 1", "Risk 2"],
-  "opportunities": ["Fırsat 1"]
+  "per_holding_view": [ { "symbol": "TICKER", "view": "kısa bilgi notu: ne oldu, neden" } ],
+  "risks": ["portföyü etkileyebilecek somut risk"],
+  "notes": ["bilgi notu (işlem önerisi değil)"]
 }
-
-Priority: 1=en acil, 5=düşük. En fazla 5 öneri ver. Recommendation'ları symbol+action ile zaten varsa tekrarlama.`;
+per_holding_view en fazla 7 pozisyon; risks/notes en fazla 4'er madde.`;
 
 async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -71,7 +55,7 @@ async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
     body: JSON.stringify({
       model: 'claude-sonnet-5',
       thinking: { type: 'disabled' },
-      max_tokens: 8000,
+      max_tokens: 3000,
       system: SYSTEM_PROMPT,
       tools: [
         {
@@ -118,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Cost guard: return today's cached report instead of calling Claude again,
     // unless an authenticated caller explicitly forces regeneration.
     if (!force) {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = dayInTZ(new Date());
       const { data: cached } = await supabase
         .from('ai_research_reports')
         .select('id, report_date, headline')
@@ -136,91 +120,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 1. Portföy verisi
-    const [holdingsRes, snapshotsRes, cashRes, prevRecsRes] = await Promise.all([
-      supabase.from('holdings').select('*'),
-      supabase.from('portfolio_snapshots').select('snapshot_date, total_value, total_pnl, total_investment, total_deposits').order('snapshot_date', { ascending: false }).limit(30),
-      supabase.from('cash_balances').select('currency, balance, total_deposits'),
-      supabase.from('ai_recommendations').select('symbol, action, status, status_updated_at').gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString()),
-    ]);
+    // Bağlam: EUR motoru + tek plan + anomaliler (sohbet ve günlük raporla AYNI metin)
+    const ctx = await buildAiContext(supabase, dayInTZ(new Date()));
+    const userPrompt = `${ctx.text}
 
-    const holdings = holdingsRes.data || [];
-    const snapshots = snapshotsRes.data || [];
-    const cash = cashRes.data || [];
-    const prevRecs = prevRecsRes.data || [];
-
-    // 2. FX ve değer hesabı
-    const usdH = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
-    const eurH = holdings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
-    const usd = Number(usdH?.current_price) || 45;
-    const eur = Number(eurH?.current_price) || 51;
-    const fx = (c: string) => {
-      const x = (c || 'TRY').toUpperCase();
-      if (x === 'USD') return usd;
-      if (x === 'EUR') return eur;
-      if (x === 'GBP') return usd * 1.27;
-      return 1;
-    };
-
-    const inv = holdings.filter((h: any) => h.asset_type !== 'cash' && h.quantity > 0).map((h: any) => {
-      const value = h.current_price * h.quantity * fx(h.currency); // fx-ok: server-side FX-aware tryValue
-      const cost = h.purchase_price * h.quantity * fx(h.currency); // fx-ok: server-side FX-aware tryCost
-      return { ...h, value, cost, pnl: value - cost, pnlPct: cost > 0 ? ((value - cost) / cost) * 100 : 0 };
-    });
-    const totalValue = inv.reduce((s: number, p: any) => s + p.value, 0);
-
-    // 3. Portföy özeti
-    const portfolioSummary = {
-      total_value_try: Math.round(totalValue),
-      total_value_eur: Math.round(totalValue / eur),
-      total_value_usd: Math.round(totalValue / usd),
-      fx: { usd_try: usd, eur_try: eur },
-      holdings: inv.map((p: any) => ({
-        symbol: p.symbol,
-        type: p.asset_type,
-        currency: p.currency,
-        qty: Number(p.quantity),
-        cur_price: Number(p.current_price),
-        value_try: Math.round(p.value),
-        weight_pct: Number(((p.value / totalValue) * 100).toFixed(2)),
-        pnl_pct: Number(p.pnlPct.toFixed(1)),
-      })).sort((a: any, b: any) => b.value_try - a.value_try),
-      cash: cash.map((c: any) => ({ currency: c.currency, balance: Number(c.balance) })),
-    };
-
-    // 4. Snapshot delta (son 7 gün + son 30 gün)
-    const today = snapshots[0];
-    const week = snapshots.find((s: any) => new Date(today.snapshot_date).getTime() - new Date(s.snapshot_date).getTime() >= 7 * 86400000);
-    const month = snapshots.find((s: any) => new Date(today.snapshot_date).getTime() - new Date(s.snapshot_date).getTime() >= 28 * 86400000);
-    const trend = {
-      this_week_pnl_change: week ? Math.round(Number(today?.total_pnl || 0) - Number(week?.total_pnl || 0)) : null,
-      this_month_pnl_change: month ? Math.round(Number(today?.total_pnl || 0) - Number(month?.total_pnl || 0)) : null,
-      total_pnl_now: Math.round(Number(today?.total_pnl || 0)),
-    };
-
-    // 5. Önceki öneriler (yinelememek için)
-    const prevContext = prevRecs.map((r: any) => `${r.symbol} ${r.action} (${r.status})`).join(', ');
-
-    const userPrompt = `Bugünkü portföy durumu (TRY bazında, FX-aware):
-${JSON.stringify(portfolioSummary, null, 2)}
-
-Trend:
-- Bu hafta kâr değişimi: ₺${trend.this_week_pnl_change ?? '?'}
-- Bu ay kâr değişimi: ₺${trend.this_month_pnl_change ?? '?'}
-- Toplam kâr şu an: ₺${trend.total_pnl_now}
-
-Son 2 haftada verilen öneriler (yinelemekten kaçın): ${prevContext || 'yok'}
-
-Web search ile şu konuları araştır ve günceli yansıt:
+Web search ile şunları araştır ve günceli yansıt:
 1. BIST100 son hafta performansı + yabancı akım
-2. EUR/TRY ve USD/TRY son hareket + 3-6 ay outlook
-3. TCMB son faiz toplantısı + enflasyon verisi
-4. Portföydeki büyük pozisyonların son haberleri (TUPRS, ASELS, EURO/USD nakit, IB01, BTC)
-5. Romanya/EUR yatırımcı için bugün dikkat edilecek özel konular
+2. EUR/TRY ve USD/TRY son hareket + sebebi
+3. TCMB son faiz kararı + enflasyon verisi
+4. Portföydeki büyük pozisyonların son haberleri (ilk 15 pozisyon yukarıda)
+5. Romanya'da yaşayan EUR ölçülü yatırımcı için bugün önemli makro konu
 
-Sonra şu format JSON ile cevap ver: report_date, headline, macro_summary, per_holding_view (en önemli 5-7 holding), recommendations (en fazla 5, priority 1-5), risks, opportunities.
-
-UYARI: Sadece geçerli JSON ver, başka metin yok. Markdown code block kullanma. Plain JSON.`;
+Sonra yalnız şu JSON'u ver: report_date, headline, macro_summary, per_holding_view (en önemli 5-7 pozisyon, view = bilgi notu), risks, notes.
+Plain JSON, markdown code block yok.`;
 
     log.push('Claude API çağrılıyor (web_search etkin)...');
     const { rawText, usage } = await callClaude(anthropicKey, userPrompt);
@@ -239,7 +151,7 @@ UYARI: Sadece geçerli JSON ver, başka metin yok. Markdown code block kullanma.
       parsed = { raw: rawText, parse_error: e.message };
     }
 
-    const reportDate = parsed.report_date || new Date().toISOString().split('T')[0];
+    const reportDate = dayInTZ(new Date());   // model tarihi değil, sunucu günü (Bükreş)
     const headline = parsed.headline || '';
 
     // 7. DB'ye yaz — upsert (tek günlük)
@@ -259,8 +171,6 @@ UYARI: Sadece geçerli JSON ver, başka metin yok. Markdown code block kullanma.
         tokens_used: (usage?.input_tokens || 0) + (usage?.output_tokens || 0),
         generated_at: new Date().toISOString(),
       }).eq('id', reportId);
-      // Eski recommendations'ı sil (yenisini yaz)
-      await supabase.from('ai_recommendations').delete().eq('report_id', reportId).eq('status', 'pending');
     } else {
       const { data: inserted, error: insErr } = await supabase
         .from('ai_research_reports')
@@ -277,32 +187,14 @@ UYARI: Sadece geçerli JSON ver, başka metin yok. Markdown code block kullanma.
       reportId = inserted.id;
     }
 
-    // 8. Önerileri ayrı tabloya yaz
-    const recs = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
-    if (recs.length > 0) {
-      const rows = recs.map((r: any) => ({
-        report_id: reportId,
-        action: String(r.action || 'watch').toLowerCase(),
-        symbol: String(r.symbol || 'GENERAL').toUpperCase(),
-        target_qty: r.target_qty || null,
-        target_amount: r.target_amount || null,
-        target_currency: r.target_currency || 'EUR',
-        priority: Number(r.priority) || 3,
-        reason: String(r.reason || ''),
-        status: 'pending',
-      }));
-      await supabase.from('ai_recommendations').insert(rows);
-    }
-
     const duration = Date.now() - startTime;
-    log.push(`Rapor oluşturuldu: ${recs.length} öneri, ${duration}ms`);
+    log.push(`Rapor oluşturuldu: ${duration}ms`);
 
     return res.status(200).json({
       success: true,
       report_id: reportId,
       report_date: reportDate,
       headline,
-      recommendations_count: recs.length,
       duration_ms: duration,
       log,
     });

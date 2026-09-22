@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { buildAiContext } from './lib/aiContext.js';
+import { dayInTZ } from '../src/lib/eurPnl.js';
 
 // "BUGÜNKÜ PLANINIZ" — 2026-09-22: AI ÇAĞRISI YOK. Eski sürüm her açılışta Claude'a "ne alayım" diye soruyordu
 // (USD mantığı, $2.000 maaş, IB01/altın-trim önerileri) ve tek planla çelişiyordu. Plan sabittir ve deterministik
@@ -21,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = dayInTZ(new Date());   // Bükreş takvimi (uygulama ile aynı ay sınırı)
     const ctx = await buildAiContext(getSupabase(), todayStr);
     const { eur, weekPlan, anomalies, trancheEUR } = ctx;
 
@@ -44,10 +45,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const plan = {
       actions,
       market_outlook: `Servet €${Math.round(eur.wealthEUR).toLocaleString('de-DE')} · son gün ${eur.dayGainEUR >= 0 ? '+' : '−'}€${Math.abs(Math.round(eur.dayGainEUR)).toLocaleString('de-DE')} · bu ay reel ${(mtd?.realGainEUR || 0) >= 0 ? '+' : '−'}€${Math.abs(Math.round(mtd?.realGainEUR || 0)).toLocaleString('de-DE')} · çekilebilir maaş €${Math.round(salary).toLocaleString('de-DE')}. Kâr = euro servet artışı, para giriş/çıkışı ve kur hariç.`,
-      top_pick: anomalies.length ? `Dikkat: ${anomalies[0]}` : 'Plan sabit: her Pazartesi dilim, işlem önerisi yok.',
+      top_pick: '',                       // 'Günün Tercihi' yok — işlem çağrışımlı alan boş
+      notice: anomalies.length ? anomalies[0] : 'Plan sabit: her hafta dilim, işlem önerisi yok. Ay sonu maaş hakkı Kâr Cüzdanı\'nda.',
       portfolio_diagnosis: '',
       news_alerts: anomalies,
-      wealth_building_tip: 'Getirisiz nakit çalıştıkça beklenen kazanç €460 → €750/ay. €1.000/ay için 40 yıl ufkunda €370-470k sermaye gerekir.',
+      wealth_building_tip: '',            // sabit rakamlı ipucu kaldırıldı (motordan gelmeyen sayı yok); hedef hesabı FIRE sayfasında
       monthly_income: { safe: salary, moderate: salary, description: 'Kâr havuzu × 0,85 (motor). AI hesaplamaz.' },
       generated_at: new Date().toISOString(),
       source: 'single-plan',

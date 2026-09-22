@@ -35,21 +35,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========================================
     // 1. Portföy verilerini topla
     // ========================================
-    const [holdingsRes, snapshotsRes, cashRes, dividendsRes, incomeRes] = await Promise.all([
-      supabase.from('holdings').select('*'),
-      supabase.from('portfolio_snapshots').select('*').order('snapshot_date', { ascending: false }).limit(30),
-      supabase.from('cash_balances').select('*'),
-      supabase.from('dividends').select('*').order('payment_date', { ascending: false }).limit(50),
-      supabase.from('income_records').select('*').order('income_date', { ascending: false }).limit(30),
-    ]);
+    // (dividends / income_records / cash_balances / snapshots sorguları 2026-09-22'de kaldırıldı — AI bağlamı aiContext'ten,
+    //  TL rakamları yalnız daily_reports'un eski TL sütunları için; EUR tek ölçü)
+    const { data: holdingsData } = await supabase.from('holdings').select('*');
+    const holdings = holdingsData || [];
 
-    const holdings = holdingsRes.data || [];
-    const snapshots = snapshotsRes.data || [];
-    const cashBalances = cashRes.data || [];
-    const dividends = dividendsRes.data || [];
-    const incomeRecords = incomeRes.data || [];
-
-    log.push(`Veri: ${holdings.length} holding, ${snapshots.length} snapshot, ${cashBalances.length} cüzdan`);
+    log.push(`Veri: ${holdings.length} holding`);
     const todayStr = new Date().toISOString().split('T')[0];
 
     // EUR kâr motoru — uygulamayla AYNI fonksiyon (buildEurModel). Servet, gün/hafta/ay kârı, bu ayın maaşı.
@@ -73,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const eurFromHolding = Number(eurHolding?.current_price) || 0;
     const usdRate = usdFromHolding > 1 ? usdFromHolding : await fetchLiveRate('USD');
     const eurRate = eurFromHolding > 1 ? eurFromHolding : await fetchLiveRate('EUR');
-    // Yardımcı kurlar (RUB/RON/GBP/CHF için yaklaşık)
+    // Yardımcı kurlar (RUB/RON/GBP/CHF için yaklaşık) — yalnız daily_reports'un eski TL sütunları için
     const fxRate = (ccy: string): number => {
       const c = (ccy || 'TRY').toUpperCase();
       if (c === 'TRY') return 1;
@@ -90,25 +81,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const q = Number(h.quantity) || 0;
       return p * q * fxRate(h.currency || 'TRY');
     };
-
-    // Portföy özeti — currency-aware
     const totalValue = holdings.reduce((sum: number, h: any) => sum + tryValue(h, 'current_price'), 0);
     const totalInvestment = holdings.reduce((sum: number, h: any) => sum + tryValue(h, 'purchase_price'), 0);
     const totalPnl = totalValue - totalInvestment;
     const totalPnlPct = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
-
-    // Likit nakit = cash_balances (FX'li) + currency tipi holdings (TRY karşılığı)
-    const cashBalancesValue = cashBalances.reduce((sum: number, c: any) => sum + (Number(c.balance) || 0) * fxRate(c.currency), 0);
-    const currencyHoldingsValue = holdings
-      .filter((h: any) => h.asset_type === 'currency')
-      .reduce((sum: number, h: any) => sum + tryValue(h, 'current_price'), 0);
-    const totalCash = cashBalancesValue + currencyHoldingsValue;
-
-    // Dünkü snapshot ile karşılaştır (TL, yalnız AI bağlamı için ikincil bilgi)
-    const yesterdaySnapshot = snapshots.find(s => s.snapshot_date !== todayStr);
-    const dailyChange = yesterdaySnapshot ? totalValue - yesterdaySnapshot.total_value : 0;
-    const dailyChangePct = yesterdaySnapshot && yesterdaySnapshot.total_value > 0
-      ? (dailyChange / yesterdaySnapshot.total_value) * 100 : 0;
 
     // ========================================
     // 2. Piyasa verilerini çek (kapsamlı)
@@ -129,7 +105,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // AI bağlamı = sohbet ve planla AYNI metin (api/lib/aiContext); işlem önerisi yok, rakamlar motorun
     const portfolioContext = aiCtx ? aiCtx.text : `PORTFÖY VERİSİ ALINAMADI — rakam verme, yalnız piyasa özeti yap.\nPozisyon sayısı: ${holdings.length}`;
-    void totalInvestment; void totalPnlPct; void totalCash; void dividends; void incomeRecords; void dailyChange; void dailyChangePct; void fxRate;
     const marketContext = buildMarketContext(marketData, newsData);
 
     const aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
@@ -140,9 +115,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       detail: `Tek plan (sabit): haftalık ~€${(aiCtx?.trancheEUR || 0).toLocaleString('de-DE')} dilim, hisse/tahvil açıklarına oranlı. ${p.label}.`,
       amount_eur: p.amountEUR, risk: p.symbol === 'XEON' ? 'low' : 'medium',
     }));
-    if (Array.isArray(aiResponse.anomalies) && aiResponse.anomalies.length) {
-      aiResponse.news_alerts = [...(aiResponse.news_alerts || []), ...aiResponse.anomalies.map((a: string) => `⚠️ ${a}`)];
-    }
+    // Anomaliler KODDAN (aiCtx.anomalies), AI kopyasına emanet değil; AI'nın kendi tespiti varsa sonuna eklenir (tekrarsız)
+    const engineAnomalies = aiCtx?.anomalies || [];
+    const aiAnomalies = (Array.isArray(aiResponse.anomalies) ? aiResponse.anomalies : []).filter((a: any) => typeof a === 'string' && a.trim()).slice(0, 2);
+    const allAnomalies = Array.from(new Set([...engineAnomalies, ...aiAnomalies]));
+    aiResponse.news_alerts = [...(Array.isArray(aiResponse.news_alerts) ? aiResponse.news_alerts : []).filter((n: any) => typeof n === 'string' && !n.startsWith('⚠️')), ...allAnomalies.map(a => `⚠️ ${a}`)];
+    aiResponse.top_pick = '';   // 'Günün Seçimi' yok — model doldursa da yayınlanmaz
 
     // ========================================
     // 5. Raporu veritabanına kaydet
@@ -157,7 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       actions: weekPlanActions,   // 2026-09-22: AI aksiyonu yok; tek planın bu haftaki dilimi
       market_outlook: aiResponse.market_outlook || '',
       portfolio_diagnosis: aiResponse.portfolio_diagnosis || '',
-      top_pick: aiResponse.top_pick || '',
+      top_pick: '',
       news_alerts: aiResponse.news_alerts || [],
       wealth_building_tip: aiResponse.wealth_building_tip || '',
       // EUR — tek ölçü (uygulama kartlarıyla aynı motor)
@@ -219,7 +197,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         salaryEUR, salaryMonthLabel: monthLabelTR(todayStr.slice(0, 7)), salaryBasisLabel: eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—',
         projectedSalaryEUR, nextMonthLabel: monthLabelTR(nextYM),
         healthOk: eur.health.ok,
-        topPick: aiResponse.top_pick || '',
+        anomalies: allAnomalies.filter(a => !a.startsWith('Snapshot eksik')),   // asOf≠date uyarısı e-posta/Telegram'da zaten var
+        topPick: '',
         portfolioDiagnosis: aiResponse.portfolio_diagnosis || '',
         marketOutlook: aiResponse.market_outlook || '',
         actions: weekPlanActions,
@@ -245,8 +224,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           value: totalValue,
           pnl: totalPnl,
           pnl_pct: totalPnlPct,
-          daily_change: dailyChange,
-          daily_change_pct: dailyChangePct,
         },
         eur: eur ? {
           wealth: eur.wealthEUR, day: eur.dayGainEUR, week: eur.weekGainEUR, mtd: eur.mtd?.gainEUR ?? null,
@@ -561,22 +538,17 @@ async function callClaudeForDailyReport(apiKey: string, portfolioContext: string
 GÖREVİN (her sabah, Türkçe, kısa):
 1. portfolio_diagnosis: bugünkü rakamları AÇIKLA — son gün ve bu ay neden artı/eksi, hangi varlık sınıfı sürükledi (3-4 cümle, rakamlı).
 2. market_outlook: verilen CANLI piyasa verilerine dayalı kısa değerlendirme (3-4 cümle). Canlı veri olmayan şey hakkında yorum yapma.
-3. market_research: küresel trend, sektörler, VIX/risk ortamı, kurların portföye etkisi, fırsat DEĞİL — 'izlenecek gelişme'.
-4. news_alerts: portföyü etkileyen gerçek haber/gelişmeler (verilen haberlerden), en fazla 4.
-5. anomalies: sana verilen ANOMALİLER listesini aynen aktar; kendi tespitin varsa ekle (ör. bir varlıkta olağandışı günlük hareket).
-6. week_plan_note: tek planın bu haftaki dilimini TEK cümleyle tekrar et (aşağıda yazıyor); yeni araç/sembol EKLEME.
-7. wealth_building_tip: tek plana bağlı, işlem içermeyen tek cümle (ör. nakdin çalışmasının etkisi).
+3. news_alerts: portföyü etkileyen gerçek haber/gelişmeler (verilen haberlerden), en fazla 4. ANOMALİLER listesini buraya KOPYALAMA — kod ekler.
+4. anomalies: yalnız KENDİ tespitin varsa (ör. bir varlıkta olağandışı günlük hareket), en fazla 2; yoksa boş dizi.
+5. wealth_building_tip: tek plana bağlı, işlem ve RAKAM içermeyen tek cümle.
 
 JSON FORMATI (başka metin ekleme; actions HER ZAMAN boş dizi, monthly_income YOK):
 {
   "actions": [],
   "portfolio_diagnosis": "…",
   "market_outlook": "…",
-  "market_research": { "global_trend": "…", "sector_analysis": "…", "risk_environment": "…", "fx_impact": "…", "opportunities": "izlenecek gelişmeler (öneri değil)" },
   "news_alerts": ["…"],
-  "anomalies": ["…"],
-  "week_plan_note": "…",
-  "top_pick": "",
+  "anomalies": [],
   "wealth_building_tip": "…"
 }`;
 
@@ -584,7 +556,7 @@ JSON FORMATI (başka metin ekleme; actions HER ZAMAN boş dizi, monthly_income Y
 
 ${marketContext}
 
-Yukarıdaki verilerle bugünkü brifingi hazırla. İşlem önerme, maaş hesaplama; rakamları açıkla, piyasayı özetle, anomalileri bildir, tek planın bu haftaki dilimini tekrar et.`;
+Yukarıdaki verilerle bugünkü brifingi hazırla. İşlem önerme, maaş hesaplama; rakamları açıkla, piyasayı özetle.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

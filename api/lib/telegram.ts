@@ -65,6 +65,7 @@ export function buildDailyTelegram(d: DailySnapshot): string {
       : `➡️ ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}${d.carryResetApplied ? ' (eski açık Nisan öncesi kâr yastığıyla sıfırlandı)' : ''}`,
   ];
   if (!d.healthOk) lines.push('', '⚠️ Kur serisi güncel değil — rakamlar güvenilmez olabilir.');
+  for (const a of (d.anomalies || []).slice(0, 3)) lines.push(`⚠️ ${escapeHtml(a.slice(0, 160))}`);
   if (d.topPick) {
     lines.push('', `🥇 ${escapeHtml(d.topPick.slice(0, 200))}`);
   }

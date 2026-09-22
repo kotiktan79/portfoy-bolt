@@ -323,7 +323,7 @@ export default function DailyReportPage() {
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Zap className="w-4 h-4 text-yellow-600" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Bu Haftanın Planı (sabit)</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">{report.report_date >= '2026-09-22' ? 'Bu Haftanın Planı (sabit)' : 'Aksiyonlar (eski AI önerisi — geçersiz)'}</span>
                 </div>
                 <div className="space-y-2">
                   {report.actions.map((action, i) => {

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { buildAiContext, AI_RULES } from './lib/aiContext.js';
+import { dayInTZ } from '../src/lib/eurPnl.js';
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -34,7 +35,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2026-09-22: bağlam SUNUCUDA, EUR motorundan (istemcinin TL/USD payload'u artık kullanılmıyor → cüzdanla aynı rakamlar)
     let systemPrompt: string;
     try {
-      const ctx = await buildAiContext(getSupabase(), new Date().toISOString().slice(0, 10));
+      // gün/ay anahtarı Bükreş takvimi (uygulama ymInTZ/dayInTZ ile aynı) — ayın 1'i 00-03 arası UTC bir önceki ayı gösteriyordu
+      const ctx = await buildAiContext(getSupabase(), dayInTZ(new Date()));
       systemPrompt = `${AI_RULES}\n\n${ctx.text}`;
     } catch (e: any) {
       console.error('aiContext:', e?.message);

@@ -1,46 +1,33 @@
 import { useState, useEffect } from 'react';
-import { Brain, TrendingUp, TrendingDown, AlertTriangle, Lightbulb, Target, Activity, Shield, Sparkles, MessageSquare, Send, Award, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
+import { Brain, Shield, Sparkles, MessageSquare, Send, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import {
-  analyzeRiskProfile,
-  generateAIRecommendations,
-  analyzeMarketSentiment,
-  generatePortfolioInsights,
-  type RiskProfile,
-  type AIRecommendation,
-  type MarketSentiment,
-  type PortfolioInsight,
-} from '../services/aiAdvisorService';
-import {
-  generateBuySellSignals,
-  calculatePortfolioScore,
-  generateSmartSuggestions,
-  type BuySellSignal,
-  type PortfolioScore,
-  type SmartSuggestion,
-} from '../services/advancedAI';
-import { generateSmartResponse, ChatMessage } from '../services/smartAIChat';
+import { analyzeRiskProfile, type RiskProfile } from '../services/aiAdvisorService';
 import { askClaude } from '../services/claudeAIService';
+
+interface ChatMessage { role: 'user' | 'ai'; content: string; suggestions?: string[]; timestamp: Date }
+
+// 2026-09-22 (kullanıcı kararı "küçült"): AI AÇIKLAR, işlem ÖNERMEZ, maaş HESAPLAMAZ.
+// Yerel sinyal/öneri/sentiment motorları (advancedAI, smartAIChat, generateAIRecommendations) bu sayfadan çıkarıldı;
+// Claude ulaşılamazsa sohbet yerel öneri motoruna DÜŞMEZ, sabit bir "ulaşılamıyor" mesajı verir.
+// Sohbet geçmişi anahtarı sürümlendi: eski öneri/sinyal mesajları /api/chat'e geçmiş olarak gitmesin.
+const CHAT_KEY = 'ai_chat_history_v2';
+const CHAT_SUGGESTIONS = ['Bu hafta ne alıyorum?', 'Bu ay neden eksi/artı?', 'Maaşım neden bu kadar?'];
+const OFFLINE_MSG = 'AI şu an ulaşılamıyor. Plan sabittir: bu haftaki dilim hisse/tahvil açıklarına oranlı V3YL + XEON — ayrıntı ve tutarlar "Hedefe Ulaşma Planı" sayfasında, maaş rakamı "Kâr Cüzdanı"nda. Biraz sonra tekrar deneyin.';
 
 export default function AIAdvisor() {
   const [holdings, setHoldings] = useState<any[]>([]);
   const [riskProfile, setRiskProfile] = useState<RiskProfile | null>(null);
-  const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
-  const [sentiment, setSentiment] = useState<MarketSentiment | null>(null);
-  const [insights, setInsights] = useState<PortfolioInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
-  const [buySellSignals, setBuySellSignals] = useState<BuySellSignal[]>([]);
-  const [portfolioScore, setPortfolioScore] = useState<PortfolioScore | null>(null);
-  const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'signals' | 'suggestions' | 'chat'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'chat'>('overview');
 
   // Load chat history from localStorage on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('ai_chat_history');
+      localStorage.removeItem('ai_chat_history');   // eski (öneri içeren) geçmiş
+      const stored = localStorage.getItem(CHAT_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         setChatHistory(parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
@@ -52,13 +39,13 @@ export default function AIAdvisor() {
   useEffect(() => {
     if (chatHistory.length > 0) {
       const toStore = chatHistory.slice(-50);
-      localStorage.setItem('ai_chat_history', JSON.stringify(toStore));
+      try { localStorage.setItem(CHAT_KEY, JSON.stringify(toStore)); } catch { /* ignore */ }
     }
   }, [chatHistory]);
 
   const clearChatHistory = () => {
     setChatHistory([]);
-    localStorage.removeItem('ai_chat_history');
+    try { localStorage.removeItem(CHAT_KEY); } catch { /* ignore */ }
   };
 
   useEffect(() => {
@@ -83,26 +70,7 @@ export default function AIAdvisor() {
   async function runAnalysis(holdingsData: any[]) {
     setAnalyzing(true);
     try {
-      const profile = await analyzeRiskProfile(holdingsData);
-      setRiskProfile(profile);
-
-      const recs = await generateAIRecommendations(holdingsData, profile);
-      setRecommendations(recs);
-
-      const sent = await analyzeMarketSentiment(holdingsData);
-      setSentiment(sent);
-
-      const insightsData = await generatePortfolioInsights(holdingsData, profile, sent);
-      setInsights(insightsData);
-
-      const signals = await generateBuySellSignals(holdingsData);
-      setBuySellSignals(signals);
-
-      const score = await calculatePortfolioScore(holdingsData);
-      setPortfolioScore(score);
-
-      const suggestions = await generateSmartSuggestions(holdingsData);
-      setSmartSuggestions(suggestions);
+      setRiskProfile(await analyzeRiskProfile(holdingsData));   // yapısal profil (çeşitlendirme/konsantrasyon) — öneri değil
     } catch (error) {
       console.error('Error running analysis:', error);
     } finally {
@@ -125,60 +93,6 @@ export default function AIAdvisor() {
     }
   };
 
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
-      case 'bullish':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'bearish':
-        return 'text-red-600 bg-red-50 border-red-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  };
-
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return <AlertTriangle className="w-5 h-5 text-red-600" />;
-      case 'medium':
-        return <Lightbulb className="w-5 h-5 text-yellow-600" />;
-      default:
-        return <Target className="w-5 h-5 text-brand-600" />;
-    }
-  };
-
-  const getRecommendationColor = (type: string) => {
-    switch (type) {
-      case 'buy':
-        return 'bg-green-50 border-green-200';
-      case 'sell':
-        return 'bg-red-50 border-red-200';
-      case 'warning':
-        return 'bg-yellow-50 border-yellow-200';
-      case 'rebalance':
-        return 'bg-brand-50 border-brand-200';
-      default:
-        return 'bg-gray-50 border-gray-200';
-    }
-  };
-
-  const getSignalColor = (signal: string) => {
-    switch (signal) {
-      case 'strong_buy':
-        return 'bg-green-600 text-white';
-      case 'buy':
-        return 'bg-green-500 text-white';
-      case 'hold':
-        return 'bg-gray-500 text-white';
-      case 'sell':
-        return 'bg-red-500 text-white';
-      case 'strong_sell':
-        return 'bg-red-600 text-white';
-      default:
-        return 'bg-gray-400 text-white';
-    }
-  };
-
   const [chatLoading, setChatLoading] = useState(false);
 
   const handleChatSubmit = async () => {
@@ -195,7 +109,6 @@ export default function AIAdvisor() {
     setChatLoading(true);
 
     try {
-      // Try Claude API first
       const conversationHistory = chatHistory
         .filter(m => m.role === 'user' || m.role === 'ai')
         .map(m => ({
@@ -203,42 +116,11 @@ export default function AIAdvisor() {
           content: m.content,
         }));
 
-      const claudeResult = await askClaude(
-        chatInput,
-        holdings,
-        conversationHistory,
-        riskProfile?.score || 50
-      );
-
-      if (claudeResult.isAI && claudeResult.response) {
-        const aiMsg: ChatMessage = {
-          role: 'ai',
-          content: claudeResult.response,
-          suggestions: ['Bu hafta ne alıyorum?', 'Bu ay neden eksi/artı?', 'Maaşım neden bu kadar?'],
-          timestamp: new Date(),
-        };
-        setChatHistory(prev => [...prev, aiMsg]);
-      } else {
-        // Fallback to local AI
-        const localResponse = generateSmartResponse(chatInput, {
-          holdings,
-          riskProfile,
-          signals: buySellSignals,
-          score: portfolioScore,
-          suggestions: smartSuggestions,
-        });
-        setChatHistory(prev => [...prev, localResponse]);
-      }
+      const claudeResult = await askClaude(chatInput, holdings, conversationHistory, riskProfile?.score || 50);
+      const content = claudeResult.isAI && claudeResult.response ? claudeResult.response : OFFLINE_MSG;
+      setChatHistory(prev => [...prev, { role: 'ai', content, suggestions: CHAT_SUGGESTIONS, timestamp: new Date() }]);
     } catch {
-      // Fallback to local AI on any error
-      const localResponse = generateSmartResponse(chatInput, {
-        holdings,
-        riskProfile,
-        signals: buySellSignals,
-        score: portfolioScore,
-        suggestions: smartSuggestions,
-      });
-      setChatHistory(prev => [...prev, localResponse]);
+      setChatHistory(prev => [...prev, { role: 'ai', content: OFFLINE_MSG, suggestions: CHAT_SUGGESTIONS, timestamp: new Date() }]);
     } finally {
       setChatLoading(false);
     }
@@ -264,7 +146,7 @@ export default function AIAdvisor() {
           </div>
           <h3 className="t-h2 mb-1">AI Analiz için varlık gerekli</h3>
           <p className="t-caption max-w-sm">
-            Portföyünüze varlık ekleyin; AI danışmanınız risk profili, sinyaller ve öneriler üretecek.
+            Portföyünüze varlık ekleyin; AI rakamları açıklar ve anomali bildirir (işlem önermez).
           </p>
         </div>
       </div>
@@ -273,10 +155,9 @@ export default function AIAdvisor() {
 
   // 2026-09-22: 'Al/Sat Sinyalleri' ve 'Akıllı Öneriler' sekmeleri KALDIRILDI — tek plan sabit, AI işlem önermez (açıklar).
   const tabs = [
-    { id: 'overview' as const, label: 'Genel Bakış', icon: Target },
+    { id: 'overview' as const, label: 'Genel Bakış', icon: Shield },
     { id: 'chat' as const, label: 'AI Sohbet', icon: MessageSquare },
   ];
-  void Activity; void Lightbulb;
 
   return (
     <div className="space-y-5">
@@ -289,19 +170,10 @@ export default function AIAdvisor() {
             </div>
             <div>
               <h2 className="t-h2">AI Portföy Danışmanı</h2>
-              <p className="t-caption">Kişiselleştirilmiş öneriler ve piyasa analizleri</p>
+              <p className="t-caption">Rakamları açıklar, anomali bildirir — işlem önermez, maaş hesaplamaz</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {portfolioScore && (
-              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white dark:bg-gray-800 ring-1 ring-slate-200 dark:ring-gray-700">
-                <Award className="w-5 h-5 text-amber-500" />
-                <div>
-                  <p className="t-eyebrow !text-[9px]">Portföy Notu</p>
-                  <p className="text-xl font-black text-brand-600 dark:text-brand-400 leading-none">{portfolioScore.grade}</p>
-                </div>
-              </div>
-            )}
             <button
               onClick={() => runAnalysis(holdings)}
               disabled={analyzing}
@@ -442,276 +314,6 @@ export default function AIAdvisor() {
         </div>
       )}
 
-      {activeTab === 'overview' && sentiment && (
-        <div className="card-secondary p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Activity className="w-6 h-6 text-brand-600" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Piyasa Sentiment</h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <div
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 ${getSentimentColor(
-                  sentiment.overall
-                )} font-bold text-lg mb-4`}
-              >
-                {sentiment.overall === 'bullish' && (
-                  <>
-                    <TrendingUp className="w-5 h-5" /> Yükseliş
-                  </>
-                )}
-                {sentiment.overall === 'bearish' && (
-                  <>
-                    <TrendingDown className="w-5 h-5" /> Düşüş
-                  </>
-                )}
-                {sentiment.overall === 'neutral' && '↔️ Nötr'}
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Genel piyasa skoru: {sentiment.score.toFixed(0)}/100
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">Teknik</span>
-                <span className="text-sm font-bold">
-                  {sentiment.signals.technical.toFixed(0)}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">Fundamental</span>
-                <span className="text-sm font-bold">
-                  {sentiment.signals.fundamental.toFixed(0)}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">Sentiment</span>
-                <span className="text-sm font-bold">
-                  {sentiment.signals.sentiment.toFixed(0)}%
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {false as boolean && activeTab === 'overview' && recommendations.length > 0 && (   /* 2026-09-22: işlem önerisi yok — tek plan */
-        <div className="card-secondary p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Lightbulb className="w-6 h-6 text-yellow-600" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              AI Önerileri ({recommendations.length})
-            </h3>
-          </div>
-
-          <div className="space-y-4">
-            {recommendations.map((rec, index) => (
-              <div
-                key={index}
-                className={`p-4 rounded-lg border-2 ${getRecommendationColor(rec.type)}`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">{getPriorityIcon(rec.priority)}</div>
-                  <div className="flex-1">
-                    <h4 className="font-bold text-gray-900 dark:text-white mb-1">
-                      {rec.title}
-                    </h4>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                      {rec.description}
-                    </p>
-                    <div className="flex items-center gap-4 text-xs">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        <strong>Sebep:</strong> {rec.reason}
-                      </span>
-                      <span className="text-gray-600 dark:text-gray-400">
-                        <strong>Etki:</strong> {rec.impact}
-                      </span>
-                      <span className="text-gray-600 dark:text-gray-400">
-                        <strong>Güven:</strong> %{rec.confidence}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'overview' && insights.length > 0 && (
-        <div className="card-secondary p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Sparkles className="w-6 h-6 text-brand-600" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              Portföy İçgörüleri
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {insights.map((insight, index) => (
-              <div
-                key={index}
-                className={`p-4 rounded-lg border-2 ${
-                  insight.severity === 'critical'
-                    ? 'bg-red-50 border-red-200'
-                    : insight.severity === 'warning'
-                    ? 'bg-yellow-50 border-yellow-200'
-                    : 'bg-brand-50 border-brand-200'
-                }`}
-              >
-                <h4 className="font-bold text-gray-900 dark:text-white mb-2">
-                  {insight.title}
-                </h4>
-                <p className="text-sm text-gray-700 dark:text-gray-300">{insight.message}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'signals' && (
-        <div className="space-y-4">
-          {portfolioScore && (
-            <div className="bg-gradient-to-r from-brand-600 to-brand-600 rounded-xl shadow-lg p-6 text-white">
-              <h3 className="text-2xl font-bold mb-4">Portföy Skoru</h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div>
-                  <p className="text-sm text-brand-100">Genel</p>
-                  <p className="text-3xl font-bold">{portfolioScore.overall.toFixed(0)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-brand-100">Çeşitlendirme</p>
-                  <p className="text-2xl font-bold">{portfolioScore.breakdown.diversification.toFixed(0)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-brand-100">Performans</p>
-                  <p className="text-2xl font-bold">{portfolioScore.breakdown.performance.toFixed(0)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-brand-100">Risk</p>
-                  <p className="text-2xl font-bold">{portfolioScore.breakdown.riskManagement.toFixed(0)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-brand-100">Not</p>
-                  <p className="text-3xl font-bold">{portfolioScore.grade}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="card-secondary p-6">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
-              Al/Sat Sinyalleri ({buySellSignals.length})
-            </h3>
-            <div className="space-y-4">
-              {buySellSignals.map((signal, index) => (
-                <div key={index} className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white">{signal.symbol}</h4>
-                      <span className={`px-3 py-1 rounded-lg text-sm font-bold ${getSignalColor(signal.signal)}`}>
-                        {signal.signal.replace('_', ' ').toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Güç</p>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{signal.strength.toFixed(0)}%</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">RSI</p>
-                      <p className="font-bold text-gray-900 dark:text-white">{signal.technicals.rsi.toFixed(1)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Momentum</p>
-                      <p className="font-bold text-gray-900 dark:text-white">{signal.technicals.momentum.toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Hedef</p>
-                      <p className="font-bold text-green-600">₺{signal.targetPrice?.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Stop-Loss</p>
-                      <p className="font-bold text-red-600">₺{signal.stopLoss?.toFixed(2)}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    {signal.reasons.map((reason, idx) => (
-                      <p key={idx} className="text-sm text-gray-700 dark:text-gray-300">• {reason}</p>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'suggestions' && (
-        <div className="card-secondary p-6">
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
-            Akıllı Öneriler ({smartSuggestions.length})
-          </h3>
-          <div className="space-y-4">
-            {smartSuggestions.map((suggestion, index) => (
-              <div key={index} className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    {suggestion.type === 'add_asset' && <ArrowUpRight className="w-6 h-6 text-green-600" />}
-                    {suggestion.type === 'decrease' && <ArrowDownRight className="w-6 h-6 text-red-600" />}
-                    {suggestion.type === 'exit' && <X className="w-6 h-6 text-red-600" />}
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white">{suggestion.symbol}</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{suggestion.type.replace('_', ' ').toUpperCase()}</p>
-                    </div>
-                  </div>
-                  <span className="px-3 py-1 bg-brand-100 dark:bg-brand-900 text-brand-600 dark:text-brand-300 rounded-lg text-sm font-bold">
-                    Öncelik: {suggestion.priority}
-                  </span>
-                </div>
-
-                <p className="text-gray-700 dark:text-gray-300 mb-4">{suggestion.reason}</p>
-
-                <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Risk Değişimi</p>
-                    <p className={`font-bold ${suggestion.expectedImpact.riskChange < 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {suggestion.expectedImpact.riskChange > 0 ? '+' : ''}{suggestion.expectedImpact.riskChange}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Getiri Değişimi</p>
-                    <p className={`font-bold ${suggestion.expectedImpact.returnChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {suggestion.expectedImpact.returnChange > 0 ? '+' : ''}{suggestion.expectedImpact.returnChange}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Sharpe Değişimi</p>
-                    <p className={`font-bold ${suggestion.expectedImpact.sharpeChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {suggestion.expectedImpact.sharpeChange > 0 ? '+' : ''}{suggestion.expectedImpact.sharpeChange.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Aksiyon Adımları:</p>
-                  {suggestion.actionSteps.map((step, idx) => (
-                    <p key={idx} className="text-sm text-gray-600 dark:text-gray-400 ml-4">
-                      {idx + 1}. {step}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {activeTab === 'chat' && (
         <div className="card-secondary p-6">
           <div className="flex items-center justify-between mb-6">
@@ -766,35 +368,6 @@ export default function AIAdvisor() {
                     )}
                   </div>
 
-                  {msg.data?.metrics && (
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      {msg.data.metrics.map((m, i) => (
-                        <div key={i} className="bg-white/80 dark:bg-gray-600 rounded-lg p-2 text-center">
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400">{m.label}</p>
-                          <p className={`text-sm font-bold ${
-                            m.color === 'green' ? 'text-green-600' :
-                            m.color === 'red' ? 'text-red-600' :
-                            m.color === 'blue' ? 'text-brand-600' :
-                            'text-gray-900 dark:text-white'
-                          }`}>{m.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {msg.data?.actions && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {msg.data.actions.map((a, i) => (
-                        <button
-                          key={i}
-                          onClick={() => a.route && window.location.assign(a.route)}
-                          className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold hover:bg-brand-700 transition-colors"
-                        >
-                          {a.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
 
                   {msg.suggestions && msg.suggestions.length > 0 && msg.role === 'ai' && (
                     <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">

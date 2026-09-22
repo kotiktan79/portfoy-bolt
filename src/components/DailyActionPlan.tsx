@@ -1,16 +1,12 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  CheckCircle2, Brain, ChevronDown, ChevronUp,
+  Brain, ChevronDown, ChevronUp,
   AlertTriangle, TrendingUp, TrendingDown, Shield,
-  Clock, Zap, Target, Sparkles
+  Clock, Sparkles
 } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
-import { analyzePortfolio } from '../services/smartInvestmentEngine';
-import { getDefaultTargetAllocations } from '../services/analyticsService';
-import { computePortfolioMetrics, computeHoldingMetrics } from '../lib/portfolioMetrics';
-import { buildMemoryContext, saveRecommendations, recordPortfolioValue } from '../services/aiMemoryService';
 
 interface DailyActionPlanProps {
   holdings: Holding[];
@@ -21,36 +17,13 @@ interface DailyActionPlanProps {
   totalCashValue: number;
 }
 
-interface Step {
-  id: string;
-  order: number;
-  urgency: 'now' | 'today' | 'this_week' | 'watch';
-  icon: JSX.Element;
-  action: string; // "SAT", "AL", "BEKLE" etc
-  symbol?: string;
-  instruction: string;
-  detail: string;
-  amount?: number;
-  completed: boolean;
-}
-
-const STORAGE_KEY = 'tandor_daily_actions';
+// 2026-09-22: yerel 'adımlar' (SAT/AL/KÂR AL, TL bazlı; hiç gösterilmiyordu, sadece 0/N çubuğunu besliyordu) KALDIRILDI.
+// Plan tek kaynaktan gelir: /api/daily-plan (deterministik, AI yok).
 
 function getTodayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-
-function loadCompletedSteps(): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-    const data = JSON.parse(raw);
-    if (data.date !== getTodayKey()) return new Set(); // Reset daily
-    return new Set(data.completed || []);
-  } catch { return new Set(); }
-}
-
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -87,12 +60,15 @@ interface AIPlan {
   actions: AIAction[];
   market_outlook: string;
   top_pick: string;
+  notice?: string;          // anomali/uyarı (işlem çağrışımlı 'Günün Tercihi' değil)
+  news_alerts?: string[];
+  source?: string;
 }
 
 const AI_CACHE_KEY = 'tandor_ai_daily_plan';
 // Politika/prompt değişince BUMP et → eski cache'lenmiş planlar otomatik geçersiz,
 // kullanıcı yeniden çekmek zorunda kalmadan güncel politikayla yeni plan üretilir.
-const AI_PLAN_VERSION = '2026-09-22-single-plan-v1';   // tek plan (deterministik, AI yok) — eski cache geçersiz
+const AI_PLAN_VERSION = '2026-09-22-single-plan-v2';   // tek plan (deterministik, AI yok) — eski cache geçersiz
 
 function getCachedAIPlan(): AIPlan | null {
   try {
@@ -108,15 +84,13 @@ function cacheAIPlan(plan: AIPlan) {
   localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ date: getTodayKey(), v: AI_PLAN_VERSION, plan }));
 }
 
-export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanProps) {
+export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
   const navigate = useNavigate();
-  const [completedSteps] = useState<Set<string>>(loadCompletedSteps);
   const [expanded, setExpanded] = useState(true);
   const [aiPlan, setAiPlan] = useState<AIPlan | null>(getCachedAIPlan);
   const [aiLoading, setAiLoading] = useState(false);
   const aiLoadedRef = useRef(false);
 
-  const report = useMemo(() => analyzePortfolio(holdings, totalCashValue), [holdings, totalCashValue]);
   const market = getMarketStatus();
 
   // Fetch AI plan once per day
@@ -129,34 +103,11 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
   async function fetchAIPlan() {
     setAiLoading(true);
     try {
-      const portfolio = computePortfolioMetrics(holdings);
-      const perHolding = computeHoldingMetrics(holdings);
-      const tv = portfolio.totalValueTRY;
-      const ti = portfolio.totalCostTRY;
-
-      const portfolioData = {
-        holdings: perHolding.map(m => ({
-          symbol: m.holding.symbol, asset_type: m.holding.asset_type,
-          quantity: m.holding.quantity, purchase_price: m.holding.purchase_price,
-          current_price: m.holding.current_price, total_value: m.valueTRY, pnl: m.pnlTRY,
-          pnl_percent: m.pnlPct,
-          weight: m.weight,
-        })),
-        totalValue: tv, totalInvested: ti,
-        totalPnlPct: portfolio.totalPnLPct,
-        cashBalance: totalCashValue,
-      };
-
-      // Build memory context for Claude
-      const memory = buildMemoryContext();
-
-      // Record today's portfolio value
-      recordPortfolioValue(tv + totalCashValue);
-
+      // Sunucu bağlamı kendisi kurar (EUR motoru + tek plan); istemci payload'u kullanılmaz
       const res = await fetch('/api/daily-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ portfolio: portfolioData, memory }),
+        body: '{}',
       });
 
       if (!res.ok) {
@@ -175,13 +126,6 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
       if (data.success && data.plan) {
         setAiPlan(data.plan);
         cacheAIPlan(data.plan);
-
-        // Save recommendations to memory for future tracking
-        if (data.plan.actions) {
-          const priceMap: Record<string, number> = {};
-          holdings.filter(h => h.asset_type !== 'cash').forEach(h => { priceMap[h.symbol] = h.current_price; });
-          saveRecommendations(data.plan.actions, priceMap);
-        }
       }
     } catch (e) {
       console.error('AI plan fetch failed:', e);
@@ -189,191 +133,9 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
     setAiLoading(false);
   }
 
-  const steps = useMemo((): Step[] => {
-    if (report.holdings.length === 0) return [];
-    const s: Step[] = [];
-    let order = 0;
-
-    const investmentHoldings = report.holdings;
-    const totalValue = report.totalValue;
-
-    // Portfolio type weights
-    const typeWeights: Record<string, number> = {};
-    report.currentAllocation.forEach(a => { typeWeights[a.type] = a.weight; });
-    const ownedSymbols = new Set(investmentHoldings.map(h => h.symbol));
-
-    // Single source of truth for target allocation — same table the RebalanceModal
-    // uses — so the homepage's rebalance advice doesn't contradict it. (The old
-    // local table summed to 90% with currency 10 vs the canonical 15.)
-    const IDEAL: Record<string, number> = getDefaultTargetAllocations();
-    const TYPE_NAMES: Record<string, string> = { stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz', commodity: 'Emtia', fund: 'Fon', eurobond: 'Eurobond' };
-    const STOCK_PICKS = ['THYAO', 'ASELS', 'BIMAS', 'TUPRS', 'KCHOL', 'GARAN', 'SISE', 'EREGL'];
-
-    // ── HEMEN YAP (Acil) ────────────────────────────────────
-
-    // 1. VARLIK TÜRÜ BAZINDA REBALANCE (en önemli)
-    const overweightTypes = Object.entries(typeWeights).filter(([t, w]) => IDEAL[t] && w > IDEAL[t] * 2);
-    const underweightTypes = Object.entries(IDEAL).filter(([t]) => (typeWeights[t] || 0) < IDEAL[t] * 0.5);
-
-    overweightTypes.sort((a, b) => b[1] - a[1]);
-    overweightTypes.forEach(([type, weight]) => {
-      const excess = weight - IDEAL[type];
-      const excessAmount = totalValue * (excess / 100);
-      const holdingsOfType = investmentHoldings.filter(h => h.assetType === type).sort((a, b) => b.value - a.value);
-      const sellSymbol = holdingsOfType[0]?.symbol || type;
-
-      // Ne alacak?
-      const buyParts: string[] = [];
-      underweightTypes.forEach(([buyType]) => {
-        if (buyType === type) return;
-        const buyAmt = excessAmount / Math.max(underweightTypes.length, 1);
-        const pick = buyType === 'stock'
-          ? STOCK_PICKS.filter(s => !ownedSymbols.has(s))[0] || 'THYAO'
-          : buyType === 'crypto' ? 'BTC'
-          : buyType === 'commodity' ? 'ALTIN'
-          : buyType === 'fund' ? 'IPV' : 'THYAO';
-        buyParts.push(`${pick}: ${formatCurrency(buyAmt)} ₺`);
-      });
-
-      s.push({
-        id: `rebal-type-${type}`, order: order++, urgency: 'now',
-        icon: <AlertTriangle size={16} className="text-red-500" />,
-        action: 'DÖNÜŞTÜR',
-        symbol: sellSymbol,
-        instruction: `${TYPE_NAMES[type] || type} azalt (%${weight.toFixed(0)} → %${IDEAL[type]}) → ${buyParts.length > 0 ? buyParts.join(' + ') : 'eksik türlere dağıt'}`,
-        detail: `${TYPE_NAMES[type]} portföyün %${weight.toFixed(0)}'i (ideal: %${IDEAL[type]}). ${formatCurrency(excessAmount)} ₺ çıkarıp eksik türlere aktar.`,
-        amount: excessAmount,
-        completed: completedSteps.has(`rebal-type-${type}`),
-      });
-    });
-
-    // 2. Kritik zarardakiler
-    const criticalLosers = investmentHoldings.filter(h => h.pnlPct < -20);
-    criticalLosers.forEach(h => {
-      s.push({
-        id: `sell-${h.symbol}`, order: order++, urgency: 'now',
-        icon: <AlertTriangle size={16} className="text-red-500" />,
-        action: 'SAT',
-        symbol: h.symbol,
-        instruction: `${h.symbol} sat → ALTIN veya hisseye çevir`,
-        detail: `%${Math.abs(h.pnlPct).toFixed(0)} zararda (${formatCurrency(Math.abs(h.pnl))} ₺ kayıp). Sat ve daha güvenli varlığa yönlendir.`,
-        amount: h.value,
-        completed: completedSteps.has(`sell-${h.symbol}`),
-      });
-    });
-
-    // ── BUGÜN YAP ───────────────────────────────────────────
-
-    // 3. Eksik türler → spesifik alım önerisi
-    underweightTypes.forEach(([type]) => {
-      const current = typeWeights[type] || 0;
-      const deficit = IDEAL[type] - current;
-      const amt = totalValue * (deficit / 100);
-      if (amt < 500) return;
-
-      let pick: string;
-      let pickDetail: string;
-      if (type === 'stock') {
-        const available = STOCK_PICKS.filter(s => !ownedSymbols.has(s));
-        pick = available[0] || 'THYAO';
-        const pick2 = available[1] || 'ASELS';
-        pickDetail = `${pick}: ${formatCurrency(amt * 0.6)} ₺ + ${pick2}: ${formatCurrency(amt * 0.4)} ₺. Likiditesi yüksek, güvenilir BIST hisseleri.`;
-      } else if (type === 'crypto') {
-        pick = 'BTC';
-        pickDetail = `BTC: ${formatCurrency(amt * 0.7)} ₺ + ETH: ${formatCurrency(amt * 0.3)} ₺. En güvenilir kripto paralar.`;
-      } else if (type === 'commodity') {
-        pick = 'ALTIN';
-        pickDetail = `ALTIN: ${formatCurrency(amt)} ₺. Enflasyon koruması + güvenli liman.`;
-      } else {
-        pick = type === 'fund' ? 'IPV' : 'USD';
-        pickDetail = `${pick}: ${formatCurrency(amt)} ₺`;
-      }
-
-      s.push({
-        id: `buy-${type}`, order: order++, urgency: 'today',
-        icon: <Target size={16} className="text-accent-500" />,
-        action: 'AL',
-        symbol: pick,
-        instruction: `${TYPE_NAMES[type] || type} ekle → ${pick} al (${formatCurrency(amt)} ₺)`,
-        detail: `${TYPE_NAMES[type]} %${current.toFixed(0)} (ideal: %${IDEAL[type]}). ${pickDetail}`,
-        amount: amt,
-        completed: completedSteps.has(`buy-${type}`),
-      });
-    });
-
-    // 4. Kâr realizasyonu (en kârlıdan)
-    const bigWinners = investmentHoldings.filter(h => h.pnlPct > 40).sort((a, b) => b.pnlPct - a.pnlPct);
-    bigWinners.slice(0, 2).forEach(w => {
-      const takeAmount = w.pnl * 0.3;
-      s.push({
-        id: `profit-${w.symbol}`, order: order++, urgency: 'today',
-        icon: <TrendingUp size={16} className="text-green-500" />,
-        action: 'KÂR AL',
-        symbol: w.symbol,
-        instruction: `${w.symbol}'den ${formatCurrency(takeAmount)} ₺ kâr al`,
-        detail: `%+${w.pnlPct.toFixed(0)} kârda. Kârın %30'unu realize et. Stop-loss: ${formatCurrency(w.stopLoss)} ₺`,
-        amount: takeAmount,
-        completed: completedSteps.has(`profit-${w.symbol}`),
-      });
-    });
-
-    // ── BU HAFTA ────────────────────────────────────────────
-
-    // Maliyet düşürme fırsatları
-    const dips = investmentHoldings.filter(h => h.pnlPct > -10 && h.pnlPct < -2 && h.action === 'buy');
-    if (dips.length > 0 && totalCashValue > 1000) {
-      const d = dips[0];
-      const buyAmt = Math.min(totalCashValue * 0.1, d.value * 0.2, 5000);
-      if (buyAmt > 500) {
-        s.push({
-          id: `avg-${d.symbol}`, order: order++, urgency: 'this_week',
-          icon: <Zap size={16} className="text-brand-500" />,
-          action: 'EK ALIM',
-          symbol: d.symbol,
-          instruction: `${d.symbol}'a ${formatCurrency(buyAmt)} ₺ ek alım yap`,
-          detail: `%${Math.abs(d.pnlPct).toFixed(1)} düşüşte. Ek alımla ortalama maliyeti düşür.`,
-          amount: buyAmt,
-          completed: completedSteps.has(`avg-${d.symbol}`),
-        });
-      }
-    }
-
-    // Stop-loss güncelle
-    const noStopLoss = investmentHoldings.filter(h => h.pnlPct < -5 && h.riskLevel !== 'low');
-    if (noStopLoss.length > 0) {
-      s.push({
-        id: 'set-stoploss', order: order++, urgency: 'this_week',
-        icon: <Shield size={16} className="text-brand-500" />,
-        action: 'KORU',
-        instruction: `${noStopLoss.length} varlık için stop-loss belirle`,
-        detail: noStopLoss.map(h => `${h.symbol}: ${formatCurrency(h.stopLoss)} ₺`).join(', '),
-        completed: completedSteps.has('set-stoploss'),
-      });
-    }
-
-    // ── İZLE ─────────────────────────────────────────────────
-
-    // İyi performans gösterenler
-    const stable = investmentHoldings.filter(h => h.action === 'hold' && h.pnlPct > 5);
-    if (stable.length > 0) {
-      s.push({
-        id: 'watch-stable', order: order++, urgency: 'watch',
-        icon: <CheckCircle2 size={16} className="text-gray-400" />,
-        action: 'TUT',
-        instruction: `${stable.map(h => h.symbol).join(', ')} - pozisyon koru`,
-        detail: 'Bu varlıklar stabil. Değişiklik gerekmez, izlemeye devam.',
-        completed: false,
-      });
-    }
-
-    return s;
-  }, [report, totalCashValue, completedSteps]);
 
   if (holdings.filter(h => h.asset_type !== 'cash').length === 0) return null;
 
-  const completedCount = steps.filter(s => s.completed).length;
-  const totalSteps = steps.filter(s => s.urgency !== 'watch').length;
-  const progress = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-gray-900">
@@ -387,12 +149,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">{getGreeting()}! Bugünkü Planınız</h3>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-amber-500 to-green-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
-              </div>
-              <span className="text-[10px] font-bold text-gray-400">{completedCount}/{totalSteps}</span>
-            </div>
+            <p className="text-[10px] text-gray-400 mt-0.5">Tek plan (sabit) · haftalık dilim V3YL + XEON · işlem önerisi yok</p>
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded-full ${market.isOpen ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             <Clock size={10} className="inline mr-1" />
@@ -449,10 +206,10 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
                 </div>
               )}
 
-              {aiPlan.top_pick && (
-                <div className="px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800">
-                  <span className="text-xs font-bold text-brand-700 dark:text-brand-300">Gunun Tercihi: </span>
-                  <span className="text-xs text-brand-600 dark:text-brand-400">{aiPlan.top_pick}</span>
+              {aiPlan.notice && (
+                <div className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Not: </span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400">{aiPlan.notice}</span>
                 </div>
               )}
 

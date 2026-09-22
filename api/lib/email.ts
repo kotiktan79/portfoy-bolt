@@ -68,6 +68,7 @@ export interface DailySnapshot {
   salaryEUR: number; salaryMonthLabel: string; salaryBasisLabel: string;   // bu ayın maaşı = geçen ay (basis) çekilebilir × 0,85
   projectedSalaryEUR: number; nextMonthLabel: string;                      // MTD'ye göre gelecek ay ön izleme
   healthOk: boolean;
+  anomalies?: string[];         // motorun deterministik anomalileri (bayat fiyat, eksik snapshot, itfa, alım yok)
   topPick: string;
   portfolioDiagnosis: string;
   marketOutlook: string;
@@ -98,6 +99,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
       <h1 style="font-size:18px;margin:0 0 4px;color:#312e81;">Günaydın, Tandor Finans</h1>
       <p style="font-size:13px;color:#64748b;margin:0 0 16px;">${d.date} · Günlük brifing · tek ölçü EUR</p>
       ${d.healthOk ? '' : `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">⚠️ Kur serisi güncel değil — EUR rakamları güvenilmez olabilir.</div>`}
+      ${(d.anomalies || []).length ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#78350f;">${(d.anomalies || []).slice(0, 4).map(a => `⚠️ ${a}`).join('<br>')}</div>` : ''}
       ${d.asOf === d.date ? '' : `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#78350f;">⚠️ Rakamlar ${d.asOf} snapshot'ına ait — bugünün snapshot'ı alınmamış.</div>`}
 
       ${card(`
