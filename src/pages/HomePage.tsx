@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BarChart3, PieChart, LayoutGrid, List } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
@@ -97,14 +97,20 @@ export default function HomePage() {
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
   const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [live, setLive] = useState<LiveGain | null>(null);
+  const [eurSeries, setEurSeries] = useState<EurDaily[]>([]);
   // ANLIK kâr: fiyatlar (holdings) her tazelendiğinde yeniden — motorla aynı formül, canlı fiyatla
   useEffect(() => {
     if (!holdings.length) return;
     let cancelled = false;
     getLiveEurGain(holdings).then(g => { if (!cancelled) setLive(g); }).catch(() => {});
-    getEurDaily().then(d => { if (cancelled) return; setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {});
+    getEurDaily().then(d => { if (cancelled) return; setEurSeries(d); setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {});
     return () => { cancelled = true; };
   }, [holdings]);
+  // Trend grafiği: son 30 günün EURO serveti; 'yatırılan para' = servet − pencere içinde birikmiş kâr (kur şişmesi yok)
+  const eurChartData = useMemo(() => {
+    const w = eurSeries.slice(-30); let cum = 0;
+    return w.map((d, i) => { if (i > 0) cum += d.gainEUR; const base = d.wealthEUR - cum; return { date: d.date, total_value: d.wealthEUR, total_investment: base, total_pnl: cum, pnl_percentage: base > 0 ? (100 * cum) / base : 0 }; });
+  }, [eurSeries]);
 
   useEffect(() => {
     // Motor verisi tek durumda izlenir: yüklenirken '…', hata olursa '—' + 'veri yüklenemedi' (asla sahte €0)
@@ -217,7 +223,7 @@ export default function HomePage() {
                     <div className="h-72 md:h-64">
                       <Suspense fallback={<ChartLoader />}>
                         {historicalData.length > 0 ? (
-                          <PortfolioChart data={historicalData} type="area" />
+                          <PortfolioChart data={eurChartData.length > 1 ? eurChartData : historicalData} unit={eurChartData.length > 1 ? 'EUR' : 'TRY'} type="area" />
                         ) : (
                           <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600 text-sm">
                             Veri bekleniyor...

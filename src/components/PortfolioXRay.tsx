@@ -3,6 +3,8 @@ import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers, Sparkles, Glob
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { analyzeXRay, XRayFinding } from '../services/xrayService';
 import { formatCurrency } from '../services/priceService';
+// Tek ölçü EUR (2026-09-22): X-Ray tutarları TL'den €'ya çevrilerek gösterilir
+const eur = (tl: number, rate: number) => `€${formatCurrency(rate > 0 ? tl / rate : 0, 0)}`;
 import { Card } from './ui/Card';
 
 // Varlık tipi → Türkçe etiket (HEDEF vs GERÇEK ALLOKASYON bar'ları için).
@@ -177,7 +179,7 @@ export default function PortfolioXRay() {
                   </div>
                   {finding.amount !== undefined && finding.amount > 0 && (
                     <span className="flex-shrink-0 text-xs font-bold tabular-nums text-gray-700 dark:text-gray-300">
-                      {formatCurrency(finding.amount, 0)} ₺
+                      {eur(finding.amount, xray.eurRate)}
                     </span>
                   )}
                 </div>
@@ -203,8 +205,8 @@ export default function PortfolioXRay() {
                   value={xray.topConcentration ? `%${xray.topConcentration.weight.toFixed(0)}` : '–'}
                   sub={xray.topConcentration?.symbol || '–'}
                 />
-                <Stat label="Döviz" value={`%${xray.effectiveCurrencyPct.toFixed(0)}`} sub={formatCurrency(xray.effectiveCurrencyExposure, 0) + ' ₺'} />
-                <Stat label="Ölü Sermaye" value={`${xray.deadMoneyCount}`} sub={formatCurrency(xray.deadMoneyTotal, 0) + ' ₺'} />
+                <Stat label="Döviz" value={`%${xray.effectiveCurrencyPct.toFixed(0)}`} sub={eur(xray.effectiveCurrencyExposure, xray.eurRate)} />
+                <Stat label="Atıl Nakit" value={eur(xray.deadMoneyTotal, xray.eurRate)} sub="hedefin üstü, %0 getiri" />
                 <Stat label="Türkiye" value={`%${xray.geographicExposure.filter(r => r.region.startsWith('Türkiye')).reduce((s, r) => s + r.pct, 0).toFixed(0)}`} sub="yerel maruziyet" />
               </div>
 
@@ -269,7 +271,7 @@ export default function PortfolioXRay() {
                         <div className="flex-1 h-2 rounded-full bg-white dark:bg-gray-900 overflow-hidden ring-1 ring-slate-200 dark:ring-gray-800">
                           <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full" style={{ width: `${Math.min(100, c.pct)}%` }} />
                         </div>
-                        <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{formatCurrency(c.value, 0)}₺</span>
+                        <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{eur(c.value, xray.eurRate)}</span>
                         <span className="text-[10px] text-gray-500 tabular-nums w-10 text-right">%{c.pct.toFixed(0)}</span>
                       </div>
                     ))}
@@ -288,8 +290,8 @@ export default function PortfolioXRay() {
                       <div key={t.symbol} className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-gray-800 dark:text-gray-200">{t.symbol}</span>
                         <div className="flex items-center gap-3">
-                          <span className="text-gray-500 tabular-nums">{formatCurrency(t.value, 0)} ₺</span>
-                          <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">{t.pnl.toFixed(0)} ₺ ({t.pnlPct.toFixed(0)}%)</span>
+                          <span className="text-gray-500 tabular-nums">{eur(t.value, xray.eurRate)}</span>
+                          <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">{eur(t.pnl, xray.eurRate)} ({t.pnlPct.toFixed(0)}% TL)</span>
                         </div>
                       </div>
                     ))}

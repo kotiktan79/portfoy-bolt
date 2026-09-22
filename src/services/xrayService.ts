@@ -1,6 +1,6 @@
 import { Holding } from '../lib/supabase';
+import { TARGET_ALLOCATION, TARGET_PCT, PHYSICAL_FIXED_TYPES } from '../config/portfolioPolicy';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
-import { TARGET_PCT } from '../config/portfolioPolicy';
 
 export interface XRayFinding {
   id: string;
@@ -55,6 +55,7 @@ export interface XRayReport {
   geographicExposure: GeographicExposure[];
   taxLossOpportunities: { symbol: string; value: number; pnl: number; pnlPct: number }[];
   bigWinners: { symbol: string; value: number; pnlPct: number; weight: number }[];
+  eurRate: number;               // TL tutarları €'ya çevirmek için (tek ölçü EUR)
   currencyMix: { currency: string; value: number; pct: number }[];
 }
 
@@ -148,7 +149,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       sectorBreakdown: [], missingSectors: [], healthScore: 0,
       hhi: 0, diversificationScore: 0, assetClassCount: 0,
       allocationDrift: [], geographicExposure: [], taxLossOpportunities: [],
-      bigWinners: [], currencyMix: [],
+      bigWinners: [], currencyMix: [], eurRate: 1,
     };
   }
 
@@ -206,28 +207,25 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     });
   }
 
-  // ── 4. Ölü Sermaye — 90+ gündür ±%2 içinde sıkışmış pozisyonlar ──
-  // Yeni alımlar (örn. son 2 hafta) "henüz hareket etmedi", "ölü" değil.
-  const deadMoney = positions
-    .filter(p => {
-      if (p.cost === 0) return false;
-      const pnlPct = ((p.value - p.cost) / p.cost) * 100;
-      const createdAt = p.created_at ? new Date(p.created_at).getTime() : Date.now();
-      const ageDays = (Date.now() - createdAt) / 86400000;
-      return pnlPct < 2 && pnlPct > -2 && p.value > 5000 && ageDays > 90;
-    })
-    .sort((a, b) => b.value - a.value);
-  const deadMoneyTotal = deadMoney.reduce((s, p) => s + p.value, 0);
+  // ── 4. Ölü Sermaye = GETİRİSİZ NAKİT (2026-09-22 düzeltmesi) ──
+  // Eski kural fiyatı ±%2 içinde kalan her pozisyonu 'ölü' sayıyordu → IB01/XEON gibi faiz işleyen
+  // kısa vadeli fonları (tasarımı gereği düz fiyat) suçlarken sıfır getirili €60k nakdi görmüyordu.
+  // Şimdi: döviz/nakit pozisyonlarının politika hedefini (%5) aşan kısmı = atıl para.
+  const cashTarget = (TARGET_ALLOCATION.currency?.target ?? 5) / 100;
+  const cashPositions = positions.filter(p => p.asset_type === 'currency').sort((a, b) => b.value - a.value);
+  const cashTotal = cashPositions.reduce((s, p) => s + p.value, 0);
+  const deadMoneyTotal = Math.max(0, cashTotal - totalValue * cashTarget);
+  const deadMoney = deadMoneyTotal > 0 ? cashPositions : [];
 
-  if (deadMoney.length > 0) {
+  if (deadMoneyTotal > totalValue * 0.02) {
     findings.push({
       id: 'dead-money',
-      severity: deadMoneyTotal > totalValue * 0.05 ? 'high' : deadMoneyTotal > 50000 ? 'medium' : 'low',
+      severity: deadMoneyTotal > totalValue * 0.20 ? 'high' : deadMoneyTotal > totalValue * 0.08 ? 'medium' : 'low',
       category: 'dead-money',
-      title: `${deadMoney.length} pozisyonda %${(deadMoneyTotal / totalValue * 100).toFixed(1)} ölü sermaye`,
-      detail: `${deadMoney.slice(0, 3).map(p => p.symbol).join(', ')}${deadMoney.length > 3 ? '...' : ''} — son aylarda ±%2 içinde, çalışmıyor.`,
+      title: `Getirisiz nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
+      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; enflasyon her yıl ~%2'sini yiyor. Tek plan: dilimlerle V3YL + XEON'a.`,
       amount: deadMoneyTotal,
-      symbols: deadMoney.map(p => p.symbol),
+      symbols: cashPositions.map(p => p.symbol),
     });
   }
 
@@ -253,9 +251,12 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     const cur = (p.currency || '').toUpperCase();
     const sym = p.symbol.toUpperCase();
     if (cur !== 'TRY') return false;
+    // TL FİYATLI ≠ TL VARLIĞI: altın, kripto, eurobond ve global ETF'ler TL ile fiyatlansa da TL riski taşımaz (2026-09-22)
+    if (p.asset_type === 'commodity' || p.asset_type === 'crypto' || p.asset_type === 'eurobond') return false;
+    if (GLOBAL_SYMBOLS.has(sym)) return false;
     // currency tipi USD/EURO TL fiyatlı saklanıyor ama gerçekte yabancı para
     if (p.asset_type === 'currency' && (sym === 'USD' || sym === 'USDC' || sym === 'EURO' || sym === 'EUR')) return false;
-    return true;
+    return true;   // BIST hissesi, TL fon, TL nakit
   }).reduce((s, p) => s + p.value, 0);
   const tlPct = (tlExposure / totalValue) * 100;
 
@@ -370,7 +371,8 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
   const sectorBreakdown = Object.values(sectorMap).sort((a, b) => b.value - a.value);
   const missingSectors = KEY_SECTORS.filter(s => !sectorMap[s] || sectorMap[s].value < stockTotal * 0.03);
 
-  if (missingSectors.length > 0 && stocks.length >= 5) {
+  // 2026-09-22: 'eksik sektör' bulgusu KALDIRILDI — tek plan BIST'e taze para koymuyor; sektör listesi yalnız bilgi.
+  if (false && missingSectors.length > 0 && stocks.length >= 5) {
     findings.push({
       id: 'missing-sectors',
       severity: missingSectors.length > 3 ? 'medium' : 'low',
@@ -438,6 +440,8 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       return { symbol: p.symbol, value: p.value, pnlPct, weight };
     })
     .filter(p => p.pnlPct > 50 && p.weight > 5)
+    // Fiziki altın politika gereği SATILMAZ → trim önerisine girmez (2026-09-22)
+    .filter(p => !PHYSICAL_FIXED_TYPES.has(positions.find(x => x.symbol === p.symbol)?.asset_type || ''))
     .sort((a, b) => b.pnlPct - a.pnlPct);
 
   if (bigWinners.length > 0) {
@@ -445,8 +449,8 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       id: 'winners-ride',
       severity: 'info',
       category: 'winner-ride',
-      title: `${bigWinners.length} pozisyon %50+ kârda, kâr alınmadı`,
-      detail: `${bigWinners.slice(0, 3).map(p => `${p.symbol} (+%${p.pnlPct.toFixed(0)}, ağırlık %${p.weight.toFixed(0)})`).join(', ')} — kâr realizasyonu / trim düşünülebilir.`,
+      title: `${bigWinners.length} pozisyon %50+ kârda (TL nominal)`,
+      detail: `${bigWinners.slice(0, 3).map(p => `${p.symbol} (+%${p.pnlPct.toFixed(0)} TL, ağırlık %${p.weight.toFixed(0)})`).join(', ')} — bilgi: satış rotasyonu durduruldu (21.08 kararın), euro bazlı kâr daha düşük.`,
       symbols: bigWinners.map(p => p.symbol),
     });
   }
@@ -473,15 +477,15 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
   // Konsantrasyon (currency hariç)
   if (topRisk && topRisk.weight > 35) healthScore -= 25;
   else if (topRisk && topRisk.weight > 25) healthScore -= 10;
-  // Ölü sermaye (90+ gün eski)
-  healthScore -= Math.min(20, (deadMoneyTotal / totalValue) * 200);
+  // Atıl nakit (politika hedefinin üstü): %35 atıl → −20
+  healthScore -= Math.min(20, (deadMoneyTotal / totalValue) * 57);
   // TL maruziyeti = foreign currency risk
   if (tlPct > 55) healthScore -= 15;
   else if (tlPct > 35) healthScore -= 8;
   // EUR (ev parası) yetersiz
   if (eurPct < 15 && totalValue > 100000) healthScore -= 5;
-  // Sektör eksikliği
-  healthScore -= Math.min(15, missingSectors.length * 3);
+  // Sektör eksikliği cezası kaldırıldı (2026-09-22): plan BIST'e taze para koymuyor
+  void missingSectors;
   // HHI konsantrasyon
   if (hhi > 3500) healthScore -= 15;
   else if (hhi > 2500) healthScore -= 8;
@@ -514,5 +518,6 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     taxLossOpportunities,
     bigWinners,
     currencyMix,
+    eurRate: fxRates.eur,
   };
 }
