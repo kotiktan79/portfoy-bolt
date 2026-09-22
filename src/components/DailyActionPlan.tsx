@@ -92,7 +92,7 @@ interface AIPlan {
 const AI_CACHE_KEY = 'tandor_ai_daily_plan';
 // Politika/prompt değişince BUMP et → eski cache'lenmiş planlar otomatik geçersiz,
 // kullanıcı yeniden çekmek zorunda kalmadan güncel politikayla yeni plan üretilir.
-const AI_PLAN_VERSION = '2026-06-15-policy-v1';
+const AI_PLAN_VERSION = '2026-09-22-single-plan-v1';   // tek plan (deterministik, AI yok) — eski cache geçersiz
 
 function getCachedAIPlan(): AIPlan | null {
   try {
@@ -418,7 +418,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
           {aiLoading && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800">
               <Sparkles size={14} className="text-brand-500 animate-pulse" />
-              <span className="text-xs text-brand-700 dark:text-brand-400 font-medium">Claude portföyünüzü analiz ediyor...</span>
+              <span className="text-xs text-brand-700 dark:text-brand-400 font-medium">Bu haftanın planı hazırlanıyor…</span>
             </div>
           )}
 
@@ -426,7 +426,7 @@ export function DailyActionPlan({ holdings, totalCashValue }: DailyActionPlanPro
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <h4 className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  AI Portföy Yöneticisi
+                  Haftalık Plan (sabit)
                 </h4>
                 <button onClick={fetchAIPlan} disabled={aiLoading} className="text-[10px] text-brand-500 hover:text-brand-700 font-medium">
                   {aiLoading ? 'Yükleniyor...' : 'Yenile'}

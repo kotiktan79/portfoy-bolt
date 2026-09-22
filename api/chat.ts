@@ -1,4 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
+import { buildAiContext, AI_RULES } from './lib/aiContext.js';
+
+function getSupabase() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error('Supabase credentials missing');
+  return createClient(url, key);
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
@@ -20,9 +29,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { portfolio, question, conversationHistory = [] } = req.body;
+    const { question, conversationHistory = [] } = req.body;
 
-    const systemPrompt = buildSystemPrompt(portfolio);
+    // 2026-09-22: bağlam SUNUCUDA, EUR motorundan (istemcinin TL/USD payload'u artık kullanılmıyor → cüzdanla aynı rakamlar)
+    let systemPrompt: string;
+    try {
+      const ctx = await buildAiContext(getSupabase(), new Date().toISOString().slice(0, 10));
+      systemPrompt = `${AI_RULES}\n\n${ctx.text}`;
+    } catch (e: any) {
+      console.error('aiContext:', e?.message);
+      systemPrompt = `${AI_RULES}\n\nPORTFÖY VERİSİ ALINAMADI (${e?.message || 'hata'}) — rakam verme, yalnız genel açıklama yap ve verinin alınamadığını söyle.`;
+    }
 
     const messages = [
       ...conversationHistory.slice(-6).map((m: any) => ({
@@ -42,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         model: 'claude-sonnet-5',
         thinking: { type: 'disabled' },
-        max_tokens: 1500,
+        max_tokens: 1200,
         system: systemPrompt,
         messages,
       }),
@@ -65,60 +82,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Error:', error);
     return res.status(200).json({ success: false, fallback: true, error: error.message });
   }
-}
-
-function buildSystemPrompt(portfolio: any): string {
-  if (!portfolio || !portfolio.holdings) {
-    return 'Sen profesyonel bir Türk yatırım danışmanısın. Kullanıcının sorularını Türkçe yanıtla.';
-  }
-
-  const { holdings, total_value, total_invested, total_pnl_percent, cash_balance, risk_score } = portfolio;
-
-  const typeNames: Record<string, string> = {
-    stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
-    fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia', cash: 'Nakit',
-  };
-
-  const byType: Record<string, { count: number; value: number; pnl: number }> = {};
-  holdings.forEach((h: any) => {
-    if (!byType[h.asset_type]) byType[h.asset_type] = { count: 0, value: 0, pnl: 0 };
-    byType[h.asset_type].count++;
-    byType[h.asset_type].value += h.total_value;
-    byType[h.asset_type].pnl += h.pnl;
-  });
-
-  const distribution = Object.entries(byType)
-    .sort((a: any, b: any) => b[1].value - a[1].value)
-    .map(([type, d]: [string, any]) => `${typeNames[type] || type}: ${d.count} adet, ${d.value.toFixed(0)} TL (%${((d.value / total_value) * 100).toFixed(1)})`)
-    .join('\n');
-
-  const topHoldings = [...holdings]
-    .sort((a: any, b: any) => b.total_value - a.total_value)
-    .slice(0, 10)
-    .map((h: any) => `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}): ${h.quantity} adet, Alış: ${h.purchase_price.toFixed(2)}₺, Güncel: ${h.current_price.toFixed(2)}₺, KZ: ${h.pnl >= 0 ? '+' : ''}${h.pnl.toFixed(0)}₺ (%${h.pnl_percent.toFixed(1)}), Ağırlık: %${h.weight.toFixed(1)}`)
-    .join('\n');
-
-  return `Sen profesyonel bir yatırım danışmanısın. Kullanıcının portföyünü analiz edip kişiselleştirilmiş öneriler sunuyorsun.
-
-KURALLAR:
-- Türkçe yanıtla, somut ve öz ol, portföy verilerinden gerçek rakam kullan
-
-MÜŞTERİ PROFİLİ & POLİTİKA (kaynak: src/config/portfolioPolicy.ts — değişirse burayı da güncelle):
-- Romanya'da yerleşik (AB), getiriyi USD bazında ölçer, 10+ yıl ufuk, ORTA risk (kötü yıl maks ~−%20), gelir = DİNAMİK MAAŞ (reel büyümenin %85'i; sabit $2000/ay ancak ~$600K portföyde sürdürülebilir).
-- HEDEF DAĞILIM: %50 global hisse · %30 USD/hard-currency tahvil (IB01/eurobond) · %10 altın · %5 kripto · %5 likit nakit.
-- KISITLAR: Hisse için GLOBAL ETF (V3YL) tercih, tek-tek hisse yığını önerme · Türk varlıklarını (BIST/TEFAS/TRY) ARTIRMA, azalt (yabancı EM+kur riski) · ALTIN FİZİKİ, satma önerme · İrlanda-UCITS ETF tercih · yeni para deposit=kâr değil · geçmiş işlemlere "hata" deme.
-
-PORTFÖY:
-Toplam Değer: ${total_value?.toFixed(0) || 0} TL
-Yatırım: ${total_invested?.toFixed(0) || 0} TL
-KZ: %${total_pnl_percent?.toFixed(1) || 0}
-Nakit: ${cash_balance?.toFixed(0) || 0} TL
-Risk: ${risk_score || 50}/100
-Pozisyon: ${holdings.length}
-
-DAĞILIM:
-${distribution}
-
-POZİSYONLAR:
-${topHoldings}`;
 }

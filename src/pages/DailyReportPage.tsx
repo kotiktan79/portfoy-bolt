@@ -323,7 +323,7 @@ export default function DailyReportPage() {
               <div className="rounded-2xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Zap className="w-4 h-4 text-yellow-600" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Günlük Aksiyonlar</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Bu Haftanın Planı (sabit)</span>
                 </div>
                 <div className="space-y-2">
                   {report.actions.map((action, i) => {
@@ -501,7 +501,7 @@ export default function DailyReportPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{formatDate(r.report_date)}</p>
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        {r.actions?.length || 0} aksiyon | {r.wealth_eur != null ? `€${formatMoney(r.wealth_eur)}` : `₺${formatMoney(r.portfolio_value)} (nominal)`}
+                        plan {r.actions?.length || 0} kalem | {r.wealth_eur != null ? `€${formatMoney(r.wealth_eur)}` : `₺${formatMoney(r.portfolio_value)} (nominal)`}
                       </p>
                     </div>
                     <div className="text-right">

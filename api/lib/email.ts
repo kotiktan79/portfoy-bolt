@@ -146,7 +146,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
       `) : ''}
 
       ${d.actions?.length ? card(`
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;">Bugünün Aksiyonları</div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;">Bu Haftanın Planı (sabit)</div>
         ${actionList}
       `) : ''}
 

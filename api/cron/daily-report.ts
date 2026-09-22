@@ -4,21 +4,9 @@ import { sendEmail, buildDailyEmail } from '../lib/email.js';
 import { sendTelegram, buildDailyTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
-import { loadEurSummary, monthLabelTR, fmtEUR, fmtSignedEUR, type EurSummary } from '../lib/eurEngine.js';
+import { monthLabelTR, fmtEUR, fmtSignedEUR, type EurSummary } from '../lib/eurEngine.js';
+import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
 
-// TEK ÖLÇÜ EUR (2026-09-19): maaş = geçen ayın reel EUR kârı × 0,85 (api/lib/eurEngine → src/lib/eurPnl.ts).
-// AI maaş HESAPLAMAZ; sabit USD hedefi yok. Geçim planı bilgi amaçlı üst sınır: €1.000/ay.
-const LIVING_CAP_EUR = Number(process.env.LIVING_CAP_EUR || 1000);
-// "Total Return" hedef allokasyon: gelir + büyüme + denge.
-// Maaş = mevcut temettü/kupon + kâra geçmiş hisseden trim. Sermaye uzun vadede büyür.
-const TARGET_ALLOCATION = {
-  stock: 35,      // temettü artıran kalite hisseler (SCHD/JNJ/KO + TUPRS/BIMAS/GARAN)
-  eurobond: 20,   // sigorta + %5 kupon
-  fund: 12,       // BIST temettü fonları
-  commodity: 10,  // altın stabilizatör
-  currency: 10,   // 12+ ay buffer
-  crypto: 13,     // büyüme tilt (BTC/ETH ana, %2 staking)
-};
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -66,8 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // EUR kâr motoru — uygulamayla AYNI fonksiyon (buildEurModel). Servet, gün/hafta/ay kârı, bu ayın maaşı.
     let eur: EurSummary | null = null;
+    let aiCtx: Awaited<ReturnType<typeof buildAiContext>> | null = null;
     try {
-      eur = await loadEurSummary(supabase, todayStr);
+      aiCtx = await buildAiContext(supabase, todayStr);
+      eur = aiCtx.eur;
       log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)} (dün ${fmtEUR(eur.prevWealthEUR)}), gün ${fmtSignedEUR(eur.dayGainEUR)} = %${eur.dayGainPct.toFixed(2)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.entitlementEUR)} (havuz ${fmtSignedEUR(eur.poolEUR)}), kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
     } catch (e: any) {
       log.push(`EUR motoru HATA: ${e.message}`);
@@ -137,11 +127,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========================================
     log.push('AI analizi başlatılıyor...');
 
-    const portfolioContext = buildPortfolioContext(holdings, totalValue, totalInvestment, totalPnlPct, totalCash, snapshots, dividends, incomeRecords, dailyChange, dailyChangePct, fxRate, eur, eurRate);
+    // AI bağlamı = sohbet ve planla AYNI metin (api/lib/aiContext); işlem önerisi yok, rakamlar motorun
+    const portfolioContext = aiCtx ? aiCtx.text : `PORTFÖY VERİSİ ALINAMADI — rakam verme, yalnız piyasa özeti yap.\nPozisyon sayısı: ${holdings.length}`;
+    void totalInvestment; void totalPnlPct; void totalCash; void dividends; void incomeRecords; void dailyChange; void dailyChangePct; void fxRate;
     const marketContext = buildMarketContext(marketData, newsData);
 
     const aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
     log.push('AI analizi tamamlandı');
+    const weekPlanActions = (aiCtx?.weekPlan || []).map(p => ({
+      urgency: 'this_week', type: 'buy', symbol: p.symbol, market: 'EU', platform: 'Revolut',
+      instruction: `${p.instruction} — ≈ €${p.amountEUR.toLocaleString('de-DE')}`,
+      detail: `Tek plan (sabit): haftalık ~€${(aiCtx?.trancheEUR || 0).toLocaleString('de-DE')} dilim, hisse/tahvil açıklarına oranlı. ${p.label}.`,
+      amount_eur: p.amountEUR, risk: p.symbol === 'XEON' ? 'low' : 'medium',
+    }));
+    if (Array.isArray(aiResponse.anomalies) && aiResponse.anomalies.length) {
+      aiResponse.news_alerts = [...(aiResponse.news_alerts || []), ...aiResponse.anomalies.map((a: string) => `⚠️ ${a}`)];
+    }
 
     // ========================================
     // 5. Raporu veritabanına kaydet
@@ -153,7 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       portfolio_pnl: totalPnl,
       portfolio_pnl_pct: totalPnlPct,
       market_data: marketData,
-      actions: aiResponse.actions || [],
+      actions: weekPlanActions,   // 2026-09-22: AI aksiyonu yok; tek planın bu haftaki dilimi
       market_outlook: aiResponse.market_outlook || '',
       portfolio_diagnosis: aiResponse.portfolio_diagnosis || '',
       top_pick: aiResponse.top_pick || '',
@@ -221,7 +222,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         topPick: aiResponse.top_pick || '',
         portfolioDiagnosis: aiResponse.portfolio_diagnosis || '',
         marketOutlook: aiResponse.market_outlook || '',
-        actions: aiResponse.actions || [],
+        actions: weekPlanActions,
       };
       const { subject, html } = buildDailyEmail(snapshot);
       const emailRes = await sendEmail(subject, html);
@@ -536,131 +537,6 @@ async function fetchMarketNews(log: string[]): Promise<string[]> {
   return [...new Set(news)].slice(0, 10); // Tekrarları kaldır, max 10
 }
 
-// ================================================
-// Portföy bağlam metni oluştur
-// ================================================
-
-function buildPortfolioContext(
-  holdings: any[], totalValue: number, totalInvestment: number,
-  totalPnlPct: number, totalCash: number, snapshots: any[],
-  dividends: any[], incomeRecords: any[],
-  dailyChange: number, dailyChangePct: number,
-  fxRate: (ccy: string) => number,
-  eur: EurSummary | null, eurRateNow: number,
-): string {
-  const typeNames: Record<string, string> = {
-    stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz',
-    fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia',
-  };
-  const eurNow = eur?.eurRate || eurRateNow;
-  const E = (tl: number) => tl / eurNow;           // bugünkü kurla TL → EUR
-  const e0 = (n: number) => `${n < 0 ? '−' : ''}€${Math.abs(n).toFixed(0)}`;
-  // FX-aware TRY value (holdings can be USD/EUR/GBP/RON/RUB)
-  const tryV = (h: any, field: 'current_price' | 'purchase_price' = 'current_price') => {
-    const p = Number(h[field]) || (field === 'current_price' ? Number(h.purchase_price) : 0) || 0;
-    const q = Number(h.quantity) || 0;
-    return p * q * fxRate(h.currency || 'TRY'); // fx-ok: tryV helper kapsüllüyor
-  };
-
-  // Tip dağılımı (değer EUR; K/Z yerel para nominal — TL pozisyonlarda kur/enflasyon DÜŞÜLMEMİŞ)
-  const byType: Record<string, { value: number; count: number; pnl: number }> = {};
-  for (const h of holdings) {
-    const type = h.asset_type || 'other';
-    if (!byType[type]) byType[type] = { value: 0, count: 0, pnl: 0 };
-    const value = tryV(h, 'current_price');
-    const cost = tryV(h, 'purchase_price');
-    byType[type].value += value;
-    byType[type].count++;
-    byType[type].pnl += value - cost;
-  }
-
-  const dist = Object.entries(byType)
-    .sort(([, a], [, b]) => b.value - a.value)
-    .map(([type, d]) => `${typeNames[type] || type}: %${(d.value / totalValue * 100).toFixed(1)} (${d.count} adet, ${e0(E(d.value))})`)
-    .join('\n');
-
-  // Top 20 pozisyon (EUR değerle sıralı)
-  const topHoldings = [...holdings]
-    .sort((a, b) => tryV(b) - tryV(a))
-    .slice(0, 20)
-    .map(h => {
-      const value = tryV(h, 'current_price');
-      const cost = tryV(h, 'purchase_price');
-      const pnlPct = cost > 0 ? ((value - cost) / cost * 100) : 0;
-      const weight = totalValue > 0 ? (value / totalValue * 100) : 0;
-      const ccy = String(h.currency || 'TRY').toUpperCase();
-      return `${h.symbol} (${typeNames[h.asset_type] || h.asset_type}, ${ccy}): ${e0(E(value))}, ağırlık %${weight.toFixed(1)}, nominal K/Z %${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}${ccy === 'TRY' ? ' (TL nominal — kur/enflasyon düşülmemiş, EUR bazında çok daha düşük)' : ''}`;
-    })
-    .join('\n');
-
-  // EUR servet trendi (motor, son 7 snapshot günü)
-  const perfTrend = eur
-    ? `motor son 7 gün: ${fmtSignedEUR(eur.weekGainEUR)} (${eur.weekGainPct >= 0 ? '+' : ''}${eur.weekGainPct.toFixed(2)}%)`
-    : snapshots.slice(0, 7).map(s => `${s.snapshot_date}: ${e0(E(Number(s.total_value)))}`).join(', ');
-
-  // Temettü / gelir özeti (EUR, bugünkü kurla)
-  const totalDividends = dividends.reduce((sum, d) => sum + (d.amount || 0), 0);
-  const recentDivs = dividends.slice(0, 5).map(d => `${d.payment_date}: ${e0(E(Number(d.amount) || 0))}`).join(', ');
-  const monthlyIncomeTotal = incomeRecords.filter(r => !r.is_projected).reduce((sum, r) => sum + (r.amount_try || 0), 0);
-
-  // Allokasyon sapması (SABİT POLİTİKA)
-  const allocationGap = Object.entries(TARGET_ALLOCATION).map(([type, target]) => {
-    const current = byType[type] ? (byType[type].value / totalValue * 100) : 0;
-    const diff = current - target;
-    const status = Math.abs(diff) < 3 ? 'OK' : diff > 0 ? 'FAZLA' : 'EKSİK';
-    return `${typeNames[type] || type}: %${current.toFixed(1)} → hedef %${target} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}, ${status})`;
-  }).join('\n');
-
-  // Pasif gelir tahmini (yieldlere göre, EUR/ay)
-  const yieldByType: Record<string, number> = { stock: 0.03, fund: 0.02, eurobond: 0.05, crypto: 0.02, commodity: 0, currency: 0.01 };
-  const passiveYearlyTRY = Object.entries(byType).reduce((sum, [type, d]) => sum + d.value * (yieldByType[type] || 0), 0);
-  const passiveMonthlyEUR = E(passiveYearlyTRY) / 12;
-
-  const salaryEUR = eur?.entitlementEUR || 0;   // AI bağlamı da cüzdanla aynı tabanı görsün
-  const withdrawalRatePctYearly = eur && eur.wealthEUR > 0 ? (salaryEUR * 12 / eur.wealthEUR) * 100 : 0;
-  const eurBlock = eur ? `
-EUR KÂR MOTORU (tek ölçü; servet farkı − dış akış; kur farkı kâr DEĞİL):
-Servet: ${fmtEUR(eur.wealthEUR)} (≈ ₺${Math.round(eur.wealthTRY).toLocaleString('tr-TR')}, EUR/TRY ${eur.eurRate.toFixed(2)})${eur.health.ok ? '' : ' — DİKKAT: kur serisi eski (' + eur.health.lastEurRateDay + ')'}
-Son gün: ${fmtSignedEUR(eur.dayGainEUR)} (${eur.dayGainPct >= 0 ? '+' : ''}${eur.dayGainPct.toFixed(2)}%)
-Son 7 gün: ${fmtSignedEUR(eur.weekGainEUR)} (${eur.weekGainPct >= 0 ? '+' : ''}${eur.weekGainPct.toFixed(2)}%)
-Bu ay (MTD): nominal ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, enflasyon payı −${fmtEUR(eur.mtd?.inflationEUR || 0)}, reel ${fmtSignedEUR(eur.mtd?.realGainEUR || 0)}, devreden açık ${fmtSignedEUR(eur.mtd?.carryInEUR || 0)} → gelecek ay maaş ön izleme ${fmtEUR(eur.mtd?.salaryEUR || 0)}
-Geçen ay (${eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—'}): nominal ${fmtSignedEUR(eur.lastFull?.gainEUR || 0)}, reel ${fmtSignedEUR(eur.lastFull?.realGainEUR || 0)}
-KÂR HAVUZU (kapanmış aylardan birikmiş, çekilenler düşülmüş): ${fmtSignedEUR(eur.poolEUR)} → ŞU AN ÇEKİLEBİLİR MAAŞ ${fmtEUR(salaryEUR)} (= havuz × 0,85, aylık tavan €${LIVING_CAP_EUR})
-Yıllık çekim oranı (maaş×12 / servet): %${withdrawalRatePctYearly.toFixed(1)} (sürdürülebilir ≤%6)` : `
-EUR KÂR MOTORU: veri alınamadı — kâr/maaş yorumu YAPMA.`;
-
-  return `PORTFÖY DURUMU (${new Date().toISOString().split('T')[0]}) — PARA BİRİMİ: EUR (kullanıcı EUR harcıyor; TL/USD nominal rakamlar yanıltıcıdır):
-${eurBlock}
-
-İKİNCİL (nominal, yalnız bağlam): toplam ₺${totalValue.toFixed(0)}, maliyet ₺${totalInvestment.toFixed(0)}, nominal TL K/Z %${totalPnlPct.toFixed(1)}, günlük TL değişim ${dailyChange >= 0 ? '+' : ''}₺${dailyChange.toFixed(0)} (%${dailyChangePct.toFixed(1)}), likit nakit ${e0(E(totalCash))}
-Pozisyon Sayısı: ${holdings.length}
-
-KULLANICININ HEDEFİ — TOTAL RETURN (Maaş + Büyüme):
-Maaş kuralı: çekilmeyen reel kâr havuzda birikir (tavan €3.000); çekim hakkı = havuz × 0,85, aylık en fazla €${LIVING_CAP_EUR}. Zarar havuzu eritir, eksiye düşerse maaş 0 (ana paraya dokunulmaz).
-Strateji: Total Return — gelir + sermaye büyümesi + denge (saf gelir DEĞİL)
-Tahmini pasif gelir: ~${e0(passiveMonthlyEUR)}/ay — temettü+kupon+staking (yield varsayımıyla)
-Beklenen yıllık toplam getiri (EUR): global hisse %6-9, kısa USD hazine %3,5-4, altın %3-5, kripto oynak
-
-DAĞILIM (EUR):
-${dist}
-
-HEDEF VS MEVCUT ALLOKASYON (SABİT POLİTİKA):
-${allocationGap}
-
-POZİSYONLAR (Top 20, EUR):
-${topHoldings}
-
-PERFORMANS:
-${perfTrend}
-
-TEMETTÜ GEÇMİŞİ:
-Toplam: ${e0(E(totalDividends))}
-Son: ${recentDivs || 'Henüz temettü yok'}
-
-GELİR ÖZETİ:
-Son kaydedilen gelir toplamı: ${e0(E(monthlyIncomeTotal))}`;
-}
-
 function buildMarketContext(marketData: MarketData, news: string[]): string {
   let context = `GÜNCEL PİYASA VERİLERİ (canlı):
 ${marketData.raw_text}`;
@@ -678,142 +554,37 @@ ${news.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
 // ================================================
 
 async function callClaudeForDailyReport(apiKey: string, portfolioContext: string, marketContext: string): Promise<any> {
-  const systemPrompt = `Sen profesyonel bir portföy yöneticisisin. Her sabah müşterine kapsamlı günlük brifing hazırlıyorsun.
+  // 2026-09-22: AI KÜÇÜLTÜLDÜ — açıklar, bilgilendirir, anomali bildirir; İŞLEM ÖNERMEZ, MAAŞ HESAPLAMAZ.
+  // Kurallar ve bağlam api/lib/aiContext.ts'ten (sohbet ve plan ile aynı kaynak).
+  const systemPrompt = `${AI_RULES}
 
-PARA BİRİMİ — TEK ÖLÇÜ EUR (ZORUNLU):
-Müşteri Romanya'da yaşıyor ve EUR harcıyor. Tüm tutarları EUR yaz. TL nominal kâr/kur farkını KÂR OLARAK YORUMLAMA
-(TL hiperenflasyonist; kur artışı EUR bazında kâr değildir). Kâr/maaş rakamlarını yalnız sana verilen "EUR KÂR MOTORU" bloğundan al,
-kendin hesaplama, başka rakam üretme. Maaş kuralı deterministiktir: geçen ayın reel EUR kârı × 0,85; zarar aylarında 0.
+GÖREVİN (her sabah, Türkçe, kısa):
+1. portfolio_diagnosis: bugünkü rakamları AÇIKLA — son gün ve bu ay neden artı/eksi, hangi varlık sınıfı sürükledi (3-4 cümle, rakamlı).
+2. market_outlook: verilen CANLI piyasa verilerine dayalı kısa değerlendirme (3-4 cümle). Canlı veri olmayan şey hakkında yorum yapma.
+3. market_research: küresel trend, sektörler, VIX/risk ortamı, kurların portföye etkisi, fırsat DEĞİL — 'izlenecek gelişme'.
+4. news_alerts: portföyü etkileyen gerçek haber/gelişmeler (verilen haberlerden), en fazla 4.
+5. anomalies: sana verilen ANOMALİLER listesini aynen aktar; kendi tespitin varsa ekle (ör. bir varlıkta olağandışı günlük hareket).
+6. week_plan_note: tek planın bu haftaki dilimini TEK cümleyle tekrar et (aşağıda yazıyor); yeni araç/sembol EKLEME.
+7. wealth_building_tip: tek plana bağlı, işlem içermeyen tek cümle (ör. nakdin çalışmasının etkisi).
 
-KULLANICININ ÖNCELİKLİ HEDEFİ — TOTAL RETURN (Maaş + Büyüme + Denge):
-Müşteri portföyden ayda ~€${LIVING_CAP_EUR}'ya kadar maaş çekmek istiyor — AMA aynı zamanda sermayenin uzun vadede büyümesini istiyor.
-Bu yüzden strateji SAF GELİR DEĞİL — "TOTAL RETURN" yaklaşımı: temettü + sermaye değer artışı + denge.
-
-FELSEFE (anla ve uygula):
-- Temettü artıran kalite hisseler (SCHD, JNJ, KO, TUPRS, BIMAS, GARAN) MÜKEMMEL — hem %3 yield hem %7-8 büyüme = toplam %10+ yıllık
-- Eurobond %20-25 sigorta için (yüksek değil) — büyüme yapmaz, sadece kupon ve stabil
-- Büyüme dilim %10-15 (BTC/ETH/teknoloji) GEREKLİ — yarın daha büyük portföy = yarın daha büyük maaş
-- Saf temettü hissesi (%6+ yield) yerine "kalite + ortalama yield" daha iyi — uzun vadede kazandırır
-
-GÖREVIN:
-1. Portföy durumunu hem maaş hem büyüme açısından değerlendir
-2. Piyasa verilerini değerlendir (SADECE sana verilen CANLI verileri kullan)
-3. Haberlerin portföye etkisini yorumla
-4. Somut aksiyon planı: total return'e hizmet eden alımlar (kalite temettü hisseleri, dengeli ETF'ler, kontrollü kripto)
-5. Maaş HESAPLAMA — motor verdi; sadece bu ayın maaşını ve gelecek ay ön izlemesini tekrar et, istikrarlı reel EUR kârı için ne gerektiğini söyle
-6. Rebalance hedefi (SABİT POLİTİKA, DENGELİ): global hisse 50 (V3YL + kaliteli US/EU + BIST ihracatçı çekirdek + TEFAS) / USD kısa hazine+eurobond 30 / altın 10 (FİZİKİ, satılamaz, dokunma) / kripto 3-5 / nakit ≤5
-
-ÖNERİ ÖNCELİKLERİ — KESIN SIRA (üstten alta uygula):
-- ✅ ÖNCELİK 1 (ZORUNLU, HER RAPORDA OLMALI): **Eurobond/Treasury alımı** — kullanıcının portföyünde %20 hedefe karşılık %1.2 mevcut. Bu en büyük yapısal eksiklik ve pasif gelir motorunun kalbi.
-  Seçenekler:
-    - Revolut'tan **IB01** (iShares $ Treasury 0-1yr UCITS, acc, TER %0,07, ~%3,9 YTM, sıfıra yakın volatilite) — BAŞLANGIÇ VE ANA ARAÇ. Kullanıcı zaten tutuyor, ekle.
-    - Revolut'tan **DTLA/IDTL** (iShares $ Treasury 20+yr UCITS) — SADECE küçük dilim, faiz artış baskısı varken uzun vade riskli
-    - EUR harcama kovası için **XEON** (Xtrackers EUR Overnight, acc) — Revolut'ta varsa
-    ⛔ SGOV/TLT/GOVT/BIL/SHV = ABD-domicile → AB'de perakende ALINAMAZ (PRIIPs). ASLA YAZMA.
-    - BIST broker'dan Türkiye Hazine eurobondu
-  TEK seferde değil, 3-5 dilimde ladder olarak öner.
-  Her raporda EN AZ 1 eurobond/Treasury aksiyonu OLMALI.
-
-- ✅ ÖNCELİK 2: Cash fazlasını global hisseye: V3YL (Amundi S&P 500 UCITS, kullanıcının haftalık DCA aracı), VWCE/IWDA (global), JNJ (ek alım), KO, PG, NESN. Temettü ETF istersen UCITS: VHYL/TDIV — SCHD/VYM ABD-domicile, ALINAMAZ. Saf REIT yerine kalite tercih et.
-
-- ✅ ÖNCELİK 3: +%60 üstü kazançtaki BIST hisselerinden TRIM (sat) — %20-30 dilim. ASELS/TUPRS/AKSEN/ENKAI/BIMAS arası en kârlısını seç.
-
-- ⛔ ÖNCELİK 4 (YASAK): Zaten +%50 üstü kârda olan BIST hissesinden YENI ALIM ya da accumulate ÖNERMEsin. Bu hisseler trim edilmeli, artırılmamalı.
-  ÖRNEK YASAK: "SISE pozisyonunu artır", "ENKAI yeni alım", "TUPRS accumulate" — KESINLIKLE YAZMAYIN.
-  Sebep: bu pozisyonlar zaten 2 katı kâra geçmiş — concentration riski büyür, kullanıcı portföyü daha BIST'e bağımlı yapar.
-  İSTİSNA: <+%20 kârda olan BIST hissesi (GARAN, JNJ gibi) ek alım yapılabilir.
-
-- ⚠️ Top pick: HER ZAMAN gelir üreten araç (IB01/DTLA/eurobond/VHYL) olmalı. BIST hissesi top pick olamaz.
-
-TEMPO VE MİKTAR KURALLARI (ZORUNLU):
-- ⛔ Tek seferde €18.000 üzeri alım ÖNERME. Maksimum €13.000 parça başına, sonra DCA ile büyüt.
-- ⛔ "today" urgency'sini SADECE risk/protect aksiyonları için kullan. Cash redeploy/buy için "this_week" veya "this_month" kullan.
-- ⛔ ABD-domicile ETF (SGOV, TLT, GOVT, SCHD, VYM, VOO, QQQ, BIL, SHV) ÖNERME — AB perakende yatırımcı PRIIPs nedeniyle ALAMAZ. Daima UCITS karşılığını yaz: IB01, DTLA, VHYL, VUAA/CSPX, EQQQ.
-- ⛔ "Revolut'tan TreasuryDirect" YAZMA — TreasuryDirect ABD vatandaşları için, Revolut'tan erişim yok. Revolut'tan US Treasury için IB01 (kısa) veya DTLA (uzun) UCITS ETF yaz.
-- ⛔ Türkiye eurobondu Revolut'ta YOK. Bunun için "Türkiye broker (İş Yatırım/Garanti BBVA)" platform yaz.
-- ⛔ Mevcut +%50 kârdaki BIST pozisyonunu artırma ÖNERME (concentration riski). SISE/ENKAI/TUPRS/AKSEN/ASELS/BIMAS/TOASO/CCOLA/EKGYO için sadece TRIM önerilebilir, "accumulate" YASAK.
-- ✅ Toplam aksiyon sayısı 4-6 arasında olsun, fazlası kullanıcıyı boğar.
-- ✅ İlk aksiyon DAİMA eurobond/Treasury (IB01 ya da DTLA ya da Türkiye Hazine eurobondu) olmalı.
-- ✅ Toplam önerilen cash redeploy miktarı portföyün %10-15'ini (servetin EUR değerinden hesapla) geçmesin, yoksa kullanıcı korkar/erteler.
-
-PLATFORM REALİTESİ (yanlış yazma):
-- **Revolut (AB)**: US/EU hisse (JNJ/KO/ASML), SADECE UCITS ETF (IB01/DTLA/V3YL/VUAA/CSPX/VWCE/VHYL/EQQQ), crypto (BTC/ETH). YOK: ABD-domicile ETF (SGOV/TLT/GOVT/SCHD/VOO/QQQ — PRIIPs), Türkiye eurobondu, fiziki tahvil, TreasuryDirect.
-- **Binance**: Crypto. YOK: hisse, tahvil, ETF.
-- **BIST (Türkiye broker)**: BIST hisseleri, TR fonlar (TEFAS), Türkiye eurobondu (USD), VIOP. Broker örnekleri: İş Yatırım, Garanti BBVA Yatırım, Ziraat Yatırım.
-- **Mevcut**: pozisyon var, dokunma demek.
-
-KURALLAR:
-- Bilgi kesim tarihin Ocak 2026. Sadece CANLI VERİLERE dayan.
-- Uydurma yapma. Veri olmayan hakkında yorum yapma.
-- Müşteri Romanya'da yaşıyor (Türk vatandaşı). BIST + Revolut (USD/EUR) + Binance kullanıyor.
-- Her öneri: NEDEN, NE KADAR, HANGİ PLATFORM, CANLI FİYAT, BEKLENEN TEMETTÜ/KUPON içermeli.
-- Pasif gelir kaynaklarını (temettü + faiz + staking + kupon) ayrı ayrı belirt; ama maaş rakamı motorunkidir.
-- Mevcut allokasyon farkını "Gelir hedef allokasyonuna" göre değerlendir (context'te verildi).
-- Çekim oranı ≤%6/yıl sürdürülebilir, %6-8 sınırda, >%8 riskli — bunu hesaba kat.
-- ⛔ ÖNEMLİ KISIT: ALTIN pozisyonu PHYSICAL (fiziki külçe/gram) — parça parça SATILAMAZ. Altın azaltma önerisi VERME. Allokasyonu düşürmek için sadece "yeni alımları başka kategorilere yönlendir" de.
-- Maaş trim'i için sadece kâğıt varlıkları öner: hisse, fon, ETF. ALTIN ve fiziki varlık trim'e dahil edilemez.
-- JNJ pozisyonu Revolut'ta tutuluyor (USD), ASML pozisyonu TRY tabanlı manuel takipte — bu ikisi için "currency conversion gerekli" türü uyarı VERME.
-
-PİYASA ARAŞTIRMASI YAPMAN GEREKENLER:
-- Verilen piyasa verilerindeki trendleri analiz et (yükselen/düşen sektörler)
-- VIX seviyesine göre risk ortamını değerlendir
-- 52 haftalık aralıkta pozisyonu düşük olan hisseleri fırsat olarak belirt
-- Kripto 24 saatlik değişimlere göre momentum analizi yap
-- Döviz kurlarının portföye etkisini hesapla
-
-JSON FORMATI (başka metin ekleme):
+JSON FORMATI (başka metin ekleme; actions HER ZAMAN boş dizi, monthly_income YOK):
 {
-  "actions": [
-    {
-      "urgency": "today|this_week|this_month",
-      "type": "buy|accumulate|hold|rebalance|protect|take_profit",
-      "symbol": "SEMBOL",
-      "market": "BIST|US|EU|CRYPTO",
-      "instruction": "Somut komut",
-      "detail": "Neden, risk, beklenti. Canlı fiyat referansı. 3-4 cümle.",
-      "amount_eur": 0,
-      "risk": "low|medium|high",
-      "expected_annual_return": 0,
-      "dividend_yield": 0,
-      "platform": "Revolut|Binance|BIST|Mevcut"
-    }
-  ],
-  "portfolio_diagnosis": "Güçlü/zayıf yönler, en büyük risk, fırsat — 4-5 cümle",
-  "market_outlook": "Bugünkü canlı verilere dayalı piyasa değerlendirmesi — 3-4 cümle",
-  "market_research": {
-    "global_trend": "Küresel piyasa trendi ve Türkiye'ye etkisi",
-    "sector_analysis": "Yükselen ve düşen sektörler",
-    "risk_environment": "VIX ve risk değerlendirmesi",
-    "fx_impact": "Döviz kurlarının portföye etkisi",
-    "opportunities": "Fırsat olarak görülen varlıklar ve neden"
-  },
-  "rebalance_alert": {
-    "needed": true,
-    "deviations": [{"type": "kripto", "current_pct": 22, "target_pct": 15, "action": "azalt"}],
-    "summary": "Kısa rebalance özeti"
-  },
-  "top_pick": "En çok önerilen varlık ve neden — canlı fiyat ile",
-  "news_alerts": ["Portföyü etkileyen haber/gelişme 1", "Gelişme 2"],
-  "wealth_building_tip": "Bu portföye özel servet büyütme stratejisi"
+  "actions": [],
+  "portfolio_diagnosis": "…",
+  "market_outlook": "…",
+  "market_research": { "global_trend": "…", "sector_analysis": "…", "risk_environment": "…", "fx_impact": "…", "opportunities": "izlenecek gelişmeler (öneri değil)" },
+  "news_alerts": ["…"],
+  "anomalies": ["…"],
+  "week_plan_note": "…",
+  "top_pick": "",
+  "wealth_building_tip": "…"
 }`;
 
   const userPrompt = `${portfolioContext}
 
 ${marketContext}
 
-Yukarıdaki verilere dayanarak kapsamlı günlük brifing hazırla. Müşterinin öncelikli hedefi ayda ~€${LIVING_CAP_EUR}'ya kadar sürdürülebilir EUR maaş — sermayeyi eritmeden; maaş = geçen ayın reel EUR kârı × 0,85 (motor hesapladı, sen tekrar et). Tüm öneriler bu hedefe hizmet etmeli: cash fazlasını temettü/eurobond'a dönüştürme, kâra geçmiş hisselerden trim, gelir maximizasyonu. Spekülatif büyüme tavsiyesi (BTC accumulate, NVDA momentum) verme — bu kullanıcının hedefi DEĞİL.
-
-ZORUNLU KISITLAR:
-- Tüm tutarlar EUR (amount_eur). Tek aksiyonda €18.000 üzeri alım önerme. Maks €13.000 parça başına.
-- ABD-domicile ETF (SGOV/TLT/GOVT/SCHD/VYM/VOO/QQQ) YAZMA — AB'de alınamaz. UCITS karşılığı: IB01/DTLA/VHYL/VUAA/EQQQ.
-- "Revolut'tan TreasuryDirect" yazma — IB01/DTLA UCITS ETF yaz.
-- Türkiye eurobondu için platform "BIST broker (İş Yatırım/Garanti)" yaz, Revolut değil.
-- "today" urgency'sini sadece risk azaltma için kullan, alım için "this_week" veya "this_month".
-- 4-6 aksiyon ver, fazlası kullanıcıyı boğar.
-- ⛔ KESIN YASAK: SISE, ENKAI, TUPRS, AKSEN, ASELS, BIMAS, TOASO, CCOLA, EKGYO için "accumulate" / "yeni alım" / "pozisyonu artır" türü öneri vermeyin. Bu hisseler zaten +%50-130 kârda — artırmak portföyü daha riskli yapar. Bu hisseler için SADECE TRIM (kâr alma) önerilebilir.
-- ⛔ İLK AKSIYON eurobond/Treasury (IB01/DTLA/Hazine eurobondu) olmak ZORUNDA. Top pick gelir üreten araç olmak ZORUNDA. BIST hissesi top pick olamaz.
-
-Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bilinçli öneriler ver. Top pick: gelir üreten bir varlık (temettü ETF, eurobond, REIT, temettü hissesi).`;
+Yukarıdaki verilerle bugünkü brifingi hazırla. İşlem önerme, maaş hesaplama; rakamları açıkla, piyasayı özetle, anomalileri bildir, tek planın bu haftaki dilimini tekrar et.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -827,7 +598,7 @@ Piyasa araştırması yap, trendleri analiz et, portföye özel somut maaş-bili
       thinking: { type: 'disabled' },
       // 4000 yetmiyordu: sonnet-5 Türkçe raporu ~7-8K karakter üretiyor, kesilen
       // çıktı JSON.parse'ı düşürüp tüm raporu ham metin olarak kaydettiriyordu.
-      max_tokens: 8000,
+      max_tokens: 3000,   // 2026-09-22: AI küçültüldü (açıklama+özet), aksiyon/JSON şişmesi yok
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),

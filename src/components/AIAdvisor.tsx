@@ -214,7 +214,7 @@ export default function AIAdvisor() {
         const aiMsg: ChatMessage = {
           role: 'ai',
           content: claudeResult.response,
-          suggestions: ['Ne yapmalıyım?', 'Risk profilim?', 'Al/Sat sinyalleri?'],
+          suggestions: ['Bu hafta ne alıyorum?', 'Bu ay neden eksi/artı?', 'Maaşım neden bu kadar?'],
           timestamp: new Date(),
         };
         setChatHistory(prev => [...prev, aiMsg]);
@@ -271,12 +271,12 @@ export default function AIAdvisor() {
     );
   }
 
+  // 2026-09-22: 'Al/Sat Sinyalleri' ve 'Akıllı Öneriler' sekmeleri KALDIRILDI — tek plan sabit, AI işlem önermez (açıklar).
   const tabs = [
     { id: 'overview' as const, label: 'Genel Bakış', icon: Target },
-    { id: 'signals' as const, label: 'Al/Sat Sinyalleri', icon: Activity },
-    { id: 'suggestions' as const, label: 'Akıllı Öneriler', icon: Lightbulb },
     { id: 'chat' as const, label: 'AI Sohbet', icon: MessageSquare },
   ];
+  void Activity; void Lightbulb;
 
   return (
     <div className="space-y-5">
@@ -497,7 +497,7 @@ export default function AIAdvisor() {
         </div>
       )}
 
-      {activeTab === 'overview' && recommendations.length > 0 && (
+      {false as boolean && activeTab === 'overview' && recommendations.length > 0 && (   /* 2026-09-22: işlem önerisi yok — tek plan */
         <div className="card-secondary p-6">
           <div className="flex items-center gap-3 mb-6">
             <Lightbulb className="w-6 h-6 text-yellow-600" />
@@ -738,7 +738,7 @@ export default function AIAdvisor() {
                   Portföyünüz hakkında her şeyi sorun!
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {['Ne yapmalıyım?', 'Performansım nasıl?', 'Al/Sat sinyalleri?', 'Risk profilim?', 'Kârlı varlıklarım?', 'Dağılım?'].map(q => (
+                  {['Bu hafta ne alıyorum?', 'Bu ay neden eksi/artı?', 'Maaşım neden bu kadar?', 'Nakit neden ölü sermaye?', 'Kurlar portföyü nasıl etkiledi?', 'Dağılım hedefe ne kadar uzak?'].map(q => (
                     <button
                       key={q}
                       onClick={() => setChatInput(q)}
