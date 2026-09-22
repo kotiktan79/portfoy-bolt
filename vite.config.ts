@@ -26,7 +26,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.{test,spec}.ts'],   // api/lib saf yardımcıları da test edilir
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],   // api/lib testleri de src/test/api altında (api/ = Vercel fonksiyonları)
   },
   optimizeDeps: {
     exclude: ['lucide-react'],

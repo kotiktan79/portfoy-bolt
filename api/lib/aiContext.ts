@@ -5,7 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadEurModel, fetchAll, fmtEUR, fmtSignedEUR, monthLabelTR, type EurSummary } from './eurEngine.js';
 import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES } from '../../src/config/portfolioPolicy.js';
-import { POOL_CAP_EUR, MONTHLY_CAP_EUR, SALARY_SAFETY, summarizeEur } from '../../src/lib/eurPnl.js';
+import { POOL_CAP_EUR, MONTHLY_CAP_EUR, SALARY_SAFETY, INFLATION_EUR, summarizeEur } from '../../src/lib/eurPnl.js';
 
 export const AI_RULES = `ROLÜN: portföy AÇIKLAYICISI ve bilgi kaynağısın — portföy YÖNETİCİSİ değilsin.
 YAPACAKLARIN: rakamları açıkla (neden bu ay eksi/artı, hangi varlık ne yaptı), piyasa/haber özetini Türkçe ver,
@@ -14,7 +14,7 @@ YAPMAYACAKLARIN (KESİN):
 - Alım/satım/trim/rebalans/"şunu artır, bunu azalt" ÖNERME. Tek plan sabittir ve aşağıda yazar; sen onu tekrar edersin, değiştirmezsin.
   Kullanıcı "ne alayım?" derse cevap: tek planın bu haftaki dilimi (aşağıda). Başka araç/sembol önerme (IB01 dahil).
 - Maaş/kâr HESAPLAMA. Rakamlar motorun; sen aynen kullanırsın. "Güvenli/dengeli maaş", "$ hedef", "SWR ile" gibi kendi formülün YOK.
-  "€1.000/ay için ne gerekir?" gibi hedef hesabı sorulursa: uygulamadaki "Hedefe Ulaşma Planı" (FIRE) sayfasına yönlendir, kendi tahminini verme.
+  "aylık tavan kadar maaş için ne gerekir?" gibi hedef hesabı sorulursa: uygulamadaki "Hedefe Ulaşma Planı" (FIRE) sayfasına yönlendir, kendi tahminini verme.
 - TL/USD nominal kârı kâr gibi sunma; kur artışı kâr DEĞİL. Tek ölçü EUR.
 - Fiziki altın satılmaz; BIST/TEFAS'a taze para konmaz; geçmiş işlemlere "hata" deme.
 - Uydurma; verisi olmayan konuda "elimde veri yok" de. Türkçe, kısa, somut.`;
@@ -28,7 +28,8 @@ type H = { id: string | number; symbol: string; asset_type: string; currency: st
 export const WEEKLY_TRANCHE_USD = 2000;
 // USD üzerinden çapraz kurlar (src/lib/fx.ts USD_CROSS ile aynı) — RUB/RON/CHF'nin TRY kur satırı yok
 const USD_CROSS: Record<string, number> = { RUB: 86, RON: 4.52, CHF: 0.81, GBP: 1 / 1.27 };
-// Günlük snapshot cron'u 18:00 UTC'de UTC tarihiyle yazar → o saatten önce "bugünün snapshot'ı" beklenemez
+// Günlük snapshot cron'u 18:00 UTC'de UTC tarihiyle yazar (vercel.json: daily-snapshot '0 18 * * *' — değişirse burayı da değiştir)
+// → o saatten önce "bugünün snapshot'ı" beklenemez
 export const SNAPSHOT_CRON_UTC_HOUR = 18;
 export function expectedSnapshotDay(now: Date): string {
   const d = new Date(now.getTime());
@@ -43,7 +44,7 @@ const NO_BUY_DAYS = 28;         // panel 'Son 28 günde kayıtlı ALIM yok' ile 
 export interface PriceRow { symbol: string; price: number | string; recorded_at: string }
 /** Bayat fiyat = fiyatın GERÇEKTEN değişmediği gün sayısı (price_history; cron her gün her sembole satır yazar).
  *  Pencere boyunca hiç değişmemiş fiyat da bayattır (atLeast=true: gerçek süre pencereden uzun olabilir);
- *  yalnız pencereye son STALE_DAYS içinde giren (yeni) sembol atlanır. Saf; test edilir. */
+ *  pencereye son STALE_DAYS içinde giren (yeni) sembol days<=STALE_DAYS koşuluyla doğal olarak elenir. Saf; test edilir. */
 export function stalePrices(rows: PriceRow[], now: Date, staleDays = STALE_DAYS): Map<string, { days: number; atLeast: boolean }> {
   const lastChange = new Map<string, string>(); const lastPrice = new Map<string, number>(); const firstSeen = new Map<string, string>();
   for (const r of rows) {
@@ -57,9 +58,8 @@ export function stalePrices(rows: PriceRow[], now: Date, staleDays = STALE_DAYS)
     const fs = firstSeen.get(sym)!;
     const days = daysAgo(lc);
     if (days <= staleDays) continue;
-    const neverChanged = fs === lc;
-    if (neverChanged && daysAgo(fs) <= staleDays) continue;   // pencereye yeni girmiş sembol
-    out.set(sym, { days, atLeast: neverChanged });
+    // days>staleDays zaten sağlandı; fs===lc ise pencere boyunca hiç değişmemiş (gerçek süre daha uzun olabilir)
+    out.set(sym, { days, atLeast: fs === lc });
   }
   return out;
 }
@@ -77,13 +77,16 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
   ]);
   if (holdRes.error) throw new Error(`aiContext holdings: ${holdRes.error.message}`);
   const eur = summarizeEur(model, todayStr.slice(0, 7));
+  // Motor boşsa (snapshot/kur yok) uydurma rakam üretme — chat/daily-plan/daily-report bu hatayı yakalayıp "veri yok" der
+  if (!eur.asOf || !(eur.eurRate > 0) || !(eur.usdRate > 0)) throw new Error(`EUR motoru: snapshot/kur serisi yok (asOf=${eur.asOf || '—'})`);
   const holdings = (holdRes.data || []) as H[];
-  const E = eur.eurRate || 1, U = eur.usdRate || E / 1.15;
+  const E = eur.eurRate, U = eur.usdRate;
   const fx = (c: string | null) => { const cur = String(c || 'TRY').toUpperCase(); return cur === 'USD' ? U : cur === 'EUR' ? E : USD_CROSS[cur] ? U / USD_CROSS[cur] : 1; };
   const valEUR = (h: H) => (Number(h.quantity) || 0) * (Number(h.current_price) || 0) * fx(h.currency) / E;
   // 'cash' tipi portföy dışı (uygulama RebalancePlan ile aynı) — dağılım ve dilim bölünmesi buna göre
   const inv = holdings.filter(h => h.asset_type !== 'cash');
   const total = inv.reduce((s, h) => s + valEUR(h), 0);
+  if (!(total > 0)) throw new Error('aiContext: portföyde değerlenmiş pozisyon yok');
   const byType: Record<string, number> = {};
   for (const h of inv) byType[h.asset_type] = (byType[h.asset_type] || 0) + valEUR(h);
 
@@ -132,7 +135,8 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
       : carryIn < 0
         ? `Bu aya devreden açık: ${fmtSignedEUR(carryIn)} — önce bu kapanır, sonra maaş oluşur. Zarar devreder.`
         : `Bu aya devreden havuz: ${fmtSignedEUR(carryIn)}. Zarar devreder, havuz tavana (${fmtEUR(POOL_CAP_EUR)}) kadar devreder.`,
-    `${monthLabelTR(nextYM)} maaş ÖN İZLEME (bu ayın birikimi ay kapanınca hak olur, ay sonuna kadar değişir): ${fmtEUR(m?.salaryEUR || 0)}${m?.withdrawnEUR ? ` · bu ay çekilen ${fmtEUR(m.withdrawnEUR)}` : ''}`,
+    ...(m?.withdrawnEUR ? [`Bu ay çekilen: ${fmtEUR(m.withdrawnEUR)} → KALAN HAK: ${fmtEUR(Math.max(0, eur.entitlementEUR - m.withdrawnEUR))} (Kâr Cüzdanı 'Kalan hak' ile aynı)`] : []),
+    `${monthLabelTR(nextYM)} maaş ÖN İZLEME (bu ayın birikimi ay kapanınca hak olur, ay sonuna kadar değişir): ${fmtEUR(m?.salaryEUR || 0)}`,
   ].join('\n');
 
   const text = `PORTFÖY (${todayStr}, tek ölçü EUR, kasa hariç):
@@ -141,7 +145,7 @@ Kâr: son gün ${fmtSignedEUR(eur.dayGainEUR)} (%${eur.dayGainPct.toFixed(2)}) �
 Geçen ay (${lf ? monthLabelTR(lf.month) : '—'}): nominal ${fmtSignedEUR(lf?.gainEUR || 0)}, reel ${fmtSignedEUR(lf?.realGainEUR || 0)}
 Güvenilir seri başından (${sinceStart ? monthLabelTR(sinceStart) : '—'}) bu yana: nominal ${fmtSignedEUR(sinceNominal)}, reel ${fmtSignedEUR(sinceReal)} (öncesi için günlük veri yok — rakam verme)
 ${poolLines}
-Kâr tanımı: euro servet artışı − para giriş/çıkışı; kur hareketi kâr değil. Enflasyon payı %2/yıl servetten düşülür.
+Kâr tanımı: euro servet artışı − para giriş/çıkışı; kur hareketi kâr değil. Enflasyon payı %${(INFLATION_EUR * 100).toLocaleString('tr-TR')}/yıl servetten düşülür.
 
 DAĞILIM vs HEDEF: ${alloc}
 Getirisiz nakit: ${fmtEUR(cashEUR)} (%${(100 * cashEUR / total).toFixed(0)}) — asıl "ölü sermaye" budur.

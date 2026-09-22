@@ -6,6 +6,7 @@ import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
 import { monthLabelTR, fmtEUR, fmtSignedEUR, type EurSummary } from '../lib/eurEngine.js';
 import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
+import { dayInTZ } from '../../src/lib/eurPnl.js';
 
 
 function getSupabase() {
@@ -41,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const holdings = holdingsData || [];
 
     log.push(`Veri: ${holdings.length} holding`);
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = dayInTZ(new Date());   // Bükreş takvimi (chat/daily-plan ile aynı); buildAiContext'in saat mantığı UTC
 
     // EUR kâr motoru — uygulamayla AYNI fonksiyon (buildEurModel). Servet, gün/hafta/ay kârı, bu ayın maaşı.
     let eur: EurSummary | null = null;
@@ -115,11 +116,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       detail: `Tek plan (sabit): haftalık ~€${(aiCtx?.trancheEUR || 0).toLocaleString('de-DE')} dilim, hisse/tahvil açıklarına oranlı. ${p.label}.`,
       amount_eur: p.amountEUR, risk: p.symbol === 'XEON' ? 'low' : 'medium',
     }));
-    // Anomaliler KODDAN (aiCtx.anomalies), AI kopyasına emanet değil; AI'nın kendi tespiti varsa sonuna eklenir (tekrarsız)
-    const engineAnomalies = aiCtx?.anomalies || [];
-    const aiAnomalies = (Array.isArray(aiResponse.anomalies) ? aiResponse.anomalies : []).filter((a: any) => typeof a === 'string' && a.trim()).slice(0, 2);
-    const allAnomalies = Array.from(new Set([...engineAnomalies, ...aiAnomalies]));
-    aiResponse.news_alerts = [...(Array.isArray(aiResponse.news_alerts) ? aiResponse.news_alerts : []).filter((n: any) => typeof n === 'string' && !n.startsWith('⚠️')), ...allAnomalies.map(a => `⚠️ ${a}`)];
+    // Anomaliler yalnız KODDAN (aiCtx.anomalies) — AI kopyası/tespiti yok (AI_RULES: kendin anomali üretme); haber listesinden tekilleştirilir
+    const allAnomalies = aiCtx?.anomalies || [];
+    const anomalySet = new Set(allAnomalies.map(a => a.trim()));
+    aiResponse.news_alerts = [
+      ...(Array.isArray(aiResponse.news_alerts) ? aiResponse.news_alerts : []).filter((n: any) => typeof n === 'string' && !n.startsWith('⚠️') && !anomalySet.has(n.trim())),
+      ...allAnomalies.map(a => `⚠️ ${a}`),
+    ];
     aiResponse.top_pick = '';   // 'Günün Seçimi' yok — model doldursa da yayınlanmaz
 
     // ========================================
@@ -539,8 +542,7 @@ GÖREVİN (her sabah, Türkçe, kısa):
 1. portfolio_diagnosis: bugünkü rakamları AÇIKLA — son gün ve bu ay neden artı/eksi, hangi varlık sınıfı sürükledi (3-4 cümle, rakamlı).
 2. market_outlook: verilen CANLI piyasa verilerine dayalı kısa değerlendirme (3-4 cümle). Canlı veri olmayan şey hakkında yorum yapma.
 3. news_alerts: portföyü etkileyen gerçek haber/gelişmeler (verilen haberlerden), en fazla 4. ANOMALİLER listesini buraya KOPYALAMA — kod ekler.
-4. anomalies: yalnız KENDİ tespitin varsa (ör. bir varlıkta olağandışı günlük hareket), en fazla 2; yoksa boş dizi.
-5. wealth_building_tip: tek plana bağlı, işlem ve RAKAM içermeyen tek cümle.
+4. wealth_building_tip: tek plana bağlı, işlem ve RAKAM içermeyen tek cümle.
 
 JSON FORMATI (başka metin ekleme; actions HER ZAMAN boş dizi, monthly_income YOK):
 {
@@ -548,7 +550,6 @@ JSON FORMATI (başka metin ekleme; actions HER ZAMAN boş dizi, monthly_income Y
   "portfolio_diagnosis": "…",
   "market_outlook": "…",
   "news_alerts": ["…"],
-  "anomalies": [],
   "wealth_building_tip": "…"
 }`;
 

@@ -75,6 +75,9 @@ export interface DailySnapshot {
   actions: any[];
 }
 
+// AI/serbest metin HTML'e kaçışlı gömülür (Telegram'daki escapeHtml karşılığı)
+const esc = (t: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 const statBox = (label: string, valueEUR: number, pct?: number) => `
   <div>
     <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;">${label}</div>
@@ -99,7 +102,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
       <h1 style="font-size:18px;margin:0 0 4px;color:#312e81;">Günaydın, Tandor Finans</h1>
       <p style="font-size:13px;color:#64748b;margin:0 0 16px;">${d.date} · Günlük brifing · tek ölçü EUR</p>
       ${d.healthOk ? '' : `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">⚠️ Kur serisi güncel değil — EUR rakamları güvenilmez olabilir.</div>`}
-      ${(d.anomalies || []).length ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#78350f;">${(d.anomalies || []).slice(0, 4).map(a => `⚠️ ${a}`).join('<br>')}</div>` : ''}
+      ${(d.anomalies || []).length ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#78350f;">${(d.anomalies || []).slice(0, 4).map(a => `⚠️ ${esc(a)}`).join('<br>')}</div>` : ''}
       ${d.asOf === d.date ? '' : `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#78350f;">⚠️ Rakamlar ${d.asOf} snapshot'ına ait — bugünün snapshot'ı alınmamış.</div>`}
 
       ${card(`
@@ -144,7 +147,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
 
       ${d.portfolioDiagnosis ? card(`
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Portföy Tanı</div>
-        <div style="font-size:13px;color:#334155;margin-top:4px;line-height:1.6;">${d.portfolioDiagnosis}</div>
+        <div style="font-size:13px;color:#334155;margin-top:4px;line-height:1.6;">${esc(d.portfolioDiagnosis)}</div>
       `) : ''}
 
       ${d.actions?.length ? card(`
@@ -154,7 +157,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
 
       ${d.marketOutlook ? card(`
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Piyasa Görünümü</div>
-        <div style="font-size:12px;color:#475569;margin-top:4px;line-height:1.6;">${d.marketOutlook}</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px;line-height:1.6;">${esc(d.marketOutlook)}</div>
       `) : ''}
 
       <div style="text-align:center;font-size:11px;color:#94a3b8;margin-top:20px;">

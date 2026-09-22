@@ -1,7 +1,7 @@
 // ============================================================
 // TEK DOĞRU KAYNAK — Portföy Politikası
 // ============================================================
-// AI Portföy Yöneticisi (smartInvestmentEngine), X-Ray (xrayService) ve
+// Rebalans Planı (RebalancePlan), X-Ray (xrayService), AI bağlamı (api/lib/aiContext) ve
 // AI Advisor (aiAdvisorService) HEPSİ buradan okur. Eskiden her birinin ayrı
 // hardcoded hedefi vardı → "ayrı telden" çelişkili öneriler. Artık tek kaynak.
 //

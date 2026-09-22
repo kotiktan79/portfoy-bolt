@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const weekIncomeBreakdown = Array.from(breakdownMap.entries()).map(([type, amount]) => ({ type, amount }));
 
-    // Gelecek hafta plan: en son AI raporundan action listesi
+    // Gelecek hafta plan: en son günlük rapordaki tek-plan dilimi (daily-report weekPlanActions; AI aksiyonu değil)
     const { data: latestReport } = await supabase
       .from('daily_reports')
       .select('actions')

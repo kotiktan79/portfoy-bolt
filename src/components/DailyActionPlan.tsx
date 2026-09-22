@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Brain, ChevronDown, ChevronUp,
-  AlertTriangle, TrendingUp, TrendingDown, Shield,
+  AlertTriangle, TrendingUp, Shield,
   Clock, Sparkles
 } from 'lucide-react';
 import { Holding } from '../lib/supabase';
@@ -165,9 +165,9 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
           {/* AI loading or no plan yet */}
           {!aiPlan && !aiLoading && (
             <div className="text-center py-4">
-              <p className="text-xs text-gray-400 mb-2">AI analizi henüz yüklenmedi</p>
+              <p className="text-xs text-gray-400 mb-2">Haftalık plan yüklenmedi</p>
               <button onClick={fetchAIPlan} className="text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline">
-                Analiz Başlat
+                Planı Getir
               </button>
             </div>
           )}
@@ -213,12 +213,6 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
                 </div>
               )}
 
-              {(aiPlan as any).weekly_strategy && (
-                <p className="text-xs text-brand-600 dark:text-brand-400 font-medium px-1">
-                  Haftalık strateji: {(aiPlan as any).weekly_strategy}
-                </p>
-              )}
-
               {(aiPlan as any).news_alerts?.length > 0 && (
                 <div className="space-y-1">
                   {(aiPlan as any).news_alerts.map((news: string, i: number) => (
@@ -237,9 +231,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
                   EU: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
                   CRYPTO: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
                 };
-                const typeIcon = action.type === 'buy' ? <TrendingUp size={14} className="text-green-500" /> :
-                  action.type === 'sell' || action.type === 'reduce' ? <TrendingDown size={14} className="text-red-500" /> :
-                  <Shield size={14} className="text-brand-500" />;
+                const typeIcon = action.symbol === 'XEON' ? <Shield size={14} className="text-brand-500" /> : <TrendingUp size={14} className="text-green-500" />;   // tek plan: yalnız alım dilimi
 
                 return (
                   <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-brand-50/50 dark:bg-brand-950/10 border border-brand-100 dark:border-brand-900/50">
@@ -286,33 +278,6 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
 
           {/* 2026-09-19: 'Aylık Dinamik Maaş' (servet × %2/%4/%6) KALDIRILDI — maaş tek yerden: Kâr Cüzdanı (euro motoru).
               Bu blok ₺23.300/ay gösterip Kâr Cüzdanı'nın €0'ıyla çelişiyordu. */}
-
-          {/* AI Wealth Building Tip */}
-          {aiPlan && (aiPlan as any).wealth_building_tip && (
-            <p className="text-xs text-brand-600 dark:text-brand-400 font-medium px-1 italic">
-              {(aiPlan as any).wealth_building_tip}
-            </p>
-          )}
-
-          {/* AI action details: expected return + dividend */}
-          {aiPlan?.actions?.some((a: any) => a.expected_annual_return || a.dividend_yield) && (
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Beklenen Getiriler</p>
-              {aiPlan.actions.filter((a: any) => a.expected_annual_return || a.dividend_yield).map((a: any, i: number) => (
-                <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-gray-50 dark:bg-gray-800/50 text-xs">
-                  <span className="font-semibold text-gray-700 dark:text-gray-300">{a.symbol}</span>
-                  <div className="flex gap-3">
-                    {a.expected_annual_return && (
-                      <span className="text-accent-600 dark:text-accent-400">Yıllık: %{a.expected_annual_return}</span>
-                    )}
-                    {a.dividend_yield && (
-                      <span className="text-brand-600 dark:text-brand-400">Temettü: %{a.dividend_yield}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Quick nav */}
           <div className="flex gap-2 pt-2 overflow-x-auto">

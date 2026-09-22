@@ -9,7 +9,7 @@ export default function AIAdvisorPage() {
         <PageHeader
           icon={Brain}
           title="AI Danışman"
-          subtitle="Risk profili, buy/sell sinyalleri ve akıllı öneriler"
+          subtitle="Rakamları açıklar, anomali bildirir — işlem önermez, maaş hesaplamaz"
         />
         <AIAdvisor />
       </div>

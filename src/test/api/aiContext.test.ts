@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { expectedSnapshotDay, stalePrices } from './aiContext';
+// api/lib saf yardımcıları — test src/ altında (api/ altındaki her .ts Vercel fonksiyonu sayılır; vitest import'u deploy'a girmesin)
+import { expectedSnapshotDay, stalePrices } from '../../../api/lib/aiContext';
 
 const now = new Date('2026-09-22T10:00:00Z');
 const day = (n: number) => new Date(now.getTime() - n * 86400000).toISOString().slice(0, 10);
@@ -20,24 +21,24 @@ describe('expectedSnapshotDay — snapshot cron 18:00 UTC', () => {
 
 describe('stalePrices — price_history üzerinden gerçek değişim', () => {
   it('11-44 gün önce son değişen sembol bayat, gün sayısı doğru', () => {
-    const rows = [];
+    const rows: Array<{ symbol: string; price: number; recorded_at: string }> = [];
     for (let i = 44; i >= 0; i--) rows.push({ symbol: 'A', price: i >= 20 ? 10 : 11, recorded_at: day(i) });
     const m = stalePrices(rows, now);
     expect(m.get('A')).toEqual({ days: 19, atLeast: false });
   });
   it('pencere boyunca HİÇ değişmemiş fiyat da bayat (en bayat olan) — eski koşul bunu atlıyordu', () => {
-    const rows = [];
+    const rows: Array<{ symbol: string; price: number; recorded_at: string }> = [];
     for (let i = 44; i >= 0; i--) rows.push({ symbol: 'B', price: 5, recorded_at: day(i) });
     const m = stalePrices(rows, now);
     expect(m.get('B')).toEqual({ days: 44, atLeast: true });
   });
   it('pencereye yeni girmiş (≤10 gün) ve sabit fiyatlı sembol bayat sayılmaz', () => {
-    const rows = [];
+    const rows: Array<{ symbol: string; price: number; recorded_at: string }> = [];
     for (let i = 6; i >= 0; i--) rows.push({ symbol: 'C', price: 7, recorded_at: day(i) });
     expect(stalePrices(rows, now).has('C')).toBe(false);
   });
   it('son 10 gün içinde değişen sembol bayat değil', () => {
-    const rows = [];
+    const rows: Array<{ symbol: string; price: number; recorded_at: string }> = [];
     for (let i = 44; i >= 0; i--) rows.push({ symbol: 'D', price: i >= 3 ? 1 : 2, recorded_at: day(i) });
     expect(stalePrices(rows, now).has('D')).toBe(false);
   });
@@ -46,7 +47,7 @@ describe('stalePrices — price_history üzerinden gerçek değişim', () => {
 // ---------------------------------------------------------------------------------
 // buildAiContext — sahte Supabase ile uçtan uca metin (DB yok, AI yok)
 // ---------------------------------------------------------------------------------
-import { buildAiContext } from './aiContext';
+import { buildAiContext } from '../../../api/lib/aiContext';
 
 type Row = Record<string, any>;
 function fakeSupabase(tables: Record<string, Row[]>) {

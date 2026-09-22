@@ -16,7 +16,6 @@ interface ReportContent {
   per_holding_view?: Array<{ symbol: string; view: string }>;
   risks?: string[];
   notes?: string[];
-  opportunities?: string[];   // eski raporlar (22.09 öncesi)
   raw?: string;
   parse_error?: string;
 }
@@ -87,6 +86,8 @@ export default function ResearchPage() {
     }
   };
 
+  const legacy = !!report && report.report_date < '2026-09-22';
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-950 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
@@ -131,6 +132,12 @@ export default function ResearchPage() {
 
         {!loading && report && (
           <>
+            {/* 22.09 öncesi raporlar eski prompt'la üretildi (trim/sell/buy önerisi, 'Fırsatlar') — DailyReportPage ile aynı kapı */}
+            {legacy && (
+              <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-sm text-amber-800 dark:text-amber-300">
+                <AlertTriangle size={14} className="inline mr-1" /> Eski format rapor ({report.report_date}) — 22.09 öncesi AI önerileri geçersiz; pozisyon notları ve öneriler gizlendi. "Şimdi Çalıştır" ile yeni rapor üret.
+              </div>
+            )}
             {/* Headline kartı */}
             <div className="mb-4 rounded-2xl bg-gradient-to-br from-brand-50 to-accent-50 dark:from-brand-950/30 dark:to-accent-950/30 border border-brand-200 dark:border-brand-900 p-5">
               <div className="flex items-center gap-2 mb-2">
@@ -140,7 +147,7 @@ export default function ResearchPage() {
                 </span>
               </div>
               <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white leading-relaxed">
-                {report.headline || (report.content as any)?.headline || 'Bugünkü rapor yüklendi.'}
+                {legacy ? 'Eski format rapor — içerik gizlendi.' : (report.headline || (report.content as any)?.headline || 'Bugünkü rapor yüklendi.')}
               </p>
               <div className="flex items-center gap-3 mt-3 text-[10px] text-slate-500 dark:text-gray-400">
                 <span>Üretildi: {new Date(report.generated_at).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</span>
@@ -150,7 +157,7 @@ export default function ResearchPage() {
             </div>
 
             {/* Macro özet */}
-            {report.content?.macro_summary && (
+            {!legacy && report.content?.macro_summary && (
               <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {report.content.macro_summary.bist100 && (
                   <MacroCard label="BIST100" value={report.content.macro_summary.bist100} />
@@ -168,7 +175,7 @@ export default function ResearchPage() {
             )}
 
             {/* Per-holding view */}
-            {Array.isArray(report.content?.per_holding_view) && report.content!.per_holding_view!.length > 0 && (
+            {!legacy && Array.isArray(report.content?.per_holding_view) && report.content!.per_holding_view!.length > 0 && (
               <div className="mb-4 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 p-4">
                 <h3 className="text-base font-bold text-gray-900 dark:text-white mb-3">Pozisyon Notları <span className="text-xs font-normal text-slate-500">(bilgi, işlem önerisi değil)</span></h3>
                 <div className="space-y-2">
@@ -184,7 +191,7 @@ export default function ResearchPage() {
 
             {/* Risks & opportunities */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              {Array.isArray(report.content?.risks) && report.content!.risks!.length > 0 && (
+              {!legacy && Array.isArray(report.content?.risks) && report.content!.risks!.length > 0 && (
                 <div className="rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 p-4">
                   <h4 className="text-sm font-bold text-rose-700 dark:text-rose-400 mb-2 flex items-center gap-1">
                     <AlertTriangle size={12} /> Riskler
@@ -194,7 +201,7 @@ export default function ResearchPage() {
                   </ul>
                 </div>
               )}
-              {(() => { const notes = report.content?.notes ?? report.content?.opportunities; return Array.isArray(notes) && notes.length > 0 && (
+              {(() => { const notes = legacy ? [] : report.content?.notes; return Array.isArray(notes) && notes.length > 0 && (
                 <div className="rounded-2xl bg-slate-50/60 dark:bg-gray-900/30 border border-slate-200 dark:border-gray-700 p-4">
                   <h4 className="text-sm font-bold text-slate-700 dark:text-gray-300 mb-2 flex items-center gap-1">
                     <Info size={12} /> Notlar
