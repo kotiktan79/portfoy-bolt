@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers, Sparkles, Globe2, Target, TrendingDown as LossIcon, Award } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers, Globe2, Target, TrendingDown as LossIcon, Award } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { analyzeXRay, XRayFinding } from '../services/xrayService';
 import { formatCurrency } from '../services/priceService';
 // Tek ölçü EUR (2026-09-22): X-Ray tutarları TL'den €'ya çevrilerek gösterilir
-const eur = (tl: number, rate: number) => `€${formatCurrency(rate > 0 ? tl / rate : 0, 0)}`;
+const eur = (tl: number, rate: number) => `${tl < 0 ? '−' : ''}€${formatCurrency(rate > 0 ? Math.abs(tl) / rate : 0, 0)}`;
 import { Card } from './ui/Card';
 
 // Varlık tipi → Türkçe etiket (HEDEF vs GERÇEK ALLOKASYON bar'ları için).
@@ -296,7 +296,7 @@ export default function PortfolioXRay() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-rose-700/70 dark:text-rose-400/70 mt-2">Kâr realizasyonu yapacaksan, bunlarla netleştir → vergi avantajı.</p>
+                  <p className="text-[10px] text-rose-700/70 dark:text-rose-400/70 mt-2">Bilgi: satış rotasyonu durduruldu; ileride kâr realize edilirse bunlarla netleştirilebilir.</p>
                 </div>
               )}
 
@@ -304,7 +304,7 @@ export default function PortfolioXRay() {
               {xray.bigWinners.length > 0 && (
                 <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 p-3 bg-emerald-50/50 dark:bg-emerald-950/20">
                   <div className="flex items-center gap-1.5 t-eyebrow text-emerald-700 dark:text-emerald-400 mb-2">
-                    <Award size={11} /> KÂR REALİZE EDİLMEYEN BÜYÜK KAZANANLAR
+                    <Award size={11} /> BÜYÜK KAZANANLAR (TL NOMİNAL — BİLGİ)
                   </div>
                   <div className="space-y-1">
                     {xray.bigWinners.slice(0, 5).map(w => (
@@ -317,7 +317,7 @@ export default function PortfolioXRay() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-emerald-700/70 dark:text-emerald-400/70 mt-2">%50+ kârda — kısmi satış (trim) ile kâr kilitle.</p>
+                  <p className="text-[10px] text-emerald-700/70 dark:text-emerald-400/70 mt-2">%50+ kârda (TL). Plan gereği satış yok; euro bazlı kâr daha düşük.</p>
                 </div>
               )}
 
@@ -348,14 +348,6 @@ export default function PortfolioXRay() {
                           </span>
                         </div>
                       ))}
-                      {xray.missingSectors.length > 0 && (
-                        <div className="flex items-start gap-1.5 mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
-                          <Sparkles size={11} className="mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                          <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                            <strong>Eksik sektörler:</strong> {xray.missingSectors.join(', ')}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

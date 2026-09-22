@@ -211,7 +211,7 @@ export default function HomePage() {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="t-h3">Portföy Trendi</h3>
-                        <p className="t-caption">Son dönemdeki değer değişimi</p>
+                        <p className="t-caption">{eurChartData.length > 1 ? 'Euro servet, son 30 gün — çizgiler arası = kâr' : 'Son dönemdeki değer değişimi (₺, nominal)'}</p>
                       </div>
                       <button
                         onClick={() => navigate('/performance')}
@@ -222,7 +222,7 @@ export default function HomePage() {
                     </div>
                     <div className="h-72 md:h-64">
                       <Suspense fallback={<ChartLoader />}>
-                        {historicalData.length > 0 ? (
+                        {(eurChartData.length > 1 || historicalData.length > 0) ? (
                           <PortfolioChart data={eurChartData.length > 1 ? eurChartData : historicalData} unit={eurChartData.length > 1 ? 'EUR' : 'TRY'} type="area" />
                         ) : (
                           <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600 text-sm">

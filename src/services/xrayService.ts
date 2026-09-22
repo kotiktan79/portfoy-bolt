@@ -56,6 +56,7 @@ export interface XRayReport {
   taxLossOpportunities: { symbol: string; value: number; pnl: number; pnlPct: number }[];
   bigWinners: { symbol: string; value: number; pnlPct: number; weight: number }[];
   eurRate: number;               // TL tutarları €'ya çevirmek için (tek ölçü EUR)
+  tlPct: number;                 // gerçek TL maruziyeti (BIST + TL fon + TL nakit) %
   currencyMix: { currency: string; value: number; pct: number }[];
 }
 
@@ -98,6 +99,7 @@ const GLOBAL_SYMBOLS = new Set([
   'ASML', 'ADYEN', 'PROSUS', 'LVMH', 'TTE', 'SAP', 'BMW', 'SIE',
   'V3YL', 'VWCE', 'VUSA', 'EUNL', 'IWDA',
   'IB01', 'IBTL', 'TLT', 'SGOV', 'BND', 'IUSB', 'JNK', 'HYG',
+  'REVOLUT-ROBO', 'XEON', 'IEGE', 'ERNE',   // TL fiyatlı saklansa da yabancı varlık (2026-09-22)
 ]);
 
 function regionOf(h: Holding): string {
@@ -149,7 +151,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       sectorBreakdown: [], missingSectors: [], healthScore: 0,
       hhi: 0, diversificationScore: 0, assetClassCount: 0,
       allocationDrift: [], geographicExposure: [], taxLossOpportunities: [],
-      bigWinners: [], currencyMix: [], eurRate: 1,
+      bigWinners: [], currencyMix: [], eurRate: 1, tlPct: 0,
     };
   }
 
@@ -223,7 +225,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: deadMoneyTotal > totalValue * 0.20 ? 'high' : deadMoneyTotal > totalValue * 0.08 ? 'medium' : 'low',
       category: 'dead-money',
       title: `Getirisiz nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
-      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; enflasyon her yıl ~%2'sini yiyor. Tek plan: dilimlerle V3YL + XEON'a.`,
+      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%2'sini yiyor. Tek plan: dilimlerle V3YL + XEON'a.`,
       amount: deadMoneyTotal,
       symbols: cashPositions.map(p => p.symbol),
     });
@@ -254,9 +256,9 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     // TL FİYATLI ≠ TL VARLIĞI: altın, kripto, eurobond ve global ETF'ler TL ile fiyatlansa da TL riski taşımaz (2026-09-22)
     if (p.asset_type === 'commodity' || p.asset_type === 'crypto' || p.asset_type === 'eurobond') return false;
     if (GLOBAL_SYMBOLS.has(sym)) return false;
-    // currency tipi USD/EURO TL fiyatlı saklanıyor ama gerçekte yabancı para
-    if (p.asset_type === 'currency' && (sym === 'USD' || sym === 'USDC' || sym === 'EURO' || sym === 'EUR')) return false;
-    return true;   // BIST hissesi, TL fon, TL nakit
+    // currency tipi pozisyonlar TL fiyatlı saklanır ama yalnız TRY/TL nakit gerçekten TL'dir
+    if (p.asset_type === 'currency') return sym === 'TRY' || sym === 'TL';
+    return true;   // BIST hissesi, TL fon
   }).reduce((s, p) => s + p.value, 0);
   const tlPct = (tlExposure / totalValue) * 100;
 
@@ -266,7 +268,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: tlPct > 55 ? 'high' : 'medium',
       category: 'currency',
       title: `TL maruziyeti %${tlPct.toFixed(1)}`,
-      detail: `Romanya/EUR-bazlı yatırımcı için TL yabancı para riskidir. BIST hisseleri + TL fonlar dahil. Önerilen üst sınır %40.`,
+      detail: `Romanya/EUR-bazlı yatırımcı için TL yabancı para riskidir. BIST hisseleri + TL fonlar dahil. Eşik %35.`,
       amount: tlExposure,
     });
   }
@@ -313,7 +315,8 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     .map(([currency, value]) => ({ currency, value, pct: (value / totalValue) * 100 }))
     .sort((a, b) => b.value - a.value);
 
-  if (currencyMix.length > 0 && currencyMix[0].pct > 30 && effectiveCurrencyPct > 35) {
+  // 'currency-mix' (USD+EUR 50/50) bulgusu KAPATILDI (2026-09-22): tek plan güvenli bacağı EUR'da toplar, USD ağırlığı bilinçli düşer.
+  if (false as boolean && currencyMix.length > 0 && currencyMix[0].pct > 30 && effectiveCurrencyPct > 35) {
     findings.push({
       id: 'currency-mix',
       severity: currencyMix[0].pct > 45 ? 'medium' : 'low',
@@ -344,7 +347,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       title: `Türkiye maruziyeti %${trPct.toFixed(0)}`,
       detail: `EM (emerging market) ağırlığın yüksek. EUR/Global ETF (V3YL, VWCE) ile dengele.`,
     });
-  } else if (trPct < 5 && totalValue > 100000) {
+  } else if (false as boolean && trPct < 5 && totalValue > 100000) {   // 'EM'e git' önerisi planla çelişir — KAPALI (2026-09-22)
     findings.push({
       id: 'no-em-exposure',
       severity: 'info',
@@ -369,10 +372,11 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     sector.weight = stockTotal > 0 ? (sector.value / stockTotal) * 100 : 0;
   }
   const sectorBreakdown = Object.values(sectorMap).sort((a, b) => b.value - a.value);
-  const missingSectors = KEY_SECTORS.filter(s => !sectorMap[s] || sectorMap[s].value < stockTotal * 0.03);
+  // 'Eksik sektör' KALDIRILDI (2026-09-22): tek plan BIST'e taze para koymuyor; sektör listesi yalnız bilgi.
+  const missingSectors: string[] = [];
+  void KEY_SECTORS;
 
-  // 2026-09-22: 'eksik sektör' bulgusu KALDIRILDI — tek plan BIST'e taze para koymuyor; sektör listesi yalnız bilgi.
-  if (false && missingSectors.length > 0 && stocks.length >= 5) {
+  if (missingSectors.length > 0 && stocks.length >= 5) {   // artık hiç tetiklenmez (dizi boş) — geriye uyum
     findings.push({
       id: 'missing-sectors',
       severity: missingSectors.length > 3 ? 'medium' : 'low',
@@ -408,7 +412,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
 
   // ── 10. Vergi-Avantajlı Satış Fırsatı (Tax Loss Harvest) ─────
   const taxLossOpportunities = positions
-    .filter(p => p.cost > 0)
+    .filter(p => p.cost > 0 && p.asset_type !== 'currency' && !PHYSICAL_FIXED_TYPES.has(p.asset_type))
     .map(p => {
       const pnl = p.value - p.cost;
       const pnlPct = (pnl / p.cost) * 100;
@@ -424,7 +428,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: 'info',
       category: 'tax-loss',
       title: `${taxLossOpportunities.length} pozisyonda kayıp realizasyon fırsatı`,
-      detail: `${taxLossOpportunities.slice(0, 3).map(p => `${p.symbol} (%${p.pnlPct.toFixed(0)})`).join(', ')} — toplam ${Math.abs(totalLoss).toFixed(0)} ₺ realize edilmemiş zarar. Kâr realize edilen pozisyonlarla netleştirilebilir.`,
+      detail: `${taxLossOpportunities.slice(0, 3).map(p => `${p.symbol} (%${p.pnlPct.toFixed(0)} TL)`).join(', ')} — toplam €${Math.round(Math.abs(totalLoss) / fxRates.eur).toLocaleString('de-DE')} realize edilmemiş zarar (bilgi; satış rotasyonu durduruldu).`,
       amount: Math.abs(totalLoss),
       symbols: taxLossOpportunities.map(p => p.symbol),
     });
@@ -432,7 +436,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
 
   // ── 11. Winner-ride: Büyük kârda büyük pozisyonlar ───────────
   const bigWinners = positions
-    .filter(p => p.cost > 0)
+    .filter(p => p.cost > 0 && p.asset_type !== 'currency')
     .map(p => {
       const pnl = p.value - p.cost;
       const pnlPct = (pnl / p.cost) * 100;
@@ -484,8 +488,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
   else if (tlPct > 35) healthScore -= 8;
   // EUR (ev parası) yetersiz
   if (eurPct < 15 && totalValue > 100000) healthScore -= 5;
-  // Sektör eksikliği cezası kaldırıldı (2026-09-22): plan BIST'e taze para koymuyor
-  void missingSectors;
+  // Sektör eksikliği cezası yok (2026-09-22): plan BIST'e taze para koymuyor
   // HHI konsantrasyon
   if (hhi > 3500) healthScore -= 15;
   else if (hhi > 2500) healthScore -= 8;
@@ -519,5 +522,6 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     bigWinners,
     currencyMix,
     eurRate: fxRates.eur,
+    tlPct,
   };
 }

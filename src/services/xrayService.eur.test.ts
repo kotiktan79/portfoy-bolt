@@ -15,7 +15,8 @@ const holdings: Holding[] = [
   H({ symbol: 'IB01', asset_type: 'eurobond', currency: 'EUR', quantity: 109.68, purchase_price: 105.12, current_price: 106.15, created_at: '2026-05-20' }),
   H({ symbol: 'TR-EUROBOND-2Y', asset_type: 'eurobond', currency: 'USD', quantity: 7.5, purchase_price: 1000, current_price: 1000 }),
   H({ symbol: 'V3YL', asset_type: 'stock', currency: 'EUR', quantity: 990, purchase_price: 7.2, current_price: 7.43 }),
-  H({ symbol: 'REVOLUT-ROBO', asset_type: 'stock', currency: 'EUR', quantity: 1.29, purchase_price: 6000, current_price: 6740 }),
+  H({ symbol: 'REVOLUT-ROBO', asset_type: 'stock', currency: 'TRY', quantity: 1.29, purchase_price: 336_000, current_price: 377_534 }),   // canlıda TL fiyatlı saklı
+  H({ symbol: 'US900123CJ75', asset_type: 'eurobond', currency: 'TRY', quantity: 2, purchase_price: 37_500, current_price: 46_940 }),
   H({ symbol: 'JNJ', asset_type: 'stock', currency: 'USD', quantity: 17, purchase_price: 155, current_price: 196 }),
   H({ symbol: 'TUPRS', asset_type: 'stock', quantity: 600, purchase_price: 95, current_price: 263 }),
   H({ symbol: 'ASELS', asset_type: 'stock', quantity: 500, purchase_price: 60, current_price: 240 }),
@@ -40,12 +41,18 @@ describe('X-Ray — EUR ölçü ve tek plan kuralları', () => {
   });
   it('TL maruziyeti: altın/kripto/eurobond/global TL fiyatlı olsa da TL DEĞİL', () => {
     const tl = byId('tl-exposure');
-    // BIST (TUPRS+ASELS+BIMAS+THYAO) + GPA ≈ 0.6M TL / 8.3M ≈ %7 → uyarı YOK
     expect(tl).toBeUndefined();
+    // BIST (TUPRS+ASELS+BIMAS+THYAO) + GPA TL; REVOLUT-ROBO ve US900123CJ75 TL fiyatlı ama TL DEĞİL
+    const tlTry = holdings.filter(h => ['TUPRS','ASELS','BIMAS','THYAO','GPA'].includes(h.symbol)).reduce((s, h) => s + h.quantity * h.current_price, 0);
+    expect(x.tlPct).toBeCloseTo(100 * tlTry / x.totalValue, 1);
+    expect(x.tlPct).toBeLessThan(15);
   });
   it('fiziki altın %50+ kârda olsa da trim önerisine girmez', () => {
     const w = byId('winners-ride');
     if (w) expect(w.symbols).not.toContain('ALTIN');
+    expect(x.bigWinners.map(b => b.symbol)).not.toContain('ALTIN');
+    expect(x.bigWinners.map(b => b.symbol)).not.toContain('USD');   // nakit 'kazanan' sayılmaz
+    expect(x.geographicExposure.find(g => g.region.startsWith('Türkiye'))!.pct).toBeLessThan(20);   // Robo Türkiye'ye yazılmaz
   });
   it("'eksik sektör' bulgusu yok (plan BIST'e taze para koymuyor)", () => {
     expect(x.findings.find(f => f.category === 'sector')).toBeUndefined();
