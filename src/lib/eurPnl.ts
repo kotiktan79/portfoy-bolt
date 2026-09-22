@@ -128,8 +128,11 @@ export const CARRY_RESET_MONTH = '2026-09';
 
 // KÂR HAVUZU (kullanıcı kararı 2026-09-20): zarar devrediyordu ama artıda kalan kâr devretmiyordu — asimetrikti.
 // Artık tek bakiye: her ay reel kâr eklenir, çekilen düşülür. Artı bakiye TAVANA kadar devreder (havuz),
-// tavanı aşan kısım portföyde kalır ve çalışmaya devam eder (düşüşte toplu çekim cazibesi doğmasın).
-export const POOL_CAP_EUR = 3000;        // ≈3 aylık geçim
+// tavanı aşan kısım portföyde kalır ve çalışmaya devam eder.
+// TAVAN €12.000 (kullanıcı kararı 2026-09-22; eskiden €3.000): kuralda ayların ~%85'i €0 verir, gelir nadir iyi aylardan gelir;
+// €3.000 tavan tam o ayları kesiyordu (+%5'lik ay ≈ €8.850 reel kâr → €5.850 bir daha maaş olamıyordu). 12 aylık maaş = bir iyi yıl
+// bir kötü yılı taşır. "Düşüşte toplu çekim" endişesini aylık tavan (MONTHLY_CAP_EUR) zaten çözer. Panel server.mjs aynı sabit.
+export const POOL_CAP_EUR = 12000;       // ≈12 aylık geçim (aylık tavan × 12)
 export const MONTHLY_CAP_EUR = 1000;     // geçim planı: aylık üst sınır
 
 /** Şu an çekilebilecek maaş: havuzun %85'i, aylık tavanla sınırlı.

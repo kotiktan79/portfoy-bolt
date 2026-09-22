@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeRateSeries, eurGainBetween, fxDriftTRY, monthlyRows, CARRY_RESET_MONTH } from './eurPnl';
+import { makeRateSeries, eurGainBetween, fxDriftTRY, monthlyRows, CARRY_RESET_MONTH, POOL_CAP_EUR } from './eurPnl';
 
 const eur = makeRateSeries([{ date: '2026-08-01', rate: 54.7 }, { date: '2026-08-31', rate: 55.94 }], 55);
 const usd = makeRateSeries([{ date: '2026-08-01', rate: 47.5 }, { date: '2026-08-31', rate: 48.25 }], 48);
@@ -232,11 +232,16 @@ describe('kâr havuzu (tavanlı)', () => {
     expect(eki.salaryEUR).toBeCloseTo(1_000, 6);                 // 0,85 × 1.800 = 1.530 → aylık tavan 1.000
     expect(kas.carryInEUR).toBeCloseTo(1_800, 6);
   });
-  it('havuz tavanı €3.000: fazlası portföyde kalır', () => {
+  it('havuz tavanı €12.000 (2026-09-22): fazlası portföyde kalır; €3.000 artık KESMEZ', () => {
     const rows = monthlyRows(mk([['2026-09-30', 2_500], ['2026-10-31', 2_500]]), 0, { carryResetFrom: null });
     const eki = rows.find(r => r.month === '2026-10')!;
-    expect(eki.carryOutEUR).toBeCloseTo(3_000, 6);
-    expect(eki.poolSpilloverEUR).toBeCloseTo(2_000, 6);          // 5.000 − 3.000
+    expect(eki.carryOutEUR).toBeCloseTo(5_000, 6);               // eski tavan 3.000 burada 2.000 kesiyordu
+    expect(eki.poolSpilloverEUR).toBe(0);
+    const big = monthlyRows(mk([['2026-09-30', 9_000], ['2026-10-31', 9_000]]), 0, { carryResetFrom: null });
+    const eki2 = big.find(r => r.month === '2026-10')!;
+    expect(eki2.carryOutEUR).toBeCloseTo(POOL_CAP_EUR, 6);
+    expect(eki2.poolSpilloverEUR).toBeCloseTo(18_000 - POOL_CAP_EUR, 6);
+    expect(POOL_CAP_EUR).toBe(12_000);
   });
   it('çekilen maaş havuzdan düşer', () => {
     const w = new Map([['2026-09', 500]]);
