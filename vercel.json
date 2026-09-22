@@ -3,12 +3,17 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "installCommand": "npm install",
-  "regions": ["fra1"],
+  "regions": [
+    "fra1"
+  ],
   "github": {
     "silent": true
   },
   "rewrites": [
-    { "source": "/((?!assets|sw|manifest|favicon).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!assets|sw|manifest|favicon).*)",
+      "destination": "/index.html"
+    }
   ],
   "crons": [
     {
@@ -22,10 +27,6 @@
     {
       "path": "/api/cron/risk-monitor",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/opportunity-scanner",
-      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/dividend-tracker",

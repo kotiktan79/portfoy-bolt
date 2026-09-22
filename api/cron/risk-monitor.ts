@@ -3,9 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, fmtEUR, fmtSignedEUR, fmtSignedPct } from '../lib/eurEngine.js';
+import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES } from '../../src/config/portfolioPolicy.js';
+
+const PLAN_NOTE = 'Plan sabit: satış yok, haftalık dilim V3YL + XEON devam. Bilgi amaçlı.';
 
 // RİSK MONİTÖRÜ — eşikler EUR (2026-09-19): portföy düşüşü = motorun akış düzeltilmiş EUR kârı (TL nominal değil;
 // TL'de kur artışı 'yükseliş', düşüşü 'çöküş' gibi görünüyordu). Pozisyon tutarları bugünkü kurla EUR.
+// 2026-09-22: uyarılar BİLGİ verir, işlem ÖNERMEZ (tek plan sabit: her dilim V3YL + XEON; satış rotasyonu durduruldu 21.08).
+// Eski 'stop-loss kontrol et / zararı kes / kısmi satış düşün / nakit artır' metinleri plan diline çevrildi;
+// konsantrasyon uyarısı politikanın sınıf bantlarına bağlandı (tek varlık %25 eşiği V3YL büyüdükçe her sabah plana aykırı uyarı üretiyordu).
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -68,14 +74,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             type: 'critical',
             title: 'PORTFÖY KRİTİK DÜŞÜŞ',
             detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (${fmtSignedPct(dailyChangePct)}). Servet ${fmtEUR(prev.wealthEUR)} → ${fmtEUR(last.wealthEUR)}`,
-            action: 'Acil değerlendirme yap. Panik satışı yapma ama stop-loss seviyelerini kontrol et.',
+            action: `Sebebini öğren (haber/kur). ${PLAN_NOTE}`,
           });
         } else if (dailyChangePct <= -3) {
           alerts.push({
             type: 'warning',
             title: 'Portföy önemli düşüş',
             detail: `${last.date}: ${fmtSignedEUR(last.gainEUR)} (${fmtSignedPct(dailyChangePct)})`,
-            action: 'Düşüşün sebebini araştır. Temel değişiklik yoksa pozisyonları koru.',
+            action: `Sebebini öğren. ${PLAN_NOTE}`,
           });
         }
         // Haftalık drawdown (son 7 takvim günü)
@@ -92,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               type: 'critical',
               title: 'HAFTALIK DRAWDOWN KRİTİK',
               detail: `Son 7 günde ${fmtSignedEUR(wk)} (${fmtSignedPct(weeklyPct)})`,
-              action: 'Savunma moduna geç. Riskli pozisyonları azalt.',
+              action: `Ay sonu maaş ön izlemesi düşer (Kâr Cüzdanı). ${PLAN_NOTE}`,
             });
           }
         }
@@ -117,42 +123,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           type: 'warning',
           title: `${h.symbol} ağır kayıpta`,
           detail: `${fmtSignedPct(pnlPct)} nominal (${fmtSignedEUR(toEUR(value - cost))}). Maliyet ${fmtEUR(toEUR(cost))} → Değer ${fmtEUR(toEUR(value))}`,
-          action: `${h.symbol} pozisyonunu değerlendir: zararı kes veya ortalama düşür.`,
+          action: `Bilgi: yerel para nominal kayıp; EUR ölçüsü Kâr Cüzdanı'nda. ${PLAN_NOTE}`,
         });
       }
     }
 
-    // 4. Konsantrasyon riski — tek varlık %25+
-    for (const h of holdings) {
-      const value = valTRY(h);
-      const weight = totalValue > 0 ? (value / totalValue) * 100 : 0;
-
-      if (weight >= 25) {
+    // 4. Konsantrasyon — tek varlık, sınıfının politika ÜST BANDINI (TARGET_ALLOCATION.max) aşıyorsa bilgi ver
+    //    (tek plan zaten hisse bacağını tek ETF'te — V3YL — topluyor; sabit %25 eşiği plana aykırı uyarı üretiyordu)
+    const invHoldings = holdings.filter((h: any) => h.asset_type !== 'cash');
+    const invTotal = invHoldings.reduce((s: number, h: any) => s + valTRY(h), 0);
+    for (const h of invHoldings) {
+      const band = TARGET_ALLOCATION[h.asset_type]; if (!band) continue;
+      const weight = invTotal > 0 ? (valTRY(h) / invTotal) * 100 : 0;
+      if (weight > band.max) {
         alerts.push({
-          type: 'warning',
-          title: `${h.symbol} aşırı konsantrasyon`,
-          detail: `Portföyün %${weight.toFixed(1)}'i tek varlıkta (${fmtEUR(toEUR(value))})`,
-          action: `Çeşitlendirme için ${h.symbol}'den kısmi satış düşün.`,
+          type: 'info',
+          title: `${h.symbol} tek başına ${h.asset_type} üst bandını aşıyor`,
+          detail: `Portföyün %${weight.toFixed(1)}'i (${fmtEUR(toEUR(valTRY(h)))}); ${h.asset_type} bandı %${band.min}-${band.max}`,
+          action: PHYSICAL_FIXED_TYPES.has(h.asset_type) ? 'Fiziki — satılmaz; diğer sınıflar büyüdükçe seyrelir.' : `Yeni dilimler açıklara oranlı gider, seyrelme kendiliğinden. ${PLAN_NOTE}`,
         });
       }
     }
 
-    // 5. Tip bazlı dağılım riski
+    // 5. Sınıf dağılımı — politika bandı dışına çıkan sınıf (bilgi; dilim bölünmesi bunu zaten hedefler)
     const byType: Record<string, number> = {};
-    for (const h of holdings) {
-      const type = h.asset_type || 'other';
-      byType[type] = (byType[type] || 0) + valTRY(h);
-    }
-
+    for (const h of invHoldings) byType[h.asset_type || 'other'] = (byType[h.asset_type || 'other'] || 0) + valTRY(h);
+    const typeNames: Record<string, string> = { stock: 'Hisse', crypto: 'Kripto', currency: 'Nakit', fund: 'Fon', commodity: 'Altın', eurobond: 'Tahvil' };
     for (const [type, value] of Object.entries(byType)) {
-      const pct = (value / totalValue) * 100;
-      if (pct > 50) {
-        const typeNames: Record<string, string> = { stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz', fund: 'Fon', commodity: 'Emtia', eurobond: 'Eurobond' };
+      const band = TARGET_ALLOCATION[type]; if (!band || !(invTotal > 0)) continue;
+      const pct = (value / invTotal) * 100;
+      if (pct > band.max + 10) {
         alerts.push({
-          type: 'warning',
-          title: `${typeNames[type] || type} ağırlığı çok yüksek`,
-          detail: `%${pct.toFixed(1)} — dağılım dengesiz`,
-          action: `${typeNames[type] || type} pozisyonunu azaltıp diğer varlık sınıflarına yay.`,
+          type: 'info',
+          title: `${typeNames[type] || type} ağırlığı bandın çok üstünde`,
+          detail: `%${pct.toFixed(1)} — hedef %${band.target} (bant %${band.min}-${band.max})`,
+          action: PHYSICAL_FIXED_TYPES.has(type) ? 'Fiziki — satılmaz; seyrelme zamanla.' : type === 'currency' ? `Getirisiz nakit — haftalık dilimlerle V3YL + XEON'a gider. ${PLAN_NOTE}` : `Yeni dilim bu sınıfa gitmez, gerisi büyüdükçe seyrelir. ${PLAN_NOTE}`,
         });
       }
     }
@@ -171,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             type: 'warning',
             title: `VIX yüksek: ${vix.toFixed(1)}`,
             detail: 'Piyasa korku seviyesi yüksek. Volatilite artmış.',
-            action: 'Yeni alım yapma. Mevcut pozisyonları koru. Nakit oranını artır.',
+            action: `Bilgi: oynaklık yüksek; dilimler açıklara oranlı devam eder. ${PLAN_NOTE}`,
           });
         }
         if (vix && vix > 40) {
@@ -179,7 +184,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             type: 'critical',
             title: `VIX KRİTİK: ${vix.toFixed(1)}`,
             detail: 'Aşırı korku. Piyasa çöküşü riski.',
-            action: 'Savunma modu. Riskli pozisyonları acil azalt.',
+            action: `Bilgi: aşırı korku dönemi; plan değişmez, günlük EUR kârı Kâr Cüzdanı'nda. ${PLAN_NOTE}`,
           });
         }
       }
@@ -206,14 +211,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             title: `USD/TRY sert hareket: %${fxChange.toFixed(1)}`,
             detail: `${previous.toFixed(2)} → ${current.toFixed(2)}`,
             action: fxChange > 0
-              ? 'TL değer kaybediyor. Döviz pozisyonlarını koru.'
-              : 'TL güçleniyor. Döviz alımı fırsatı olabilir.',
+              ? 'Bilgi: TL varlıkların euro değeri düşer (kur artışı kâr değil).'
+              : 'Bilgi: TL varlıkların euro değeri artar; plan değişmez (BIST/TL\'ye taze para yok).',
           });
         }
       }
     } catch { /* skip */ }
 
-    // Sonuçları kaydet
+    // Sonuçları kaydet — 'info' uyarıları push'a girmez (her sabah aynı bilgi bildirim olmasın)
+    const notify = alerts.filter(a => a.type !== 'info');
     if (alerts.length > 0) {
       await supabase.from('daily_reports').upsert([{
         report_date: today,
@@ -221,16 +227,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }], { onConflict: 'report_date' });
 
       // Web Push: uygulama kapalıyken de uyarı düşsün (abone yoksa no-op)
-      const critical = alerts.filter(a => a.type === 'critical');
-      const top = critical[0] || alerts[0];
-      await sendPushToAll({
-        title: critical.length > 0
-          ? `🚨 ${critical.length} kritik risk uyarısı`
-          : `⚠️ ${alerts.length} risk uyarısı`,
-        body: `${top.title}: ${top.detail}`.slice(0, 180),
-        url: '/daily-report',
-        tag: 'risk-monitor',
-      }).catch((e) => console.error('[push] gönderim hatası:', e));
+      const critical = notify.filter(a => a.type === 'critical');
+      const top = critical[0] || notify[0];
+      if (top) {
+        await sendPushToAll({
+          title: critical.length > 0
+            ? `🚨 ${critical.length} kritik risk uyarısı`
+            : `⚠️ ${notify.length} risk uyarısı`,
+          body: `${top.title}: ${top.detail}`.slice(0, 180),
+          url: '/daily-report',
+          tag: 'risk-monitor',
+        }).catch((e) => console.error('[push] gönderim hatası:', e));
+      }
     }
 
     return res.status(200).json({
