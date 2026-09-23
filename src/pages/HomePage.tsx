@@ -189,6 +189,7 @@ export default function HomePage() {
                 liveSince={live?.sinceDate}
                 liveParts={live?.parts}
                 liveFxEUR={live?.fxEUR}
+                liveOtherEUR={live?.otherEUR}
                 closeWealthEUR={lastDay?.wealthEUR}
                 eurState={eurState}
                 todayDate={lastDay?.date}

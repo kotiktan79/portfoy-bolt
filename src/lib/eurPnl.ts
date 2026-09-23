@@ -365,7 +365,7 @@ export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
 // Eski 'anlık' rakam TL'ydi ve kur şişmesi taşıyordu; bu sürüm euro cetveliyle motorun devamıdır.
 // Snapshot alındığında (18:00 UTC) motorun o günkü gainEUR'üne yakınsar, sonra sıfırdan başlar.
 // ------------------------------------------------------------------------------------
-export interface LiveHolding { symbol?: string; currency?: string | null; quantity: number | string | null; current_price?: number | string | null; purchase_price?: number | string | null }
+export interface LiveHolding { symbol?: string; asset_type?: string | null; currency?: string | null; quantity: number | string | null; current_price?: number | string | null; purchase_price?: number | string | null }
 export interface LiveGainInput {
   holdings: LiveHolding[];
   usdNow: number; eurNow: number;        // şu anki kurlar (snapshot cron'u ile aynı kaynak: USD/EURO pozisyon fiyatı)
@@ -403,19 +403,30 @@ export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | nul
   // Kur payı, KAPANIŞ portföyünün kur değişiminden etkilenmesi: V0 × (1/e_now − 1/e_0).
   // Fiyat payı, her pozisyonun bugünkü kurla değerlenmiş fiyat farkı. Toplamları gainEUR'a eşitlenir (kalan 'other').
   if (inp.closePrices && inp.closePrices.size) {
-    const fxEUR = last.totalValue * (1 / inp.eurNow - 1 / eurLast);
+    // NAKİT DÖVİZ AYRI TUTULUR (2026-09-24, hakem bulgusu): EURO satırının "fiyatı" kurun KENDİSİ olduğu için
+    // klasik fiyat/kur ayrıştırması onu iki şişik kalem olarak bölüyordu (part_EURO + kur payı = tam olarak 0).
+    // Doğrusu: nakit döviz için doğrudan euro karşılığının değişimi — q×(p_now/e_now − p_0/e_0). EURO'da bu
+    // tanım gereği 0 çıkar (30.100 € her zaman 30.100 €), USD nakitte gerçek parite kârını verir.
+    // Kur payı da yalnız NAKİT DIŞI kapanış değeri üzerinden hesaplanır; toplam yine gainEUR'a eşit kalır.
+    const isCash = (h: LiveHolding) => String(h.asset_type || '').toLowerCase() === 'currency';
     const parts: LiveGainPart[] = [];
+    let cashCloseTRY = 0;
     for (const h of inp.holdings) {
       const sym = String(h.symbol || ''); if (!sym) continue;
       const p0 = inp.closePrices.get(sym);
-      if (p0 === undefined || !isFinite(p0)) continue;
+      if (p0 === undefined || !isFinite(p0) || !p0) continue;
       const q = Number(h.quantity) || 0, cp = Number(h.current_price) || Number(h.purchase_price) || 0;
-      if (!q || !cp || !p0) continue;
-      const eurDelta = q * (cp - p0) * fxNow(h.currency) / inp.eurNow;
-      if (Math.abs(eurDelta) < 0.5) continue;      // gürültüyü gösterme
+      if (!q || !cp) continue;
+      const cash = isCash(h);
+      if (cash) cashCloseTRY += q * p0 * fxNow(h.currency);
+      const eurDelta = cash
+        ? q * fxNow(h.currency) * (cp / inp.eurNow - p0 / eurLast)   // nakit: euro karşılığının değişimi (kur dahil)
+        : q * (cp - p0) * fxNow(h.currency) / inp.eurNow;            // diğer: fiyat farkı, bugünkü kurla
+      if (Math.abs(eurDelta) < 0.5) continue;      // gürültüyü gösterme (EURO nakdi tanım gereği burada elenir)
       parts.push({ symbol: sym, eurDelta, pricePct: (cp / p0 - 1) * 100 });
     }
     parts.sort((a, b) => Math.abs(b.eurDelta) - Math.abs(a.eurDelta));
+    const fxEUR = (last.totalValue - cashCloseTRY) * (1 / inp.eurNow - 1 / eurLast);
     out.fxEUR = fxEUR;
     out.parts = parts;
     out.otherEUR = gainEUR - fxEUR - parts.reduce((t, p) => t + p.eurDelta, 0);

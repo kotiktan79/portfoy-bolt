@@ -69,25 +69,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'usd': {
         const rate = await fetchFXRate('USD');
+        if (rate == null) return res.status(503).json({ success: false, error: 'FX kaynağı yanıt vermedi' });
         return res.json({ success: true, data: { rate } });
       }
 
       case 'eur': {
         const rate = await fetchFXRate('EUR');
+        if (rate == null) return res.status(503).json({ success: false, error: 'FX kaynağı yanıt vermedi' });
         return res.json({ success: true, data: { rate } });
       }
 
       case 'gold': {
         const usdTry = await fetchFXRate('USD');
         const goldOz = await fetchMetalPrice('gold');
-        const pricePerGramTRY = goldOz ? (goldOz / 31.1035) * usdTry : null;
+        // kur yoksa TL fiyatı üretme (uydurma sabit yok) — ons fiyatı yine döner
+        const pricePerGramTRY = goldOz && usdTry != null ? (goldOz / 31.1035) * usdTry : null;
         return res.json({ success: true, data: { pricePerOz: goldOz, pricePerGramTRY } });
       }
 
       case 'silver': {
         const usdTry = await fetchFXRate('USD');
         const silverOz = await fetchMetalPrice('silver');
-        const pricePerGramTRY = silverOz ? (silverOz / 31.1035) * usdTry : null;
+        // kur yoksa TL fiyatı üretme (uydurma sabit yok) — ons fiyatı yine döner
+        const pricePerGramTRY = silverOz && usdTry != null ? (silverOz / 31.1035) * usdTry : null;
         return res.json({ success: true, data: { pricePerOz: silverOz, pricePerGramTRY } });
       }
 
@@ -185,15 +189,19 @@ async function fetchYahoo(symbols: string): Promise<any[]> {
   return results;
 }
 
-async function fetchFXRate(currency: string): Promise<number> {
+// 2026-09-24 (hakem bulgusu): kaynak bozulunca UYDURMA SABİT (USD 44 / EUR 51) dönüyordu ve bu rakam
+// istemci tarafından holdings.current_price'a YAZILABİLİYORDU → tek günde on binlerce euro sahte kâr,
+// üstelik maaş havuzuna giriyor. Artık sabit yok: kaynak vermezse null döner, çağıran ESKİ fiyatı korur.
+async function fetchFXRate(currency: string): Promise<number | null> {
   try {
     const r = await fetch(`https://open.er-api.com/v6/latest/${currency}`, { signal: AbortSignal.timeout(5000) });
     if (r.ok) {
       const d = await r.json();
-      return d.rates?.TRY || (currency === 'USD' ? 44 : 51);
+      const rate = Number(d.rates?.TRY);
+      if (isFinite(rate) && rate > 1) return rate;
     }
-  } catch { /* fallback */ }
-  return currency === 'USD' ? 44 : 51;
+  } catch { /* kaynak yok */ }
+  return null;
 }
 
 async function fetchMetalPrice(metal: string): Promise<number | null> {

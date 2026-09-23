@@ -27,6 +27,7 @@ interface HeroDashboardProps {
   liveSince?: string;          // son snapshot günü
   liveParts?: Array<{ symbol: string; eurDelta: number; pricePct: number }>;   // günlük hareketin kırılımı
   liveFxEUR?: number;          // kırılımın kur payı
+  liveOtherEUR?: number;       // kırılımda ayrı gösterilmeyenler (akış, fiyatı bilinmeyen pozisyon)
   closeWealthEUR?: number;     // son kapanış serveti — anlık yüzdenin tabanı (LivePage ile aynı)
   totalPnLTRY?: number;
   totalPnLPct?: number;
@@ -104,6 +105,7 @@ export default function HeroDashboard({
   liveSince,
   liveParts,
   liveFxEUR,
+  liveOtherEUR,
   closeWealthEUR,
   totalPnLTRY,
   totalPnLPct,
@@ -222,10 +224,17 @@ export default function HeroDashboard({
             {/* 2026-09-24: "neden eksi?" ekranda cevaplansın — hareketi yapan 3 pozisyon + kur payı */}
             {(liveParts?.length || liveFxEUR !== undefined) && (
               <p className="mt-1.5 text-[11px] text-white/70 leading-relaxed">
-                {[
-                  ...(liveParts || []).slice(0, 3).map(p => `${p.symbol} ${p.eurDelta >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(p.eurDelta))} (${p.pricePct >= 0 ? '+' : ''}${p.pricePct.toFixed(1)}%)`),
-                  ...(liveFxEUR !== undefined && Math.abs(liveFxEUR) >= 1 ? [`kur ${liveFxEUR >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(liveFxEUR))}`] : []),
-                ].join(' · ')}
+                {(() => {
+                  // Basılanların TOPLAMI rozetteki rakama eşit olmalı: ilk 3'ün dışında kalanlar + otherEUR 'diğer'e toplanır.
+                  const top = (liveParts || []).slice(0, 3);
+                  const kalan = (liveParts || []).slice(3).reduce((t, p) => t + p.eurDelta, 0) + (liveOtherEUR || 0);
+                  const eur = (v: number) => `${v >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(v))}`;
+                  return [
+                    ...top.map(p => `${p.symbol} ${eur(p.eurDelta)} (${p.pricePct >= 0 ? '+' : ''}${p.pricePct.toFixed(1)}%)`),
+                    ...(liveFxEUR !== undefined && Math.abs(liveFxEUR) >= 1 ? [`kur ${eur(liveFxEUR)}`] : []),
+                    ...(Math.abs(kalan) >= 1 ? [`diğer ${eur(kalan)}`] : []),
+                  ].join(' · ');
+                })()}
               </p>
             )}
           </div>

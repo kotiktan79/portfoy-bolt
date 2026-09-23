@@ -119,22 +119,26 @@ export async function getLiveEurGain(holdings: Holding[]): Promise<LiveGain | nu
   const sinceTs = model.lastSnapshot.createdAt || (model.lastSnapshot.date + 'T18:00:00Z');   // cron 18:00 UTC; created_at yoksa yaklaşık
   const ccyById = new Map<string, string>(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
   const realizedTodayTRY = await realizedSince(sinceTs, fx.usd, eurNow, ccyById).catch(() => 0);
-  const closePrices = await closePricesOn(model.lastSnapshot.date).catch(() => null);
+  const closePrices = await closePricesOn(model.lastSnapshot.date, sinceTs).catch(() => null);
   return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, closePrices });
 }
 
 /** Son snapshot GÜNÜNÜN fiyatları (price_history, sembol başına o günün son kaydı) — günlük kırılım için.
  *  Cron her gün her pozisyona satır yazar; yoksa o pozisyon kırılımda 'diğer'e düşer, toplam yine doğru kalır. */
 const _cpCache = new Map<string, Map<string, number>>();
-async function closePricesOn(day: string): Promise<Map<string, number> | null> {
-  const hit = _cpCache.get(day); if (hit) return hit;
+async function closePricesOn(day: string, untilTs: string): Promise<Map<string, number> | null> {
+  const key = `${day}|${untilTs}`;
+  const hit = _cpCache.get(key); if (hit) return hit;
+  // ÜST SINIR = snapshot'ın YAZILDIĞI AN (2026-09-24 hakem bulgusu): gece açılan uygulama aynı UTC gününe
+  // snapshot'tan SONRA fiyat satırı yazabiliyor; 'günün son kaydı' kuralı o satırı kapanış sanıyordu.
   const rows = await fetchAll<{ symbol: string; price: number; recorded_at: string }>('closePrices', () => supabase
     .from('price_history').select('symbol,price,recorded_at')
-    .gte('recorded_at', `${day}T00:00:00`).lt('recorded_at', `${day}T23:59:59.999`)
+    .gte('recorded_at', `${day}T00:00:00Z`).lte('recorded_at', untilTs)
     .order('recorded_at', { ascending: true }).order('id', { ascending: true }));
   if (!rows.length) return null;
   const m = new Map<string, number>();
   for (const r of rows) { const v = Number(r.price); if (isFinite(v) && v > 0) m.set(r.symbol, v); }   // son kayıt kazanır
-  _cpCache.set(day, m);
+  _cpCache.set(key, m);
+  if (_cpCache.size > 4) _cpCache.delete(_cpCache.keys().next().value as string);   // birkaç gün yeter
   return m;
 }

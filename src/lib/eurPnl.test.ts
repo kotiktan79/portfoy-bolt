@@ -351,8 +351,8 @@ describe('liveEurGain — kırılım (fiyat payı + kur payı + kalan)', () => {
     // Kapanış: 100.000 TL, kur 50 → €2.000. Şimdi: altın fiyatı %10 düştü (10 adet 5.000→4.500 = −5.000 TL),
     // kalan 50.000 TL sabit; kur 50 → 49 (TL güçlendi, EUR değeri artar).
     const holdings = [
-      { symbol: 'ALTIN', currency: 'TRY', quantity: 10, current_price: 4500, purchase_price: 3000 },
-      { symbol: 'TUPRS', currency: 'TRY', quantity: 100, current_price: 500, purchase_price: 400 },
+      { symbol: 'ALTIN', asset_type: 'commodity', currency: 'TRY', quantity: 10, current_price: 4500, purchase_price: 3000 },
+      { symbol: 'TUPRS', asset_type: 'stock', currency: 'TRY', quantity: 100, current_price: 500, purchase_price: 400 },
     ];
     const close = new Map([['ALTIN', 5000], ['TUPRS', 500]]);
     const g = liveEurGain(model(100_000, 70_000, 50), { holdings, usdNow: 48, eurNow: 49, realizedTodayTRY: 0, closePrices: close })!;
@@ -362,6 +362,39 @@ describe('liveEurGain — kırılım (fiyat payı + kur payı + kalan)', () => {
     expect(g.fxEUR).toBeCloseTo(100_000 * (1 / 49 - 1 / 50), 6);       // kur payı: kapanış portföyüne
     const toplam = g.fxEUR! + g.parts!.reduce((t, p) => t + p.eurDelta, 0) + g.otherEUR!;
     expect(toplam).toBeCloseTo(g.gainEUR, 6);                           // KIRILIM = TOPLAM
+  });
+
+  it('NAKİT DÖVİZ: EURO nakdi kırılımda görünmez (katkısı tanım gereği 0), USD nakdi parite kârını verir', () => {
+    // Kapanış: EURO 1.000 € (kur 50 → 50.000 TL) + USD 1.000 $ (kur 40 → 40.000 TL) = 90.000 TL
+    // Şimdi: EUR/TRY 50 → 49 (TL güçlendi), USD/TRY 40 → 40 (dolar TL'ye göre sabit → euroya karşı ZAYIF)
+    const holdings = [
+      { symbol: 'EURO', asset_type: 'currency', currency: 'TRY', quantity: 1000, current_price: 49, purchase_price: 49 },
+      { symbol: 'USD', asset_type: 'currency', currency: 'TRY', quantity: 1000, current_price: 40, purchase_price: 40 },
+    ];
+    const close = new Map([['EURO', 50], ['USD', 40]]);
+    const g = liveEurGain(model(90_000, 90_000, 50), { holdings, usdNow: 40, eurNow: 49, closePrices: close })!;
+    // 1.000 € her zaman 1.000 € → EURO listede YOK
+    expect(g.parts!.find(p => p.symbol === 'EURO')).toBeUndefined();
+    // 1.000 $ : kapanışta 1000×40/50 = €800, şimdi 1000×40/49 = €816,3 → +€16,3 (parite)
+    const usd = g.parts!.find(p => p.symbol === 'USD')!;
+    expect(usd.eurDelta).toBeCloseTo(1000 * 40 / 49 - 1000 * 40 / 50, 6);
+    // Nakit dışı kapanış değeri 0 olduğundan kur payı da 0 — sahte ±kalem yok
+    expect(g.fxEUR).toBeCloseTo(0, 6);
+    const toplam = g.fxEUR! + g.parts!.reduce((t, p) => t + p.eurDelta, 0) + g.otherEUR!;
+    expect(toplam).toBeCloseTo(g.gainEUR, 6);
+  });
+
+  it('nakit + hisse birlikte: kur payı yalnız NAKİT DIŞI kapanış değeri üzerinden', () => {
+    const holdings = [
+      { symbol: 'EURO', asset_type: 'currency', currency: 'TRY', quantity: 1000, current_price: 49, purchase_price: 49 },
+      { symbol: 'TUPRS', asset_type: 'stock', currency: 'TRY', quantity: 100, current_price: 400, purchase_price: 300 },
+    ];
+    const close = new Map([['EURO', 50], ['TUPRS', 400]]);       // hisse fiyatı sabit, sadece kur oynadı
+    const g = liveEurGain(model(50_000 + 40_000, 90_000, 50), { holdings, usdNow: 48, eurNow: 49, closePrices: close })!;
+    expect(g.fxEUR).toBeCloseTo(40_000 * (1 / 49 - 1 / 50), 6);   // yalnız hissenin 40.000 TL'si
+    expect(g.parts!.length).toBe(0);                               // hiçbir fiyat değişmedi
+    const toplam = g.fxEUR! + g.otherEUR!;
+    expect(toplam).toBeCloseTo(g.gainEUR, 6);
   });
 
   it('kapanış fiyatı yoksa kırılım üretilmez (rakam yine doğru)', () => {

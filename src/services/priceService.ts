@@ -276,6 +276,8 @@ export async function fetchEURTRYRate(): Promise<number> {
     return result.rates.TRY;
   }
 
+  // 2026-09-24: buraya düşmek "kur bilinmiyor" demektir. Dönen değer FALLBACK_PRICES'tan gelir ve
+  // isFallbackPrice() onu yakalayıp DB'ye yazılmasını engeller (ekranda görünür, kalıcı olmaz).
   return FALLBACK_PRICES['EURO'] || DEFAULT_USD_TRY_RATE * 1.08;
 }
 

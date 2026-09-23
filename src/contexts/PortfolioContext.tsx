@@ -344,6 +344,16 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         // (US stock → USD, EU stock → EUR, BIST → TRY, crypto → TRY). Doğrudan yazılır.
         // Fallback fiyat DB'ye YAZILMAZ — eski gerçek fiyat, uydurma sabitten iyidir.
         const newPrice = prices[holding.symbol];
+        // 2026-09-24 (hakem bulgusu): KUR satırlarında (currency) sapma bandı — bozuk kaynak 51/44 gibi bir rakam
+        // dönerse DB'ye YAZILMAZ. Kur, servetin TAMAMINI böldüğü için tek hatalı yazım on binlerce euro sahte kâr
+        // üretip maaş havuzuna giriyordu. Diğer varlıklarda bant yok (hisse/kripto gerçekten %20 oynayabilir).
+        const sapmaVar = holding.asset_type === 'currency' && holding.current_price > 1 && newPrice
+          ? Math.abs(newPrice / holding.current_price - 1) > 0.05
+          : false;
+        if (sapmaVar) {
+          console.warn(`[kur] ${holding.symbol}: ${holding.current_price} → ${newPrice} (%${(100 * (newPrice / holding.current_price - 1)).toFixed(1)}) — bant dışı, DB'ye yazılmadı`);
+          return holding;
+        }
         if (newPrice && !isFallbackPrice(holding.symbol, newPrice) && Math.abs(newPrice - holding.current_price) > 0.01) {
           const { error } = await supabase
             .from('holdings')
