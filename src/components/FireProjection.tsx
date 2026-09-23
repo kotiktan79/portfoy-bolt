@@ -12,7 +12,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from 'recharts';
-import { projectFire, FireInputs } from '../services/fireProjectionService';
+import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, FireInputs } from '../services/fireProjectionService';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { chartChrome } from '../lib/chartTheme';
@@ -82,8 +82,8 @@ export default function FireProjection() {
   // Havuz kuralının (Kâr Cüzdanı) aynı hedef için istediği sermaye ve bugünkü portföyün beklentisi —
   // sayfanın kendi getiri/enflasyon girdilerinden türetilir, sabit rakam yok.
   const realRatePct = inputs.annualReturnPct - inputs.annualInflationPct;
-  const poolRuleCapital = realRatePct > 0 ? (inputs.targetMonthlyIncome * 12) / (SALARY_SAFETY * realRatePct / 100) : 0;
-  const poolRuleMonthlyNow = Math.min(MONTHLY_CAP_EUR, Math.max(0, SALARY_SAFETY * (realRatePct / 100) * currentValueEUR / 12));
+  const poolRuleCapital = poolRuleCapitalFor(inputs.targetMonthlyIncome, realRatePct, SALARY_SAFETY);
+  const poolRuleMonthlyNow = poolRuleMonthlyFrom(currentValueEUR, realRatePct, SALARY_SAFETY, MONTHLY_CAP_EUR);
 
   const projection = useMemo(() => {
     const fi: FireInputs = { currentValue: currentValueEUR, ...inputs };
@@ -256,11 +256,11 @@ export default function FireProjection() {
           {/* 2026-09-23: rakamlar sayfanın KENDİ girdilerinden türetilir (eski sabit '~€343k / ~€460k+' metni girdiler
               değişince yanlış kalıyordu ve panelle çelişiyordu). İki ölçüt ayrı ayrı yazılır ki çelişki gibi görünmesin. */}
           Dürüst not: iki farklı ölçüt var. <strong>SWR (%{inputs.safeWithdrawalRatePct})</strong> ile
-          €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay için {fmtEUR0(projection.targetPortfolio)} gerekir.
-          <strong> Kâr Cüzdanı'nın havuz kuralı</strong> (reel kârın %{Math.round(SALARY_SAFETY * 100)}'i, aylık tavan €{MONTHLY_CAP_EUR.toLocaleString('de-DE')}) ise
-          bu sayfadaki varsayımlarla (%{inputs.annualReturnPct} getiri − %{inputs.annualInflationPct} enflasyon = reel %{(inputs.annualReturnPct - inputs.annualInflationPct).toFixed(1)})
+          €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay için {projection.targetPortfolio > 0 ? fmtEUR0(projection.targetPortfolio) : '—'} gerekir.
+          <strong> Kâr Cüzdanı'nın havuz kuralı</strong> (reel kârın %{Math.round(SALARY_SAFETY * 100)}'i; çekim her hâlükârda aylık €{MONTHLY_CAP_EUR.toLocaleString('de-DE')} ile sınırlı)
+          bu sayfadaki varsayımlarla (%{inputs.annualReturnPct} getiri − %{inputs.annualInflationPct} enflasyon = reel %{realRatePct.toFixed(1)})
           {poolRuleCapital > 0 ? ` ${fmtEUR0(poolRuleCapital)}` : ' —'} ister; bugünkü portföyün bu kuralla beklenen maaşı {fmtEUR0(poolRuleMonthlyNow)}/ay ve ayların çoğu €0.
-          Kasa bu hesaba dahil değil; yastıktır.
+          Kasa bu hesaba dahil değil; yastıktır. Yerel panel aynı soruyu politika dağılımının beklenen reel getirisiyle hesapladığı için orada farklı bir sermaye rakamı görebilirsin.
         </p>
       </div>
 

@@ -33,6 +33,19 @@ export interface FireProjection {
 
 const PROJECTION_YEARS = 40;
 
+// HAVUZ KURALI (Kâr Cüzdanı) — FIRE sayfasının 'dürüst not'u bunları kullanır. Saf fonksiyon: test edilir.
+// Uzun vadede aylık maaş ≈ güvenlik payı × reel getiri × sermaye ÷ 12 (aylık tavanla sınırlı).
+/** Verilen aylık gelir için havuz kuralının istediği sermaye. Reel getiri ≤ 0 ise hedef ulaşılamaz → 0. */
+export function poolRuleCapitalFor(monthlyIncome: number, realRatePct: number, safety: number): number {
+  if (!(realRatePct > 0) || !(monthlyIncome > 0) || !(safety > 0)) return 0;
+  return (monthlyIncome * 12) / (safety * (realRatePct / 100));
+}
+/** Bugünkü sermayenin havuz kuralıyla beklenen aylık maaşı (aylık tavanla sınırlı). */
+export function poolRuleMonthlyFrom(capital: number, realRatePct: number, safety: number, monthlyCap: number): number {
+  if (!(capital > 0) || !(realRatePct > 0)) return 0;
+  return Math.min(monthlyCap, (safety * (realRatePct / 100) * capital) / 12);
+}
+
 export function projectFire(inputs: FireInputs): FireProjection {
   const {
     currentValue,
