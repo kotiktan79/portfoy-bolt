@@ -60,7 +60,7 @@ async function load(): Promise<EurModel> {
 export async function getEurDaily(): Promise<EurDaily[]> { return (await load()).daily; }
 export async function getEurMonths(): Promise<MonthRow[]> { return (await load()).months; }
 export async function getEurPnlHealth() { return (await load()).health; }
-export function invalidateEurPnlCache() { _cache = null; _rzCache = null; }
+export function invalidateEurPnlCache() { _cache = null; _rzCache = null; _cpCache.clear(); }
 
 const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 export const monthLabel = (ym: string) => `${MONTHS_TR[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -119,5 +119,22 @@ export async function getLiveEurGain(holdings: Holding[]): Promise<LiveGain | nu
   const sinceTs = model.lastSnapshot.createdAt || (model.lastSnapshot.date + 'T18:00:00Z');   // cron 18:00 UTC; created_at yoksa yaklaşık
   const ccyById = new Map<string, string>(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
   const realizedTodayTRY = await realizedSince(sinceTs, fx.usd, eurNow, ccyById).catch(() => 0);
-  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY });
+  const closePrices = await closePricesOn(model.lastSnapshot.date).catch(() => null);
+  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, closePrices });
+}
+
+/** Son snapshot GÜNÜNÜN fiyatları (price_history, sembol başına o günün son kaydı) — günlük kırılım için.
+ *  Cron her gün her pozisyona satır yazar; yoksa o pozisyon kırılımda 'diğer'e düşer, toplam yine doğru kalır. */
+const _cpCache = new Map<string, Map<string, number>>();
+async function closePricesOn(day: string): Promise<Map<string, number> | null> {
+  const hit = _cpCache.get(day); if (hit) return hit;
+  const rows = await fetchAll<{ symbol: string; price: number; recorded_at: string }>('closePrices', () => supabase
+    .from('price_history').select('symbol,price,recorded_at')
+    .gte('recorded_at', `${day}T00:00:00`).lt('recorded_at', `${day}T23:59:59.999`)
+    .order('recorded_at', { ascending: true }).order('id', { ascending: true }));
+  if (!rows.length) return null;
+  const m = new Map<string, number>();
+  for (const r of rows) { const v = Number(r.price); if (isFinite(v) && v > 0) m.set(r.symbol, v); }   // son kayıt kazanır
+  _cpCache.set(day, m);
+  return m;
 }

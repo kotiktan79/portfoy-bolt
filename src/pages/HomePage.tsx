@@ -187,6 +187,8 @@ export default function HomePage() {
                 prevWealthEUR={prevDay?.wealthEUR}
                 liveGainEUR={live?.gainEUR}
                 liveSince={live?.sinceDate}
+                liveParts={live?.parts}
+                liveFxEUR={live?.fxEUR}
                 closeWealthEUR={lastDay?.wealthEUR}
                 eurState={eurState}
                 todayDate={lastDay?.date}

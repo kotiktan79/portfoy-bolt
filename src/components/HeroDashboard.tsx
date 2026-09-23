@@ -25,6 +25,8 @@ interface HeroDashboardProps {
   todayDate?: string;
   liveGainEUR?: number;        // ANLIK: son snapshot'tan şu ana (canlı fiyatlar, aynı formül)
   liveSince?: string;          // son snapshot günü
+  liveParts?: Array<{ symbol: string; eurDelta: number; pricePct: number }>;   // günlük hareketin kırılımı
+  liveFxEUR?: number;          // kırılımın kur payı
   closeWealthEUR?: number;     // son kapanış serveti — anlık yüzdenin tabanı (LivePage ile aynı)
   totalPnLTRY?: number;
   totalPnLPct?: number;
@@ -100,6 +102,8 @@ export default function HeroDashboard({
   todayDate,
   liveGainEUR,
   liveSince,
+  liveParts,
+  liveFxEUR,
   closeWealthEUR,
   totalPnLTRY,
   totalPnLPct,
@@ -214,6 +218,15 @@ export default function HeroDashboard({
                 <span className="opacity-70">·</span>
                 <span>{todayWealthForPct > 0 ? `${liveGainEUR >= 0 ? '+' : ''}${dayPct(liveGainEUR, todayWealthForPct).toFixed(2)}% ` : ''}anlık{liveSince ? ` (${liveSince.slice(5).replace('-', '/')} kapanışından beri)` : ''}</span>
               </motion.div>
+            )}
+            {/* 2026-09-24: "neden eksi?" ekranda cevaplansın — hareketi yapan 3 pozisyon + kur payı */}
+            {(liveParts?.length || liveFxEUR !== undefined) && (
+              <p className="mt-1.5 text-[11px] text-white/70 leading-relaxed">
+                {[
+                  ...(liveParts || []).slice(0, 3).map(p => `${p.symbol} ${p.eurDelta >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(p.eurDelta))} (${p.pricePct >= 0 ? '+' : ''}${p.pricePct.toFixed(1)}%)`),
+                  ...(liveFxEUR !== undefined && Math.abs(liveFxEUR) >= 1 ? [`kur ${liveFxEUR >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(liveFxEUR))}`] : []),
+                ].join(' · ')}
+              </p>
             )}
           </div>
 

@@ -334,3 +334,53 @@ describe('canlı (gün içi) kâr — son snapshot’tan şu ana, aynı formül'
     expect(g.gainEUR).toBeCloseTo(1000 / 50, 6);   // +1.000 TL realize = €20
   });
 });
+
+// ---------------------------------------------------------------------------------
+// GÜNLÜK KIRILIM (2026-09-24): "sabah +€200, akşam eksi" şikâyeti — hareketi neyin
+// yaptığı ekranda görünsün. Kırılımın TOPLAMI her zaman gainEUR'a eşit olmalı.
+// ---------------------------------------------------------------------------------
+describe('liveEurGain — kırılım (fiyat payı + kur payı + kalan)', () => {
+  const model = (closeTRY: number, closeInv: number, eurRate: number): any => ({
+    daily: [{ date: '2026-09-22', wealthEUR: closeTRY / eurRate, gainEUR: 0, totalValueTRY: closeTRY, eurRate, usdRate: 48 }],
+    months: [], health: { ok: true, lastEurRateDay: '2026-09-22', lastSnapDay: '2026-09-22' },
+    lastSnapshot: { date: '2026-09-22', totalValue: closeTRY, totalInvestment: closeInv, createdAt: '2026-09-22T18:00:00Z' },
+    foreignCostsAtLast: [],
+  });
+
+  it('fiyat düşüşü ve kur yükselişi ayrı ayrı görünür, toplamı gainEUR eder', () => {
+    // Kapanış: 100.000 TL, kur 50 → €2.000. Şimdi: altın fiyatı %10 düştü (10 adet 5.000→4.500 = −5.000 TL),
+    // kalan 50.000 TL sabit; kur 50 → 49 (TL güçlendi, EUR değeri artar).
+    const holdings = [
+      { symbol: 'ALTIN', currency: 'TRY', quantity: 10, current_price: 4500, purchase_price: 3000 },
+      { symbol: 'TUPRS', currency: 'TRY', quantity: 100, current_price: 500, purchase_price: 400 },
+    ];
+    const close = new Map([['ALTIN', 5000], ['TUPRS', 500]]);
+    const g = liveEurGain(model(100_000, 70_000, 50), { holdings, usdNow: 48, eurNow: 49, realizedTodayTRY: 0, closePrices: close })!;
+    expect(g.parts!.map(p => p.symbol)).toEqual(['ALTIN']);            // TUPRS değişmedi → listede yok
+    expect(g.parts![0].eurDelta).toBeCloseTo(-5_000 / 49, 6);
+    expect(g.parts![0].pricePct).toBeCloseTo(-10, 6);
+    expect(g.fxEUR).toBeCloseTo(100_000 * (1 / 49 - 1 / 50), 6);       // kur payı: kapanış portföyüne
+    const toplam = g.fxEUR! + g.parts!.reduce((t, p) => t + p.eurDelta, 0) + g.otherEUR!;
+    expect(toplam).toBeCloseTo(g.gainEUR, 6);                           // KIRILIM = TOPLAM
+  });
+
+  it('kapanış fiyatı yoksa kırılım üretilmez (rakam yine doğru)', () => {
+    const holdings = [{ symbol: 'X', currency: 'TRY', quantity: 1, current_price: 100, purchase_price: 90 }];
+    const g = liveEurGain(model(100, 90, 50), { holdings, usdNow: 48, eurNow: 50 })!;
+    expect(g.parts).toBeUndefined();
+    expect(g.fxEUR).toBeUndefined();
+    expect(g.gainEUR).toBeCloseTo(0, 6);
+  });
+
+  it('fiyatı bilinmeyen pozisyon kırılımda değil ama "kalan"da sayılır', () => {
+    const holdings = [
+      { symbol: 'BILINEN', currency: 'TRY', quantity: 10, current_price: 110, purchase_price: 100 },
+      { symbol: 'BILINMEYEN', currency: 'TRY', quantity: 10, current_price: 300, purchase_price: 200 },
+    ];
+    const close = new Map([['BILINEN', 100]]);   // BILINMEYEN'in kapanış fiyatı yok
+    const g = liveEurGain(model(1000 + 2000, 1000 + 2000, 50), { holdings, usdNow: 48, eurNow: 50, closePrices: close })!;
+    expect(g.parts!.length).toBe(1);
+    const toplam = g.fxEUR! + g.parts!.reduce((t, p) => t + p.eurDelta, 0) + g.otherEUR!;
+    expect(toplam).toBeCloseTo(g.gainEUR, 6);
+  });
+});

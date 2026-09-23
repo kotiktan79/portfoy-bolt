@@ -365,13 +365,21 @@ export function summarizeEur(model: EurModel, todayYM: string): EurSummary {
 // Eski 'anlık' rakam TL'ydi ve kur şişmesi taşıyordu; bu sürüm euro cetveliyle motorun devamıdır.
 // Snapshot alındığında (18:00 UTC) motorun o günkü gainEUR'üne yakınsar, sonra sıfırdan başlar.
 // ------------------------------------------------------------------------------------
-export interface LiveHolding { currency?: string | null; quantity: number | string | null; current_price?: number | string | null; purchase_price?: number | string | null }
+export interface LiveHolding { symbol?: string; currency?: string | null; quantity: number | string | null; current_price?: number | string | null; purchase_price?: number | string | null }
 export interface LiveGainInput {
   holdings: LiveHolding[];
   usdNow: number; eurNow: number;        // şu anki kurlar (snapshot cron'u ile aynı kaynak: USD/EURO pozisyon fiyatı)
   realizedTodayTRY?: number;             // son snapshot ZAMANINDAN sonra gerçekleşen satış K/Z (TL)
+  closePrices?: Map<string, number> | null;   // son snapshot günündeki fiyatlar (price_history) — kırılım için
 }
-export interface LiveGain { gainEUR: number; wealthEUR: number; sinceDate: string; totalValueTRY: number }
+/** Günlük hareketin kırılımı: hangi varlık ne kattı + kur payı (2026-09-24: "neden eksi?" ekranda cevaplansın). */
+export interface LiveGainPart { symbol: string; eurDelta: number; pricePct: number }
+export interface LiveGain {
+  gainEUR: number; wealthEUR: number; sinceDate: string; totalValueTRY: number;
+  fxEUR?: number;              // kapanış portföyüne kurun etkisi (fiyatlar sabitken)
+  parts?: LiveGainPart[];      // fiyat hareketinden gelenler, mutlak büyüklüğe göre sıralı
+  otherEUR?: number;           // kalan (miktar değişimi, fiyatı bilinmeyen pozisyon, akış artığı)
+}
 
 export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | null {
   const last = model.lastSnapshot; if (!last) return null;
@@ -389,5 +397,28 @@ export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | nul
   const drift = model.foreignCostsAtLast.reduce((d, c) => d + c.costNative * ((c.currency === 'USD' ? inp.usdNow - usdLast : inp.eurNow - eurLast)), 0);
   const flowTRY = (I - last.totalInvestment) - drift - (inp.realizedTodayTRY || 0);
   const gainEUR = V / inp.eurNow - last.totalValue / eurLast - flowTRY / inp.eurNow;
-  return { gainEUR, wealthEUR: V / inp.eurNow, sinceDate: last.date, totalValueTRY: V };
+  const out: LiveGain = { gainEUR, wealthEUR: V / inp.eurNow, sinceDate: last.date, totalValueTRY: V };
+
+  // KIRILIM (varsa kapanış fiyatları): kur payı + pozisyon bazında fiyat payı + kalan.
+  // Kur payı, KAPANIŞ portföyünün kur değişiminden etkilenmesi: V0 × (1/e_now − 1/e_0).
+  // Fiyat payı, her pozisyonun bugünkü kurla değerlenmiş fiyat farkı. Toplamları gainEUR'a eşitlenir (kalan 'other').
+  if (inp.closePrices && inp.closePrices.size) {
+    const fxEUR = last.totalValue * (1 / inp.eurNow - 1 / eurLast);
+    const parts: LiveGainPart[] = [];
+    for (const h of inp.holdings) {
+      const sym = String(h.symbol || ''); if (!sym) continue;
+      const p0 = inp.closePrices.get(sym);
+      if (p0 === undefined || !isFinite(p0)) continue;
+      const q = Number(h.quantity) || 0, cp = Number(h.current_price) || Number(h.purchase_price) || 0;
+      if (!q || !cp || !p0) continue;
+      const eurDelta = q * (cp - p0) * fxNow(h.currency) / inp.eurNow;
+      if (Math.abs(eurDelta) < 0.5) continue;      // gürültüyü gösterme
+      parts.push({ symbol: sym, eurDelta, pricePct: (cp / p0 - 1) * 100 });
+    }
+    parts.sort((a, b) => Math.abs(b.eurDelta) - Math.abs(a.eurDelta));
+    out.fxEUR = fxEUR;
+    out.parts = parts;
+    out.otherEUR = gainEUR - fxEUR - parts.reduce((t, p) => t + p.eurDelta, 0);
+  }
+  return out;
 }
