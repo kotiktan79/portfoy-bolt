@@ -21,7 +21,7 @@ import { chartChrome } from '../lib/chartTheme';
 // Eski sürüm USD'ydi, hedefi salary_settings'ten ($1.500) alıyordu ve 'aylık katkı'yı son 90 günün
 // mevduat farkından türetiyordu — o fark kasa→portföy İÇ transferiydi ($7.076/ay 'katkı' sanıp
 // '2 yıl 7 ay' diyordu). Gerçek: dış katkı yok, hedef €1.000/ay, gerçekçi getiriyle ~17-21 yıl.
-import { MONTHLY_CAP_EUR, INFLATION_EUR } from '../lib/eurPnl';
+import { MONTHLY_CAP_EUR, INFLATION_EUR, SALARY_SAFETY } from '../lib/eurPnl';
 import { getEurDaily } from '../services/eurPnlService';
 import { fmtEUR0, fmtAxisEUR } from '../lib/chartTheme';
 
@@ -78,6 +78,12 @@ export default function FireProjection() {
   // Yedek: USD toplamı EUR'ya (motor gelene kadar); EUR/USD ≈ 1,15 varsayımı yalnız ilk render için
   const fallbackEUR = portfolioMetrics.totalCurrentValueUSD > 0 ? portfolioMetrics.totalCurrentValueUSD / 1.15 : 0;
   const currentValueEUR = wealthEUR ?? fallbackEUR;
+
+  // Havuz kuralının (Kâr Cüzdanı) aynı hedef için istediği sermaye ve bugünkü portföyün beklentisi —
+  // sayfanın kendi getiri/enflasyon girdilerinden türetilir, sabit rakam yok.
+  const realRatePct = inputs.annualReturnPct - inputs.annualInflationPct;
+  const poolRuleCapital = realRatePct > 0 ? (inputs.targetMonthlyIncome * 12) / (SALARY_SAFETY * realRatePct / 100) : 0;
+  const poolRuleMonthlyNow = Math.min(MONTHLY_CAP_EUR, Math.max(0, SALARY_SAFETY * (realRatePct / 100) * currentValueEUR / 12));
 
   const projection = useMemo(() => {
     const fi: FireInputs = { currentValue: currentValueEUR, ...inputs };
@@ -247,8 +253,14 @@ export default function FireProjection() {
           </ComposedChart>
         </ResponsiveContainer>
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
-          Dürüst not: Kâr Cüzdanı'ndaki havuz kuralıyla (aylık reel kârın %85'i) bu portföyün beklenen maaşı ~€130-170/ay, ayların çoğu €0.
-          €1.000/ay için SWR ile ~€343k, havuz kuralıyla ~€460k+ sermaye gerekir. Kasa (€28,8k) bu hesaba dahil değil; yastıktır.
+          {/* 2026-09-23: rakamlar sayfanın KENDİ girdilerinden türetilir (eski sabit '~€343k / ~€460k+' metni girdiler
+              değişince yanlış kalıyordu ve panelle çelişiyordu). İki ölçüt ayrı ayrı yazılır ki çelişki gibi görünmesin. */}
+          Dürüst not: iki farklı ölçüt var. <strong>SWR (%{inputs.safeWithdrawalRatePct})</strong> ile
+          €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay için {fmtEUR0(projection.targetPortfolio)} gerekir.
+          <strong> Kâr Cüzdanı'nın havuz kuralı</strong> (reel kârın %{Math.round(SALARY_SAFETY * 100)}'i, aylık tavan €{MONTHLY_CAP_EUR.toLocaleString('de-DE')}) ise
+          bu sayfadaki varsayımlarla (%{inputs.annualReturnPct} getiri − %{inputs.annualInflationPct} enflasyon = reel %{(inputs.annualReturnPct - inputs.annualInflationPct).toFixed(1)})
+          {poolRuleCapital > 0 ? ` ${fmtEUR0(poolRuleCapital)}` : ' —'} ister; bugünkü portföyün bu kuralla beklenen maaşı {fmtEUR0(poolRuleMonthlyNow)}/ay ve ayların çoğu €0.
+          Kasa bu hesaba dahil değil; yastıktır.
         </p>
       </div>
 
