@@ -82,8 +82,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const eurHolding = allHoldings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
     const usdFromHolding = Number(usdHolding?.current_price) || 0;
     const eurFromHolding = Number(eurHolding?.current_price) || 0;
+    // Kur YOKSA snapshot yazma: uydurma sabitle yazılan bir gün, serveti kaydırıp maaş havuzuna sahte kâr sokuyor
+    // (2026-09-24 hakem bulgusu). Öncelik: holding fiyatı > canlı API; ikisi de yoksa bu çalışma iptal.
     const usdRateForTotal = usdFromHolding > 1 ? usdFromHolding : await fetchUsdTry();
     const eurRateForTotal = eurFromHolding > 1 ? eurFromHolding : await fetchEurTry();
+    if (usdRateForTotal == null || eurRateForTotal == null || !(usdRateForTotal > 1) || !(eurRateForTotal > 1)) {
+      log.push(`KUR YOK (USD=${usdRateForTotal ?? '—'}, EUR=${eurRateForTotal ?? '—'}) — snapshot YAZILMADI (sahte rakam üretmektense gün atlanır)`);
+      return res.status(200).json({ success: false, error: 'FX kaynağı yok — snapshot atlandı', log });
+    }
     log.push(`FX: USD=${usdRateForTotal.toFixed(4)} (${usdFromHolding > 1 ? 'holding' : 'live'}), EUR=${eurRateForTotal.toFixed(4)} (${eurFromHolding > 1 ? 'holding' : 'live'})`);
 
     const tryValueOf = (h: any, priceField: 'current_price' | 'purchase_price') => {
@@ -391,6 +397,7 @@ async function updateCryptoPrices(supabase: any, holdings: any[], result: PriceR
   try {
     const usdTry = await fetchUsdTry();
 
+    if (usdTry == null) { log.push('FX yok → USD fiyatları TL\'ye çevrilmedi'); return; }
     for (const h of holdings) {
       const usdPrice = priceMap[h.symbol.toUpperCase()];
       if (usdPrice) {
@@ -503,7 +510,7 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
           let priceToWrite: number;
           if (holdingCurrency === 'USD') priceToWrite = price;
           else if (holdingCurrency === 'EUR') priceToWrite = price;
-          else priceToWrite = price * (isEuropean ? eurTry : usdTry); // currency=TRY ise çevir
+          else { const k = isEuropean ? eurTry : usdTry; if (k == null) { result.failed++; continue; } priceToWrite = price * k; }   // currency=TRY ise çevir
 
           // Sanity guard — aynı currency içinde karşılaştır (eski/yeni aynı birimde)
           const oldPrice = Number(h.current_price) || 0;
@@ -541,6 +548,10 @@ async function updateCurrencyPrices(supabase: any, holdings: any[], result: Pric
   try {
     const usdTry = await fetchUsdTry();
     const eurTry = await fetchEurTry();
+    if (usdTry == null || eurTry == null) {
+      log.push(`FX kaynağı yok (USD=${usdTry ?? '—'}, EUR=${eurTry ?? '—'}) → kur satırları GÜNCELLENMEDİ, eski fiyat korundu`);
+      return;
+    }
 
     const rateMap: Record<string, number> = {
       USD: usdTry,
@@ -566,6 +577,13 @@ async function updateCurrencyPrices(supabase: any, holdings: any[], result: Pric
       const sym = h.symbol.toUpperCase();
       const rate = rateMap[sym];
       if (rate) {
+        // SAPMA BANDI: kur servetin tamamını böldüğü için tek hatalı yazım on binlerce euro sahte kâr üretir.
+        const onceki = Number(h.current_price) || 0;
+        if (onceki > 1 && Math.abs(rate / onceki - 1) > 0.05) {
+          log.push(`⚠️ ${sym}: ${onceki.toFixed(3)} → ${rate.toFixed(3)} (%${(100 * (rate / onceki - 1)).toFixed(1)}) bant dışı — YAZILMADI`);
+          result.failed++;
+          continue;
+        }
         await supabase.from('holdings').update({ current_price: rate, updated_at: new Date().toISOString() }).eq('id', h.id);
         result.updated++;
         result.details[h.symbol] = rate;
@@ -598,11 +616,11 @@ async function updateCommodityPrices(supabase: any, holdings: any[], result: Pri
           log.push(`Altın: TR gram altın ${trGram.toFixed(2)} TRY (truncgil)`);
         } else {
           const goldOz = await fetchGoldPrice();
-          if (goldOz) { price = (goldOz / 31.1035) * usdTry; log.push(`Altın: spot fallback ${price.toFixed(2)} TRY`); }
+          if (goldOz && usdTry != null) { price = (goldOz / 31.1035) * usdTry; log.push(`Altın: spot fallback ${price.toFixed(2)} TRY`); }
         }
       } else if (sym.includes('SILVER') || sym.includes('GUMUS') || sym === 'XAG') {
         const silverOz = await fetchSilverPrice();
-        if (silverOz) price = (silverOz / 31.1035) * usdTry;
+        if (silverOz && usdTry != null) price = (silverOz / 31.1035) * usdTry;
       }
 
       if (price) {
@@ -695,9 +713,11 @@ async function updateEurobondPrices(supabase: any, holdings: any[], result: Pric
       if (holdingCurrency === 'EUR') {
         const usdTry = await fetchUsdTry();
         const eurTry = await fetchEurTry();
+        if (usdTry == null || eurTry == null) continue;           // kur yoksa fiyat yazma
         priceToWrite = usdPrice * (usdTry / eurTry); // USD → EUR
       } else if (holdingCurrency === 'TRY') {
         const usdTry = await fetchUsdTry();
+        if (usdTry == null) continue;
         priceToWrite = usdPrice * usdTry;
       }
       // Sanity guard
@@ -727,32 +747,33 @@ async function updateEurobondPrices(supabase: any, holdings: any[], result: Pric
 let _usdTryCache: { value: number; ts: number } | null = null;
 let _eurTryCache: { value: number; ts: number } | null = null;
 
-async function fetchUsdTry(): Promise<number> {
+// 2026-09-24 (hakem bulgusu): sabit yedek kur (USD 46,7 / EUR 53,3) KALDIRILDI. Kaynak düştüğü gece
+// bu rakam snapshot'a ve exchange_rates'e 'api' olarak yazılıyor, serveti %4-5 kaydırıp maaş havuzuna
+// sahte kâr sokuyordu. Artık kur bilinmiyorsa null döner; çağıran ya holding'deki kuru kullanır ya işlemi atlar.
+async function fetchUsdTry(): Promise<number | null> {
   if (_usdTryCache && Date.now() - _usdTryCache.ts < 60000) return _usdTryCache.value;
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD');
     if (res.ok) {
       const data = await res.json();
-      const rate = data.rates?.TRY || 46.7;
-      _usdTryCache = { value: rate, ts: Date.now() };
-      return rate;
+      const rate = Number(data.rates?.TRY);
+      if (isFinite(rate) && rate > 1) { _usdTryCache = { value: rate, ts: Date.now() }; return rate; }
     }
-  } catch { /* fallback */ }
-  return _usdTryCache?.value || 46.7;
+  } catch { /* kaynak yok */ }
+  return _usdTryCache?.value ?? null;
 }
 
-async function fetchEurTry(): Promise<number> {
+async function fetchEurTry(): Promise<number | null> {
   if (_eurTryCache && Date.now() - _eurTryCache.ts < 60000) return _eurTryCache.value;
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/EUR');
     if (res.ok) {
       const data = await res.json();
-      const rate = data.rates?.TRY || 53.3;
-      _eurTryCache = { value: rate, ts: Date.now() };
-      return rate;
+      const rate = Number(data.rates?.TRY);
+      if (isFinite(rate) && rate > 1) { _eurTryCache = { value: rate, ts: Date.now() }; return rate; }
     }
-  } catch { /* fallback */ }
-  return _eurTryCache?.value || 53.3;
+  } catch { /* kaynak yok */ }
+  return _eurTryCache?.value ?? null;
 }
 
 // Tüm para birimlerinin USD karşılıkları (1 USD = rates[CCY]). Tek istek,
