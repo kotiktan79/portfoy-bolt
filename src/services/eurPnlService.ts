@@ -51,7 +51,7 @@ async function load(): Promise<EurModel> {
     fetchAll<any>('payouts', () => supabase.from('income_records')
       .select('income_date,amount,currency,income_type,destination,is_projected')
       .eq('is_projected', false).eq('destination', 'kasa')
-      .in('income_type', ['dividend', 'coupon', 'interest', 'staking'])
+      .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
   ]);
   const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
@@ -95,7 +95,7 @@ export async function getEurWeeks(): Promise<Array<{ key: string; label: string;
 /** CANLI (gün içi) kâr: son snapshot'tan şu ana, motorla aynı formül; fiyatlar güncel holdings'ten.
  *  Realize (bugünkü satışlar) küçük bir sorguyla eklenir; 2 dk önbellek. */
 import { liveEurGain, type LiveGain } from '../lib/eurPnl';
-import { getFxRatesFromHoldings, USD_CROSS } from '../lib/fx';
+import { getFxRatesFromHoldings } from '../lib/fx';
 import type { Holding } from '../lib/supabase';
 let _rzCache: { ts: number; since: string; tl: number } | null = null;
 /** Son snapshot'ın ZAMAN DAMGASINDAN sonraki satışların realize'ı (TL). Sınır iki sorguda da aynı (hakem 2026-09-22:
@@ -132,8 +132,11 @@ export async function getLiveEurGain(holdings: Holding[]): Promise<LiveGain | nu
   const ccyById = new Map<string, string>(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
   const realizedTodayTRY = await realizedSince(sinceTs, fx.usd, eurNow, ccyById).catch(() => 0);
   const closePrices = await closePricesOn(model.lastSnapshot.date, sinceTs).catch(() => null);
-  // TRY/USD/EUR dışı birimler: src/lib/fx.ts USD_CROSS ile AYNI çapraz (tek kaynak); bugün böyle pozisyon yok
-  const otherNow = Object.fromEntries(Object.entries(USD_CROSS).map(([c, perUsd]) => [c, fx.usd / perUsd]));
+  // 2026-09-27 (hakem): SABİT çapraz tablo (USD_CROSS) kâr yoluna girmişti — 'sabit yedek kur YASAK' kuralına aykırı.
+  // Artık 'şu anki kur' = motorun kur serisinin SON GÜNÜ (exchange_rates_daily, source=api). Seri yoksa birim
+  // atlanır ve liveEurGain onu unknownCcy ile bildirir; uydurma çapraz kullanılmaz.
+  const otherNow = { ...model.ratesAtLast };
+  delete otherNow.USD; delete otherNow.EUR;
   return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, closePrices, otherNow });
 }
 

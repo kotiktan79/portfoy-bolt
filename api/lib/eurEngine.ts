@@ -44,7 +44,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     fetchAll<any>('payouts', () => supabase.from('income_records')
       .select('income_date,amount,currency,income_type,destination,is_projected')
       .eq('is_projected', false).eq('destination', 'kasa')
-      .in('income_type', ['dividend', 'coupon', 'interest', 'staking'])
+      .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
   ]);
   const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : 45;

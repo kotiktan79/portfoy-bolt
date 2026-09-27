@@ -33,7 +33,9 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
   // 2026-09-27: para nereye geldi? Motor bunu bilmeden kâr düzeltmesi YAPMAZ.
   // 'kasa'   → portföyden çıktı: ödeme günü fiyat düşüşü zarar sayılmaz, akış olarak düşülür.
   // 'portfoy'→ portföyde kaldı: servet değişmedi, düzeltme gerekmez.
-  const [destination, setDestination] = useState<'kasa' | 'portfoy'>('kasa');
+  // Varsayılan YOK (2026-09-27 hakem): tek tuşla 'kasa' işaretlenen bir kayıt kâr düzeltmesi tetikliyordu.
+  // Seçim yapılmazsa destination null gider ve motor DÜZELTME YAPMAZ (temkinli taraf).
+  const [destination, setDestination] = useState<'kasa' | 'portfoy' | null>(null);
   const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
@@ -75,6 +77,7 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
       is_projected: isProjected,
       // 'profit_taking' realize zinciriyle çakışır (cash_transactions K/Z notu) → motor onu payout saymaz,
       // bu yüzden hedef yalnız gerçek gelir türlerinde anlamlı; yine de kaydedilir ki geçmiş izlenebilsin.
+      // düzeltme yalnız temettü/kupon için anlamlı; diğer türlerde hedef bilgisi saklanır ama motor kullanmaz
       destination,
     }]);
 
@@ -98,7 +101,7 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
     setIncomeDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setIsProjected(false);
-    setDestination('kasa');
+    setDestination(null);
   };
 
   return (
@@ -136,30 +139,34 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
             </div>
           </div>
 
-          {/* Para nereye geldi — kâr hesabının doğruluğu buna bağlı */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Para nereye geldi?</label>
-            <div className="flex gap-1.5 mt-1.5">
-              {([['kasa', 'Kasaya (portföy dışı)'], ['portfoy', 'Portföyde kaldı']] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => setDestination(v)}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    destination === v
-                      ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300 ring-2 ring-offset-1 ring-brand-400'
-                      : 'bg-slate-100 dark:bg-gray-800 text-gray-500'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          {/* Para nereye geldi — yalnız temettü/kupon için kâr düzeltmesi tetikler */}
+          {(incomeType === 'dividend' || incomeType === 'coupon') && (
+            <div>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Para nereye geldi?</label>
+              <div className="flex gap-1.5 mt-1.5">
+                {([['kasa', 'Kasaya (portföy dışı)'], ['portfoy', 'Portföyde kaldı']] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => setDestination(v)}
+                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      destination === v
+                        ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300 ring-2 ring-offset-1 ring-brand-400'
+                        : 'bg-slate-100 dark:bg-gray-800 text-gray-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
+                {destination === 'kasa'
+                  ? 'Portföy değeri bu tutar kadar düştü ve para dışarı çıktı → ZARAR sayılmaz, akış olarak düşülür. Aşağıdaki tarih, değerin DÜŞTÜĞÜ gün olmalı (ex-div), ödeme günü değil.'
+                  : destination === 'portfoy'
+                    ? 'Nakit portföy içinde kaldı → servet değişmedi, kâr düzeltmesi yapılmaz.'
+                    : 'Seçmezsen kâr düzeltmesi YAPILMAZ (temkinli). Emin değilsen boş bırak.'}
+              </p>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-              {destination === 'kasa'
-                ? 'Ödeme günü hisse fiyatı düşer; bu tutar ZARAR sayılmaz, portföyden çıkış olarak düşülür. Para kasada görünür.'
-                : 'Nakit portföy içinde kaldı → servet değişmedi, kâr düzeltmesi yapılmaz.'}
-            </p>
-          </div>
+          )}
 
           {/* Kaynak Varlık */}
           <div>
@@ -218,7 +225,7 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
 
           {/* Tarih */}
           <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tarih</label>
+            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tarih (temettüde: değerin düştüğü gün)</label>
             <input
               type="date"
               value={incomeDate}

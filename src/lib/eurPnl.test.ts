@@ -66,6 +66,76 @@ describe('eurPnl', () => {
     expect(eurGainBetween(a, b, flat, { payoutTRY: 5_000 })).toBeCloseTo(100, 6);
   });
 
+  it('(e5) snapshot GÜNÜ OLMAYAN temettü/realize ERTELENİR — kapanmış güne sahte kâr yazılmaz (hakem 2026-09-27)', () => {
+    // Snapshot serisi 1-2 Ağustos. Temettü 5 Ağustos tarihli (henüz snapshot yok).
+    // Eski davranış: son güne (2 Ağustos, KAPANMIŞ) yazılıp +€100 sahte kâr üretiyordu.
+    const model = buildEurModel({
+      snapshots: [
+        { snapshot_date: '2026-08-01', total_value: 100_000, total_investment: 80_000 },
+        { snapshot_date: '2026-08-02', total_value: 100_000, total_investment: 80_000 },
+      ],
+      eurRates: [{ recorded_at: '2026-08-01', rate: 50 }, { recorded_at: '2026-08-02', rate: 50 }],
+      usdRates: [{ recorded_at: '2026-08-01', rate: 40 }, { recorded_at: '2026-08-02', rate: 40 }],
+      transactions: [], cashSells: [], holdings: [],
+      usdNow: 40, reliableFrom: '2026-08-01', annualInflation: 0,
+      payouts: [{ date: '2026-08-05', amount: 5_000, currency: 'TRY' }],
+    });
+    expect(model.daily[1].gainEUR).toBeCloseTo(0, 6);          // sahte kâr YOK
+    expect(model.health.pendingAdjustments).toBe(1);            // ertelendi ve görünür
+  });
+
+  it('(e6) snapshot günü GELDİĞİNDE temettü doğru güne işlenir', () => {
+    const model = buildEurModel({
+      snapshots: [
+        { snapshot_date: '2026-08-01', total_value: 100_000, total_investment: 80_000 },
+        { snapshot_date: '2026-08-05', total_value: 95_000, total_investment: 80_000 },   // temettü kadar düştü
+      ],
+      eurRates: [{ recorded_at: '2026-08-01', rate: 50 }, { recorded_at: '2026-08-05', rate: 50 }],
+      usdRates: [{ recorded_at: '2026-08-01', rate: 40 }, { recorded_at: '2026-08-05', rate: 40 }],
+      transactions: [], cashSells: [], holdings: [],
+      usdNow: 40, reliableFrom: '2026-08-01', annualInflation: 0,
+      payouts: [{ date: '2026-08-05', amount: 5_000, currency: 'TRY' }],
+    });
+    expect(model.daily[1].gainEUR).toBeCloseTo(0, 6);           // düşüş akışla eşleşti → kâr 0
+    expect(model.health.pendingAdjustments).toBeUndefined();
+  });
+
+  it('(e7) anlık drift BİRİM BAZINDA: ruble maliyeti EUR/TRY farkıyla çarpılmaz (hakem 2026-09-27)', () => {
+    // 1.000.000 ₽ maliyet. Kapanıştan şimdiye: EUR/TRY 50→52 (büyük), RUB/TRY 0,60→0,61 (küçük).
+    // Eski kod rubleyi 'EUR' kovasına atıp drift = 1.000.000 × 2 = 2.000.000 TL hesaplıyordu (doğrusu 10.000 TL).
+    const model: any = {
+      daily: [{ date: '2026-08-02', wealthEUR: 2000, gainEUR: 0, totalValueTRY: 100_000, eurRate: 50, usdRate: 40 }],
+      months: [], health: { ok: true, lastEurRateDay: '2026-08-02', lastSnapDay: '2026-08-02' },
+      lastSnapshot: { date: '2026-08-02', totalValue: 100_000, totalInvestment: 100_000 },
+      foreignCostsAtLast: [{ currency: 'RUB', costNative: 1_000_000 }],
+      ratesAtLast: { USD: 40, EUR: 50, RUB: 0.60 },
+    };
+    const holdings = [{ symbol: 'RUBPOS', asset_type: 'currency', currency: 'RUB', quantity: 1_000_000, current_price: 1, purchase_price: 1 }];
+    const g = liveEurGain(model, { holdings, usdNow: 40, eurNow: 52, otherNow: { RUB: 0.61 } })!;
+    // V = 1.000.000 × 1 × 0,61 = 610.000 TL → €11.730,77 ; V0/e0 = 100.000/50 = €2.000
+    // akış = (I − I0) − drift = (610.000 − 100.000) − 1.000.000×(0,61−0,60) = 510.000 − 10.000 = 500.000
+    // kâr = 11.730,77 − 2.000 − 500.000/52 = 11.730,77 − 2.000 − 9.615,38 = €115,39
+    expect(g.gainEUR).toBeCloseTo(610_000 / 52 - 2_000 - (510_000 - 10_000) / 52, 6);
+    expect(g.unknownCcy).toBeUndefined();
+  });
+
+  it('(e8) kuru BİLİNMEYEN birim anlık hesaba katılmaz ve bildirilir', () => {
+    const model: any = {
+      daily: [{ date: '2026-08-02', wealthEUR: 2000, gainEUR: 0, totalValueTRY: 100_000, eurRate: 50, usdRate: 40 }],
+      months: [], health: { ok: true, lastEurRateDay: '2026-08-02', lastSnapDay: '2026-08-02' },
+      lastSnapshot: { date: '2026-08-02', totalValue: 100_000, totalInvestment: 100_000 },
+      foreignCostsAtLast: [], ratesAtLast: { USD: 40, EUR: 50 },
+    };
+    const holdings = [
+      { symbol: 'TL', asset_type: 'stock', currency: 'TRY', quantity: 1, current_price: 100_000, purchase_price: 100_000 },
+      { symbol: 'GARIP', asset_type: 'stock', currency: 'XYZ', quantity: 5, current_price: 1000, purchase_price: 1000 },
+    ];
+    const g = liveEurGain(model, { holdings, usdNow: 40, eurNow: 50 })!;
+    expect(g.unknownCcy).toEqual(['XYZ']);
+    expect(g.totalValueTRY).toBeCloseTo(100_000, 6);      // XYZ pozisyonu değere KATILMADI (1 TL sayılmadı)
+    expect(g.gainEUR).toBeCloseTo(0, 6);
+  });
+
   it('(f) aylık: enflasyon payı, zarar devri, maaş', () => {
     const daily = [
       { date: '2026-06-01', gainEUR: 0, wealthEUR: 150000 }, { date: '2026-06-30', gainEUR: -4000, wealthEUR: 146000 },
