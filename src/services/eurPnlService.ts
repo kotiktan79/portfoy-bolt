@@ -31,15 +31,17 @@ export async function fetchAll<T>(name: string, build: () => any): Promise<T[]> 
 
 async function load(): Promise<EurModel> {
   if (_cache && Date.now() - _cache.ts < TTL) return _cache.value;
-  const rateQ = (ccy: 'EUR' | 'USD') => () => supabase.from('exchange_rates_daily').select('day,rate')
+  const OTHER_CCY = ['RUB', 'RON', 'GBP', 'CHF'];   // TRY/USD/EUR dışı; exchange_rates_daily'de mevcut
+  const rateQ = (ccy: string) => () => supabase.from('exchange_rates_daily').select('day,rate')
     .eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true });
-  const [snaps, eurRates, usdRates, txs, cashSells, holds, withdrawals] = await Promise.all([
+  const [snaps, eurRates, usdRates, otherRates, txs, cashSells, holds, withdrawals] = await Promise.all([
     fetchAll<{ snapshot_date: string; total_value: number; total_investment: number }>('snapshots', () => supabase
       .from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
       .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).order('id', { ascending: true })),
     // exchange_rates_daily: gün başına son kur (~170 satır) — ham tablo 2.800+ satır, tavanda kesiliyordu (2026-09-19)
     fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
     fetchAll<{ day: string; rate: number }>('usd', rateQ('USD')),
+    Promise.all(OTHER_CCY.map(c => fetchAll<{ day: string; rate: number }>(c.toLowerCase(), rateQ(c)))),
     fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
@@ -48,6 +50,8 @@ async function load(): Promise<EurModel> {
   const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
   const value = buildEurModel({
     snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
+    // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın
+    otherRates: Object.fromEntries(OTHER_CCY.map((c, i) => [c, dailyRows(otherRates[i])])),
     transactions: txs, cashSells, holdings: holds,
     usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
@@ -83,7 +87,7 @@ export async function getEurWeeks(): Promise<Array<{ key: string; label: string;
 /** CANLI (gün içi) kâr: son snapshot'tan şu ana, motorla aynı formül; fiyatlar güncel holdings'ten.
  *  Realize (bugünkü satışlar) küçük bir sorguyla eklenir; 2 dk önbellek. */
 import { liveEurGain, type LiveGain } from '../lib/eurPnl';
-import { getFxRatesFromHoldings } from '../lib/fx';
+import { getFxRatesFromHoldings, USD_CROSS } from '../lib/fx';
 import type { Holding } from '../lib/supabase';
 let _rzCache: { ts: number; since: string; tl: number } | null = null;
 /** Son snapshot'ın ZAMAN DAMGASINDAN sonraki satışların realize'ı (TL). Sınır iki sorguda da aynı (hakem 2026-09-22:
@@ -120,7 +124,9 @@ export async function getLiveEurGain(holdings: Holding[]): Promise<LiveGain | nu
   const ccyById = new Map<string, string>(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
   const realizedTodayTRY = await realizedSince(sinceTs, fx.usd, eurNow, ccyById).catch(() => 0);
   const closePrices = await closePricesOn(model.lastSnapshot.date, sinceTs).catch(() => null);
-  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, closePrices });
+  // TRY/USD/EUR dışı birimler: src/lib/fx.ts USD_CROSS ile AYNI çapraz (tek kaynak); bugün böyle pozisyon yok
+  const otherNow = Object.fromEntries(Object.entries(USD_CROSS).map(([c, perUsd]) => [c, fx.usd / perUsd]));
+  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, closePrices, otherNow });
 }
 
 /** Son snapshot GÜNÜNÜN fiyatları (price_history, sembol başına o günün son kaydı) — günlük kırılım için.

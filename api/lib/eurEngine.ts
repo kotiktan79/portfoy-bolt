@@ -26,13 +26,15 @@ export async function fetchAll<T>(name: string, build: () => any): Promise<T[]> 
 
 export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> {
   const dailyRows = (rows: Array<{ day: string; rate: number }>) => rows.map(r => ({ recorded_at: String(r.day), rate: Number(r.rate) }));
-  const rateQ = (ccy: 'EUR' | 'USD') => () => supabase.from('exchange_rates_daily').select('day,rate')
+  const OTHER_CCY = ['RUB', 'RON', 'GBP', 'CHF'];   // TRY/USD/EUR dışı; exchange_rates_daily'de mevcut
+  const rateQ = (ccy: string) => () => supabase.from('exchange_rates_daily').select('day,rate')
     .eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true });
-  const [snaps, eurRates, usdRates, txs, cashSells, holds, withdrawals] = await Promise.all([
+  const [snaps, eurRates, usdRates, otherRates, txs, cashSells, holds, withdrawals] = await Promise.all([
     fetchAll<any>('snapshots', () => supabase.from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
       .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).order('id', { ascending: true })),
     fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
     fetchAll<{ day: string; rate: number }>('usd', rateQ('USD')),
+    Promise.all(OTHER_CCY.map(c => fetchAll<{ day: string; rate: number }>(c.toLowerCase(), rateQ(c)))),
     fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
@@ -41,6 +43,8 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
   const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : 45;
   return buildEurModel({
     snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
+    // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın
+    otherRates: Object.fromEntries(OTHER_CCY.map((c, i) => [c, dailyRows(otherRates[i])])),
     transactions: txs, cashSells, holdings: holds,
     usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),

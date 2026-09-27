@@ -34,11 +34,18 @@ describe('eurPnl', () => {
   it('(e) kur-drift: €7.188 V3YL maliyeti, EUR/TRY 54.7→55.94, alım yok → drift = 7188×1.24 TL; akıştan düşülünce kâr 0', () => {
     const a = { date: '2026-08-01', totalValue: 7188 * 54.7, totalInvestment: 7188 * 54.7 };
     const b = { date: '2026-08-31', totalValue: 7188 * 55.94, totalInvestment: 7188 * 55.94 }; // snapshot maliyeti kurla büyüdü
-    const drift = fxDriftTRY([{ currency: 'EUR', costNative: 7188 }], '2026-08-01', '2026-08-31', usd, eur);
+    const ser = (c: string) => (c === 'USD' ? usd : c === 'EUR' ? eur : null);
+    const drift = fxDriftTRY([{ currency: 'EUR', costNative: 7188 }], '2026-08-01', '2026-08-31', ser);
     expect(drift).toBeCloseTo(7188 * (55.94 - 54.7), 4);
     expect(eurGainBetween(a, b, eur, { fxDriftTRY: drift })).toBeCloseTo(0, 6);
     expect(eurGainBetween(a, b, eur)).toBeLessThan(-100); // drift düşülmezse sahte zarar
   });
+  it('(e2) kuru bilinmeyen para birimi: drift 0 katar, hesap çökmez (2026-09-27)', () => {
+    const ser = (c: string) => (c === 'USD' ? usd : c === 'EUR' ? eur : null);
+    const d = fxDriftTRY([{ currency: 'RUB', costNative: 1_000_000 }, { currency: 'EUR', costNative: 100 }], '2026-08-01', '2026-08-31', ser);
+    expect(d).toBeCloseTo(100 * (55.94 - 54.7), 6);      // yalnız EUR bacağı sayıldı, RUB sessizce 0
+  });
+
   it('(f) aylık: enflasyon payı, zarar devri, maaş', () => {
     const daily = [
       { date: '2026-06-01', gainEUR: 0, wealthEUR: 150000 }, { date: '2026-06-30', gainEUR: -4000, wealthEUR: 146000 },

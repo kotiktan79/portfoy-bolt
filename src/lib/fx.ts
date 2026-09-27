@@ -29,7 +29,7 @@ export function getFxRatesFromHoldings(holdings: Holding[]): FxRates {
 // currency-cash holding'i yok, o yüzden USD'den türetilir. Eskiden buradaki
 // `return amount` yüzünden RUB/RON gibi birimler 1:1 TRY sayılıyordu — 110.000 ₽
 // ekranda 110.000 TL görünüyordu (gerçeği ~61.700 TL).
-const USD_CROSS: Record<string, number> = { RUB: 86, RON: 4.52, CHF: 0.81 };
+export const USD_CROSS: Record<string, number> = { RUB: 86, RON: 4.52, CHF: 0.81 };
 
 // Belirtilen currency'deki tutarı TRY'ye çevirir.
 export function fxToTRY(amount: number, ccy: string | null | undefined, rates: FxRates): number {

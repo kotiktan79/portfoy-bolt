@@ -5,6 +5,7 @@ import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
 import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR } from '../lib/eurPnl';
 import { currentYM } from '../services/salaryService';
+import { getKasaFx, type KasaFx } from '../services/kasaFxService';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
 //   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
@@ -27,6 +28,9 @@ export default function KarCuzdani({ holdings }: Props) {
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
   const [amountInput, setAmountInput] = useState<string>('');
+
+  // KASA (ölçüm dışı) — kur etkisi görünür olsun; maaş/havuz rakamlarına DOKUNMAZ (2026-09-27)
+  useEffect(() => { let c = false; getKasaFx().then(k => { if (!c) setKasa(k); }).catch(() => {}); return () => { c = true; }; }, []);
 
   useEffect(() => { loadAll(); }, []);
   async function loadAll() {
@@ -57,6 +61,7 @@ export default function KarCuzdani({ holdings }: Props) {
   // TEK TABAN: çekim hakkı KAPANMIŞ son ayın havuzundan (motor hesaplıyor; bitmemiş ayın kârı geri dönebilir).
   // Havuz zaten çekilenler düşülmüş bakiyedir → burada SADECE bu ay çekilenler düşülür (çift sayım yok).
   const poolEur = salary?.poolOutEUR ?? 0;
+  const [kasa, setKasa] = useState<KasaFx | null>(null);
   const entitlementEur = salary?.entitlementEUR ?? 0;
   const mtdPoolEur = mtd?.poolOutEUR ?? 0;               // bu ay şimdiye kadar biriken (ay kapanınca hak olur)
   const remainingEur = Math.max(0, entitlementEur - withdrawnThisMonthEur);
@@ -142,6 +147,29 @@ export default function KarCuzdani({ holdings }: Props) {
               </p>
             </div>
           </div>
+          {kasa && (
+            <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 text-xs">
+              <p className="text-slate-500 dark:text-gray-400">
+                Kasa <span className="text-[10px]">(portföy DIŞI · maaş hesabına girmez · yalnız kurun etkisi)</span>
+              </p>
+              <p className="font-bold text-base text-gray-900 dark:text-white">
+                €{fmt(kasa.totalEurNow)}
+                <span className={`ml-2 text-[11px] font-semibold ${kasa.longWindow.fxDeltaEUR < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  {kasa.longWindow.sinceDay.slice(5).replace('-', '/')}'den beri kur {sgn(kasa.longWindow.fxDeltaEUR)}€{fmt(kasa.longWindow.fxDeltaEUR)}
+                </span>
+                <span className={`ml-2 text-[11px] ${kasa.shortWindow.fxDeltaEUR < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  · son 30 gün {sgn(kasa.shortWindow.fxDeltaEUR)}€{fmt(kasa.shortWindow.fxDeltaEUR)}
+                </span>
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
+                {kasa.rows.map(r => `${r.currency} €${fmt(r.eurNow)} (${sgn(r.fxDeltaEUR)}€${fmt(r.fxDeltaEUR)})`).join(' · ')}
+                {kasa.missingCcy.length > 0 && ` · kuru yok: ${kasa.missingCcy.join(', ')}`}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
+                Aynı bakiyenin geçmiş kurlarla karşılaştırması — para yatırma/çekme karışmaz. Atıl döviz beklerken euro değeri oynar; haftalık dilim bunu durdurur.
+              </p>
+            </div>
+          )}
           {mtd && (
             <div className="mt-3 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-gray-300">
               <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)} · enflasyon payı €{fmt(mtd.inflationEUR)} · reel {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}

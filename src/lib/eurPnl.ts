@@ -47,24 +47,36 @@ export function dayInTZ(d: Date | string, tz: string = TZ): string {
 export interface SnapPoint { date: string; totalValue: number; totalInvestment: number; createdAt?: string }
 export interface RateSeries { rateAt(date: string): number }
 
-export function makeRateSeries(points: Array<{ date: string; rate: number }>, fallback: number): RateSeries {
-  const sorted = [...points].filter(p => p.rate > 1).sort((a, b) => a.date.localeCompare(b.date));
+/** minRate: geçerli sayılan alt sınır. Varsayılan 1 — EUR/USD/TRY kurları için "bozuk 1.0 yer tutucusunu at" demek.
+ *  RUB/RON gibi 1'in ALTINDA seyreden birimlerde 1 vermek seriyi tamamen siler (2026-09-27: ruble kuru 0,58 olduğu için
+ *  sessizce düşüyordu, test yakaladı) → o birimler için küçük bir sınır geçilmeli. */
+export function makeRateSeries(points: Array<{ date: string; rate: number }>, fallback: number, minRate = 1): RateSeries {
+  const sorted = [...points].filter(p => Number.isFinite(p.rate) && p.rate > minRate).sort((a, b) => a.date.localeCompare(b.date));
   return {
     rateAt(date: string): number {
       let best = 0;
       for (const p of sorted) { if (p.date <= date) best = p.rate; else break; }
-      if (best > 1) return best;
+      if (best > minRate) return best;
       return sorted.length ? sorted[0].rate : fallback;
     },
   };
 }
 
+/** TL karşılığı kuru 1'in altında seyreden birimler için güvenli alt sınır (RUB ≈ 0,58, RON ≈ 10,6 ama garanti yok). */
+export const MIN_RATE_MINOR = 1e-6;
+
 /** Döviz cinsi maliyetlerin kur-drift'i (TL): Σ maliyet_native × (k_t − k_{t−1}) */
-export interface ForeignCost { currency: 'USD' | 'EUR'; costNative: number }
-export function fxDriftTRY(costs: ForeignCost[], prevDate: string, date: string, usd: RateSeries, eur: RateSeries): number {
+// 2026-09-27: para birimi serbest. Eskiden yalnız 'USD'|'EUR' idi; RUB/RON/GBP/CHF cinsi bir pozisyon
+// açılsaydı drift hesabı onu sessizce EUR sanacaktı. Seriler dışarıdan gelir (series param).
+export interface ForeignCost { currency: string; costNative: number }
+export function fxDriftTRY(
+  costs: ForeignCost[], prevDate: string, date: string,
+  series: (ccy: string) => RateSeries | null,
+): number {
   let d = 0;
   for (const c of costs) {
-    const s = c.currency === 'USD' ? usd : eur;
+    const s = series(c.currency);
+    if (!s) continue;                                   // kuru bilinmeyen birim: drift 0 (health'te uyarı çıkar)
     d += c.costNative * (s.rateAt(date) - s.rateAt(prevDate));
   }
   return d;
@@ -193,7 +205,11 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
 // AYNI fonksiyonu çağırır; iki tarafın farklı rakam üretmesi imkânsız olsun (2026-09-19).
 // ------------------------------------------------------------------------------------
 export interface EurDaily extends DailyGain { totalValueTRY: number; eurRate: number; usdRate: number }
-export interface EurHealth { ok: boolean; lastEurRateDay: string; lastSnapDay: string }
+export interface EurHealth {
+  ok: boolean; lastEurRateDay: string; lastSnapDay: string;
+  /** kuru bilinmeyen para birimleri — bu birimdeki realize/maliyet sessizce 0 sayılır, görünür olsun */
+  unknownCcy?: string[];
+}
 export interface EurModel {
   daily: EurDaily[]; months: MonthRow[]; health: EurHealth;
   lastSnapshot: SnapPoint | null;          // canlı (gün içi) kâr için taban
@@ -241,6 +257,8 @@ export interface EurModelInput {
   snapshots: Array<{ snapshot_date: string; total_value: number | string | null; total_investment: number | string | null; created_at?: string | null }>;
   eurRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
   usdRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
+  /** TRY/USD/EUR dışı birimlerin TL kurları (RUB/RON/GBP/CHF). Yoksa o birimdeki kayıt 0 sayılır ve health'te uyarı çıkar. */
+  otherRates?: Record<string, Array<{ recorded_at: string; rate: number | string }>> | null;
   transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null }>;
   cashSells: Array<{ created_at: string; currency: string | null; notes: string | null }>;
   holdings: Array<{ id: string | number; currency: string | null; quantity: number | string | null; purchase_price: number | string | null; created_at: string | null }>;
@@ -261,17 +279,41 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   const snapDays = snaps.map(s => s.date);
 
   // kur serileri (gün → son kayıt)
-  const toSeries = (rows: Array<{ recorded_at: string; rate: number | string }>, fb: number) => {
+  const toSeries = (rows: Array<{ recorded_at: string; rate: number | string }>, fb: number, minRate = 1) => {
     const m = new Map<string, number>(); for (const r of rows) m.set(String(r.recorded_at).slice(0, 10), Number(r.rate));
-    return { series: makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), fb), lastDay: Array.from(m.keys()).sort().pop() || '' };
+    return { series: makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), fb, minRate), lastDay: Array.from(m.keys()).sort().pop() || '' };
   };
   const E = toSeries(inp.eurRates, inp.usdNow * 1.15), U = toSeries(inp.usdRates, inp.usdNow);
   const eur = E.series, usd = U.series;
+  // TRY/USD/EUR dışı birimler (RUB/RON/GBP/CHF) — varsa kendi serisiyle, yoksa 'bilinmeyen' listesine
+  const otherSeries = new Map<string, RateSeries>();
+  for (const [ccy, rows] of Object.entries(inp.otherRates || {})) {
+    if (!rows?.length) continue;
+    otherSeries.set(ccy.toUpperCase(), toSeries(rows, NaN, MIN_RATE_MINOR).series);   // ruble 0,58 → sınır 1 olamaz
+  }
+  const unknownCcy = new Set<string>();
+  const seriesFor = (ccy: string): RateSeries | null => {
+    const c = String(ccy || 'TRY').toUpperCase();
+    if (c === 'USD') return usd;
+    if (c === 'EUR') return eur;
+    const o = otherSeries.get(c);
+    if (o) return o;
+    unknownCcy.add(c);
+    return null;
+  };
 
   // realize (TL, holding para birimine göre çevrilmiş), mükerrer elenir, snapshot gününe hizalanır
   const holds = inp.holdings;
   const ccyById = new Map<string, string>(holds.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
-  const toTRY = (amt: number, ccy: string, d: string) => amt * (ccy === 'TRY' ? 1 : ccy === 'USD' ? usd.rateAt(d) : ccy === 'EUR' ? eur.rateAt(d) : 0);
+  // TL'ye çevrim: TRY=1, bilinen her birim kendi serisiyle. Bilinmeyen birim 0 (temkinli) ve health'te uyarı —
+  // eskiden USD/EUR dışı her şey sessizce 0'dı; artık en az görünür. (2026-09-27)
+  const toTRY = (amt: number, ccy: string, d: string) => {
+    const c = String(ccy || 'TRY').toUpperCase();
+    if (c === 'TRY') return amt;
+    const s2 = seriesFor(c); if (!s2) return 0;
+    const r = s2.rateAt(d);
+    return Number.isFinite(r) ? amt * r : 0;
+  };
   const align = (d: string) => snapDays.find(x => x >= d) || snapDays[snapDays.length - 1];
   const realizedByDay = new Map<string, number>(); const seen = new Set<string>();
   for (const c of inp.cashSells) {
@@ -290,7 +332,8 @@ export function buildEurModel(inp: EurModelInput): EurModel {
 
   // DÖVİZ MALİYET TAKVİMİ: her snapshot günü için USD/EUR cinsi pozisyonların native maliyeti.
   // Drift tabanı = quantity × purchase_price (snapshot total_investment bu tabanla kurulur; cost_basis bayat olabilir).
-  const foreign = holds.filter(h => ['USD', 'EUR'].includes(String(h.currency || '').toUpperCase()));
+  // drift: TRY DIŞI her pozisyon (eskiden yalnız USD/EUR — ruble pozisyonu açılsa drift hiç hesaplanmazdı)
+  const foreign = holds.filter(h => String(h.currency || 'TRY').toUpperCase() !== 'TRY');
   const txByHolding = new Map<string, Array<{ d: string; dCost: number }>>();
   for (const t of inp.transactions) {
     const h = foreign.find(x => String(x.id) === String(t.holding_id)); if (!h) continue;
@@ -304,19 +347,23 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     let c = (Number(h.quantity) || 0) * (Number(h.purchase_price) || 0);
     for (const t of txByHolding.get(String(h.id)) || []) if (t.d > date) c -= t.dCost;
     if (String(h.created_at || '').slice(0, 10) > date) c = 0;
-    return { currency: String(h.currency).toUpperCase() as 'USD' | 'EUR', costNative: Math.max(0, c) };
+    return { currency: String(h.currency).toUpperCase(), costNative: Math.max(0, c) };
   });
   const driftByDay = new Map<string, number>();
   for (let i = 1; i < snaps.length; i++) {
     const prev = snaps[i - 1].date, cur = snaps[i].date;
-    driftByDay.set(cur, fxDriftTRY(costsOn(prev), prev, cur, usd, eur));
+    driftByDay.set(cur, fxDriftTRY(costsOn(prev), prev, cur, seriesFor));
   }
 
   const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay);
   const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
   const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
-  const health: EurHealth = { ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay, lastEurRateDay: E.lastDay, lastSnapDay };
+  const health: EurHealth = {
+    ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay,
+    lastEurRateDay: E.lastDay, lastSnapDay,
+    ...(unknownCcy.size ? { unknownCcy: Array.from(unknownCcy).sort() } : {}),
+  };
   const lastSnapshot = snaps.length ? snaps[snaps.length - 1] : null;
   return { daily, months, health, lastSnapshot, foreignCostsAtLast: lastSnapshot ? costsOn(lastSnapshot.date) : [] };
 }
@@ -369,6 +416,8 @@ export interface LiveHolding { symbol?: string; asset_type?: string | null; curr
 export interface LiveGainInput {
   holdings: LiveHolding[];
   usdNow: number; eurNow: number;        // şu anki kurlar (snapshot cron'u ile aynı kaynak: USD/EURO pozisyon fiyatı)
+  /** TRY/USD/EUR dışı birimlerin ŞU ANKİ TL kuru (RUB/RON/GBP/CHF). Eksikse o pozisyon TL sanılır — snapshot ile aynı davranış. */
+  otherNow?: Record<string, number> | null;
   realizedTodayTRY?: number;             // son snapshot ZAMANINDAN sonra gerçekleşen satış K/Z (TL)
   closePrices?: Map<string, number> | null;   // son snapshot günündeki fiyatlar (price_history) — kırılım için
 }
@@ -383,7 +432,16 @@ export interface LiveGain {
 
 export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | null {
   const last = model.lastSnapshot; if (!last) return null;
-  const fxNow = (c: string | null | undefined) => { const cur = String(c || 'TRY').toUpperCase(); return cur === 'USD' ? inp.usdNow : cur === 'EUR' ? inp.eurNow : 1; };
+  // 2026-09-27: TRY/USD/EUR dışı birim artık verilen kurla çevrilir. Eksikse 1 (TL) — daily-snapshot tryValueOf ile
+  // AYNI davranış, yani anlık rakam kapanışla tutarlı kalır; tutarsız bir tahmin üretmekten iyidir.
+  const fxNow = (c: string | null | undefined) => {
+    const cur = String(c || 'TRY').toUpperCase();
+    if (cur === 'USD') return inp.usdNow;
+    if (cur === 'EUR') return inp.eurNow;
+    if (cur === 'TRY') return 1;
+    const r = Number(inp.otherNow?.[cur]);
+    return Number.isFinite(r) && r > 0 ? r : 1;
+  };
   // daily-snapshot.ts tryValueOf ile aynı: USD/EUR kurla, diğerleri ham
   let V = 0, I = 0;
   for (const h of inp.holdings) {
