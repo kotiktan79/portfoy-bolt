@@ -57,6 +57,7 @@ function fakeSupabase(tables: Record<string, Row[]>) {
     const q: any = {
       select: (_c: string, opts?: { count?: string; head?: boolean }) => { head = !!opts?.head; count = !!opts?.count; return q; },
       eq: (c: string, v: any) => { filtered = filtered.filter(r => r[c] === v); return q; },
+      in: (c: string, vals: any[]) => { filtered = filtered.filter(r => vals.includes(r[c])); return q; },
       gt: (c: string, v: any) => { filtered = filtered.filter(r => r[c] > v); return q; },
       gte: (c: string, v: any) => { filtered = filtered.filter(r => String(r[c]) >= String(v)); return q; },
       order: () => q,
@@ -97,7 +98,7 @@ function fixture(opts: { augLoss: boolean }) {
   return fakeSupabase({
     portfolio_snapshots: snapshots,
     exchange_rates_daily: [...rate(E).map(r => ({ ...r, from_currency: 'EUR', to_currency: 'TRY', source: 'api' })), ...rate(U).map(r => ({ ...r, from_currency: 'USD', to_currency: 'TRY', source: 'api' }))],
-    transactions: [], cash_transactions: [], salary_withdrawals: [],
+    transactions: [], cash_transactions: [], salary_withdrawals: [], income_records: [],
     holdings, cash_balances: [{ currency: 'USD', balance: 20000 }, { currency: 'RUB', balance: 0 }],
     price_history,
   });

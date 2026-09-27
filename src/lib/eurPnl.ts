@@ -84,11 +84,13 @@ export function fxDriftTRY(
 
 export function eurGainBetween(
   a: SnapPoint, b: SnapPoint, eur: RateSeries,
-  opts: { realizedTRY?: number; fxDriftTRY?: number } = {},
+  opts: { realizedTRY?: number; fxDriftTRY?: number; payoutTRY?: number } = {},
 ): number {
   const ea = eur.rateAt(a.date), eb = eur.rateAt(b.date);
   const wealth = b.totalValue / eb - a.totalValue / ea;
-  const flowTRY = (b.totalInvestment - a.totalInvestment) - (opts.fxDriftTRY || 0) - (opts.realizedTRY || 0);
+  // payoutTRY (2026-09-27): temettü/kupon portföyden ÇIKTIYSA (kasaya geçtiyse) bu bir akıştır, zarar değil.
+  // Ödeme günü hissenin fiyatı düşer → servet azalır; aynı tutar akıştan düşülünce kâr etkisi 0 olur.
+  const flowTRY = (b.totalInvestment - a.totalInvestment) - (opts.fxDriftTRY || 0) - (opts.realizedTRY || 0) - (opts.payoutTRY || 0);
   return wealth - flowTRY / eb;
 }
 
@@ -101,6 +103,7 @@ export interface DailyGain { date: string; gainEUR: number; wealthEUR: number }
 export function dailyEurGains(
   snaps: SnapPoint[], eur: RateSeries,
   realizedByDay: Map<string, number>, driftByDay: Map<string, number>,
+  payoutByDay?: Map<string, number> | null,
 ): DailyGain[] {
   const s = [...snaps].sort((x, y) => x.date.localeCompare(y.date));
   const out: DailyGain[] = [];
@@ -109,7 +112,11 @@ export function dailyEurGains(
     if (i === 0) { out.push({ date: s[i].date, gainEUR: 0, wealthEUR }); continue; }
     out.push({
       date: s[i].date, wealthEUR,
-      gainEUR: eurGainBetween(s[i - 1], s[i], eur, { realizedTRY: realizedByDay.get(s[i].date) || 0, fxDriftTRY: driftByDay.get(s[i].date) || 0 }),
+      gainEUR: eurGainBetween(s[i - 1], s[i], eur, {
+        realizedTRY: realizedByDay.get(s[i].date) || 0,
+        fxDriftTRY: driftByDay.get(s[i].date) || 0,
+        payoutTRY: payoutByDay?.get(s[i].date) || 0,
+      }),
     });
   }
   return out;
@@ -267,6 +274,9 @@ export interface EurModelInput {
   annualInflation: number;
   /** ay → o ay çekilen maaş (EUR); havuzdan düşülür. Yoksa çekim yok sayılır. */
   withdrawnByMonth?: Map<string, number> | null;
+  /** PORTFÖYDEN ÇIKAN temettü/kupon (income_records.destination='kasa'): gün → tutar (kendi para biriminde).
+   *  Akış olarak düşülür, yani ödeme günü zarar görünmez. 'profit_taking' DAHİL EDİLMEZ (realize zinciri onu sayıyor). */
+  payouts?: Array<{ date: string; amount: number; currency: string | null }> | null;
 }
 
 export function buildEurModel(inp: EurModelInput): EurModel {
@@ -355,7 +365,17 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     driftByDay.set(cur, fxDriftTRY(costsOn(prev), prev, cur, seriesFor));
   }
 
-  const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay);
+  // PORTFÖYDEN ÇIKAN temettü/kupon → TL'ye çevrilip snapshot gününe hizalanır (realize ile aynı yöntem)
+  const payoutByDay = new Map<string, number>();
+  for (const p of inp.payouts || []) {
+    const d = String(p.date).slice(0, 10);
+    if (!d || d < reliableFrom) continue;
+    const tl = toTRY(Number(p.amount) || 0, String(p.currency || 'TRY').toUpperCase(), d);
+    if (!Number.isFinite(tl) || tl <= 0) continue;
+    const k = align(d); payoutByDay.set(k, (payoutByDay.get(k) || 0) + tl);
+  }
+
+  const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay, payoutByDay);
   const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
   const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';

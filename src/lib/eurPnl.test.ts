@@ -46,6 +46,26 @@ describe('eurPnl', () => {
     expect(d).toBeCloseTo(100 * (55.94 - 54.7), 6);      // yalnız EUR bacağı sayıldı, RUB sessizce 0
   });
 
+  it('(e3) TEMETTÜ portföyden çıkınca zarar sayılmaz, akış olur (2026-09-27)', () => {
+    // Kapanış 100.000 TL. Temettü 5.000 TL ödendi: hissenin fiyatı düştü (servet 95.000) ve para KASAYA geçti.
+    // Kur sabit 50. Düzeltme yoksa −€100 zarar görünür; payout akış olarak düşülünce kâr 0 olur.
+    const a = { date: '2026-08-01', totalValue: 100_000, totalInvestment: 80_000 };
+    const b = { date: '2026-08-02', totalValue: 95_000, totalInvestment: 80_000 };
+    const flat = makeRateSeries([{ date: '2026-08-01', rate: 50 }, { date: '2026-08-02', rate: 50 }], 50);
+    expect(eurGainBetween(a, b, flat)).toBeCloseTo(-100, 6);                        // düzeltme yok → sahte zarar
+    expect(eurGainBetween(a, b, flat, { payoutTRY: 5_000 })).toBeCloseTo(0, 6);     // akış olarak düşüldü → kâr 0
+  });
+
+  it('(e4) temettü portföyde KALIRSA düzeltme yapılmaz (servet zaten değişmedi)', () => {
+    // Fiyat düştü ama nakit portföy içine geçti → toplam servet aynı → kâr 0; payout GEÇİLMEMELİ.
+    const a = { date: '2026-08-01', totalValue: 100_000, totalInvestment: 80_000 };
+    const b = { date: '2026-08-02', totalValue: 100_000, totalInvestment: 80_000 };
+    const flat = makeRateSeries([{ date: '2026-08-01', rate: 50 }, { date: '2026-08-02', rate: 50 }], 50);
+    expect(eurGainBetween(a, b, flat)).toBeCloseTo(0, 6);
+    // yanlışlıkla payout geçilirse SAHTE KÂR doğar — bu yüzden destination='kasa' şartı var
+    expect(eurGainBetween(a, b, flat, { payoutTRY: 5_000 })).toBeCloseTo(100, 6);
+  });
+
   it('(f) aylık: enflasyon payı, zarar devri, maaş', () => {
     const daily = [
       { date: '2026-06-01', gainEUR: 0, wealthEUR: 150000 }, { date: '2026-06-30', gainEUR: -4000, wealthEUR: 146000 },
