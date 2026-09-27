@@ -136,6 +136,58 @@ describe('eurPnl', () => {
     expect(g.gainEUR).toBeCloseTo(0, 6);
   });
 
+  it('(e9) MÜKERRER temettü bir kez sayılır (aynı kayıt iki kez / iki kaynaktan) — hakem 2026-09-27', () => {
+    const base = {
+      snapshots: [
+        { snapshot_date: '2026-08-01', total_value: 100_000, total_investment: 80_000 },
+        { snapshot_date: '2026-08-02', total_value: 95_000, total_investment: 80_000 },
+      ],
+      eurRates: [{ recorded_at: '2026-08-01', rate: 50 }, { recorded_at: '2026-08-02', rate: 50 }],
+      usdRates: [{ recorded_at: '2026-08-01', rate: 40 }, { recorded_at: '2026-08-02', rate: 40 }],
+      transactions: [], cashSells: [], holdings: [],
+      usdNow: 40, reliableFrom: '2026-08-01', annualInflation: 0,
+    };
+    const tek = buildEurModel({ ...base, payouts: [{ date: '2026-08-02', amount: 5_000, currency: 'TRY' }] });
+    const cift = buildEurModel({ ...base, payouts: [
+      { date: '2026-08-02', amount: 5_000, currency: 'TRY' },
+      { date: '2026-08-02', amount: 5_000, currency: 'TRY' },   // aynı temettü iki kez girildi
+    ] });
+    expect(tek.daily[1].gainEUR).toBeCloseTo(0, 6);
+    expect(cift.daily[1].gainEUR).toBeCloseTo(0, 6);            // ikinci kayıt elendi → sahte +€100 YOK
+    expect(cift.health.duplicateAdjustments).toBe(1);
+  });
+
+  it('(e10) amountTRY verilmişse kurla çevrim yerine O kullanılır', () => {
+    const m = buildEurModel({
+      snapshots: [
+        { snapshot_date: '2026-08-01', total_value: 100_000, total_investment: 80_000 },
+        { snapshot_date: '2026-08-02', total_value: 95_000, total_investment: 80_000 },
+      ],
+      eurRates: [{ recorded_at: '2026-08-01', rate: 50 }, { recorded_at: '2026-08-02', rate: 50 }],
+      usdRates: [{ recorded_at: '2026-08-01', rate: 40 }, { recorded_at: '2026-08-02', rate: 40 }],
+      transactions: [], cashSells: [], holdings: [],
+      usdNow: 40, reliableFrom: '2026-08-01', annualInflation: 0,
+      // 125 USD ama kullanıcı gerçek TL tutarını 5.000 olarak düzeltmiş (kur 40 olsa 5.000 çıkmazdı)
+      payouts: [{ date: '2026-08-02', amount: 125, currency: 'USD', amountTRY: 5_000 }],
+    });
+    expect(m.daily[1].gainEUR).toBeCloseTo(0, 6);
+  });
+
+  it('(e11) ANLIK ekranda da temettü zarar görünmez (payoutTodayTRY)', () => {
+    const model: any = {
+      daily: [{ date: '2026-08-02', wealthEUR: 2000, gainEUR: 0, totalValueTRY: 100_000, eurRate: 50, usdRate: 40 }],
+      months: [], health: { ok: true, lastEurRateDay: '2026-08-02', lastSnapDay: '2026-08-02' },
+      lastSnapshot: { date: '2026-08-02', totalValue: 100_000, totalInvestment: 80_000 },
+      foreignCostsAtLast: [], ratesAtLast: { USD: 40, EUR: 50 },
+    };
+    // Temettü bugün ödendi: pozisyon değeri 95.000'e düştü, para kasaya gitti.
+    const holdings = [{ symbol: 'X', asset_type: 'stock', currency: 'TRY', quantity: 1, current_price: 95_000, purchase_price: 80_000 }];
+    const wrong = liveEurGain(model, { holdings, usdNow: 40, eurNow: 50 })!;
+    expect(wrong.gainEUR).toBeCloseTo(-100, 6);                                          // düzeltme yoksa sahte zarar
+    const right = liveEurGain(model, { holdings, usdNow: 40, eurNow: 50, payoutTodayTRY: 5_000 })!;
+    expect(right.gainEUR).toBeCloseTo(0, 6);                                             // düzeltmeyle 0
+  });
+
   it('(f) aylık: enflasyon payı, zarar devri, maaş', () => {
     const daily = [
       { date: '2026-06-01', gainEUR: 0, wealthEUR: 150000 }, { date: '2026-06-30', gainEUR: -4000, wealthEUR: 146000 },

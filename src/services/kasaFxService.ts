@@ -11,7 +11,7 @@
 // yanıltıyor: 27 Eylül'de son 30 gün +€979 iken seri başından beri −€739 (ruble önce düştü, sonra toparladı).
 import { supabase } from '../lib/supabase';
 import { fetchAll } from './eurPnlService';
-import { makeRateSeries, MIN_RATE_MINOR, type RateSeries } from '../lib/eurPnl';
+import { makeRateSeries, MIN_RATE_MINOR, RELIABLE_FROM, type RateSeries } from '../lib/eurPnl';
 
 export interface KasaRow { currency: string; balance: number; eurNow: number; eurThen: number; fxDeltaEUR: number }
 export interface KasaWindow { label: string; sinceDay: string; fxDeltaEUR: number }
@@ -34,6 +34,15 @@ export interface KasaRateRow { day: string; from_currency: string; rate: number 
 /** SAF çekirdek (test edilir): bakiyeler + kur satırları → kasa euro değeri ve kur etkisi. IO yok. */
 export function computeKasaFx(balances: KasaBalance[], rateRows: KasaRateRow[], shortDays = SHORT_DAYS): KasaFx | null {
   if (!balances.length || !rateRows.length) return null;
+  // Aynı birimden birden fazla satır gelirse (UNIQUE yalnız user_id+currency) kırılım mükerrer görünüyordu → birleştir
+  const merged = new Map<string, number>();
+  for (const b of balances) {
+    const c = String(b.currency || '').toUpperCase(); const v = Number(b.balance) || 0;
+    if (!c || !v) continue;
+    merged.set(c, (merged.get(c) || 0) + v);
+  }
+  balances = Array.from(merged, ([currency, balance]) => ({ currency, balance }));
+  if (!balances.length) return null;
   const byCcy = new Map<string, Array<{ date: string; rate: number }>>();
   for (const r of rateRows) {
     const c = String(r.from_currency).toUpperCase();
@@ -90,7 +99,10 @@ export function computeKasaFx(balances: KasaBalance[], rateRows: KasaRateRow[], 
   return {
     asOf,
     totalEurNow: now.total,
-    shortWindow: { label: `${shortDays} gün`, sinceDay: shortDay, fxDeltaEUR: now.total - shortV.total },
+    shortWindow: {
+      label: shortDay === longDay ? 'serinin tamamı' : `${shortDays} gün`,   // kırpıldıysa '30 gün' demek yanlış olur
+      sinceDay: shortDay, fxDeltaEUR: now.total - shortV.total,
+    },
     longWindow: { label: 'ölçüm başından', sinceDay: longDay, fxDeltaEUR: now.total - longV.total },
     rows,
     missingCcy: Array.from(new Set(now.missing)).sort(),
@@ -105,7 +117,8 @@ export async function getKasaFx(): Promise<KasaFx | null> {
       .from('cash_balances').select('currency,balance').gt('balance', 0).order('currency', { ascending: true })),
     fetchAll<{ day: string; from_currency: string; rate: number }>('kasaRates', () => supabase
       .from('exchange_rates_daily').select('day,from_currency,rate')
-      .eq('to_currency', 'TRY').eq('source', 'api').order('day', { ascending: true })),
+      .eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM)     // motorla AYNI başlangıç (hakem 2026-09-27)
+      .order('day', { ascending: true })),
   ]);
   const value = computeKasaFx(balances, rateRows);
   _cache = { ts: Date.now(), value };

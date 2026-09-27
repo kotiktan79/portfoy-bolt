@@ -160,7 +160,7 @@ export default function IncomeRecordModal({ isOpen, onClose, onSaved, holdings =
               </div>
               <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
                 {destination === 'kasa'
-                  ? 'Portföy değeri bu tutar kadar düştü ve para dışarı çıktı → ZARAR sayılmaz, akış olarak düşülür. Aşağıdaki tarih, değerin DÜŞTÜĞÜ gün olmalı (ex-div), ödeme günü değil.'
+                  ? 'Portföy değeri bu tutar kadar düştü ve para dışarı çıktı → ZARAR sayılmaz, akış olarak düşülür. Aşağıdaki tarih, değerin DÜŞTÜĞÜ gün olmalı (ex-div), ödeme günü değil. Not: kasa bakiyesini bu kayıt GÜNCELLEMEZ, onu ayrıca girmen gerekir.'
                   : destination === 'portfoy'
                     ? 'Nakit portföy içinde kaldı → servet değişmedi, kâr düzeltmesi yapılmaz.'
                     : 'Seçmezsen kâr düzeltmesi YAPILMAZ (temkinli). Emin değilsen boş bırak.'}

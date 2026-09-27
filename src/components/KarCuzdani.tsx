@@ -30,7 +30,13 @@ export default function KarCuzdani({ holdings }: Props) {
   const [amountInput, setAmountInput] = useState<string>('');
 
   // KASA (ölçüm dışı) — kur etkisi görünür olsun; maaş/havuz rakamlarına DOKUNMAZ (2026-09-27)
-  useEffect(() => { let c = false; getKasaFx().then(k => { if (!c) setKasa(k); }).catch(() => {}); return () => { c = true; }; }, []);
+  useEffect(() => {
+    let c = false;
+    getKasaFx()
+      .then(k => { if (!c) { setKasa(k); setKasaErr(k ? null : 'veri yok'); } })
+      .catch(e => { if (!c) setKasaErr(e?.message || 'okunamadı'); });   // sessizce kaybolmasın: panelde satır duruyor
+    return () => { c = true; };
+  }, []);
 
   useEffect(() => { loadAll(); }, []);
   async function loadAll() {
@@ -62,6 +68,7 @@ export default function KarCuzdani({ holdings }: Props) {
   // Havuz zaten çekilenler düşülmüş bakiyedir → burada SADECE bu ay çekilenler düşülür (çift sayım yok).
   const poolEur = salary?.poolOutEUR ?? 0;
   const [kasa, setKasa] = useState<KasaFx | null>(null);
+  const [kasaErr, setKasaErr] = useState<string | null>(null);
   const entitlementEur = salary?.entitlementEUR ?? 0;
   const mtdPoolEur = mtd?.poolOutEUR ?? 0;               // bu ay şimdiye kadar biriken (ay kapanınca hak olur)
   const remainingEur = Math.max(0, entitlementEur - withdrawnThisMonthEur);
@@ -147,6 +154,9 @@ export default function KarCuzdani({ holdings }: Props) {
               </p>
             </div>
           </div>
+          {kasaErr && !kasa && (
+            <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">Kasa kur etkisi okunamadı ({kasaErr}) — panelde görünüyor olabilir, rakamlar ayrışmasın diye burada gizlenmedi.</p>
+          )}
           {kasa && (
             <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 text-xs">
               <p className="text-slate-500 dark:text-gray-400">

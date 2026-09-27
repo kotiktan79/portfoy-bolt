@@ -42,7 +42,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     // PORTFÖYDEN ÇIKAN temettü/kupon (2026-09-27): ödeme günü fiyat düşüşü ZARAR sayılmasın, akış olarak düşülsün.
     // Yalnız gerçekleşmiş (is_projected=false), hedefi 'kasa' olan ve realize zinciriyle çakışmayan türler.
     fetchAll<any>('payouts', () => supabase.from('income_records')
-      .select('income_date,amount,currency,income_type,destination,is_projected')
+      .select('income_date,amount,amount_try,currency,income_type,destination,is_projected')
       .eq('is_projected', false).eq('destination', 'kasa')
       .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
@@ -55,7 +55,10 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     transactions: txs, cashSells, holdings: holds,
     usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
-    payouts: (payouts || []).map((r: any) => ({ date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency })),
+    payouts: (payouts || []).map((r: any) => ({
+      date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency,
+      amountTRY: r.amount_try == null ? null : Number(r.amount_try),   // kullanıcının elle düzelttiği TL tutarı önceliklidir
+    })),
   });
 }
 

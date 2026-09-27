@@ -218,6 +218,8 @@ export interface EurHealth {
   unknownCcy?: string[];
   /** snapshot'ı henüz olmayan güne ait realize/temettü kaydı: düzeltme ERTELENDİ (sahte kâr yazmaktansa beklenir) */
   pendingAdjustments?: number;
+  /** aynı tutar+gün iki kaynaktan geldi (mükerrer): bir kez sayıldı, kalanı elendi */
+  duplicateAdjustments?: number;
 }
 export interface EurModel {
   daily: EurDaily[]; months: MonthRow[]; health: EurHealth;
@@ -280,7 +282,7 @@ export interface EurModelInput {
   withdrawnByMonth?: Map<string, number> | null;
   /** PORTFÖYDEN ÇIKAN temettü/kupon (income_records.destination='kasa'): gün → tutar (kendi para biriminde).
    *  Akış olarak düşülür, yani ödeme günü zarar görünmez. 'profit_taking' DAHİL EDİLMEZ (realize zinciri onu sayıyor). */
-  payouts?: Array<{ date: string; amount: number; currency: string | null }> | null;
+  payouts?: Array<{ date: string; amount: number; currency: string | null; amountTRY?: number | null }> | null;
 }
 
 export function buildEurModel(inp: EurModelInput): EurModel {
@@ -378,11 +380,20 @@ export function buildEurModel(inp: EurModelInput): EurModel {
 
   // PORTFÖYDEN ÇIKAN temettü/kupon → TL'ye çevrilip snapshot gününe hizalanır (realize ile aynı yöntem)
   const payoutByDay = new Map<string, number>();
+  let duplicateAdjustments = 0;
   for (const p of inp.payouts || []) {
     const d = String(p.date).slice(0, 10);
     if (!d || d < reliableFrom) continue;
-    const tl = toTRY(Number(p.amount) || 0, String(p.currency || 'TRY').toUpperCase(), d);
+    // amountTRY verilmişse O kullanılır (kullanıcının elle düzelttiği gerçek tutar); yoksa kurla çevrilir
+    const tl = Number.isFinite(Number(p.amountTRY)) && Number(p.amountTRY) > 0
+      ? Number(p.amountTRY)
+      : toTRY(Number(p.amount) || 0, String(p.currency || 'TRY').toUpperCase(), d);
     if (!Number.isFinite(tl) || tl <= 0) continue;
+    // MÜKERRER ELEME (hakem 2026-09-27): aynı temettü iki kez girilirse ya da hem income_records'a hem K/Z notlu
+    // cash sell olarak girilirse tutar iki kez akıştan düşülür → sahte kâr. realize ile AYNI 'seen' anahtarı.
+    const key = `${d}|${Math.round(tl)}`;
+    if (seen.has(key)) { duplicateAdjustments++; continue; }
+    seen.add(key);
     const k = align(d); if (!k) { pendingAdjustments++; continue; }
     payoutByDay.set(k, (payoutByDay.get(k) || 0) + tl);
   }
@@ -396,6 +407,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     lastEurRateDay: E.lastDay, lastSnapDay,
     ...(unknownCcy.size ? { unknownCcy: Array.from(unknownCcy).sort() } : {}),
     ...(pendingAdjustments ? { pendingAdjustments } : {}),
+    ...(duplicateAdjustments ? { duplicateAdjustments } : {}),
   };
   const lastSnapshot = snaps.length ? snaps[snaps.length - 1] : null;
   // son kapanış günündeki kurlar: USD/EUR + varsa diğerleri (anlık kâr drift'i birim bazında hesaplasın)
@@ -459,6 +471,8 @@ export interface LiveGainInput {
   /** TRY/USD/EUR dışı birimlerin ŞU ANKİ TL kuru (RUB/RON/GBP/CHF). Eksikse o pozisyon TL sanılır — snapshot ile aynı davranış. */
   otherNow?: Record<string, number> | null;
   realizedTodayTRY?: number;             // son snapshot ZAMANINDAN sonra gerçekleşen satış K/Z (TL)
+  /** son snapshot GÜNÜNDEN sonra portföyden çıkan temettü/kupon (TL) — yoksa ödeme günü anlık ekranda ZARAR görünür */
+  payoutTodayTRY?: number;
   closePrices?: Map<string, number> | null;   // son snapshot günündeki fiyatlar (price_history) — kırılım için
 }
 /** Günlük hareketin kırılımı: hangi varlık ne kattı + kur payı (2026-09-24: "neden eksi?" ekranda cevaplansın). */
@@ -513,7 +527,7 @@ export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | nul
     if (now === null || then === null) return d;               // kuru bilinmeyen birim: drift 0 + unknownCcy'de görünür
     return d + c.costNative * (now - then);
   }, 0);
-  const flowTRY = (I - last.totalInvestment) - drift - (inp.realizedTodayTRY || 0);
+  const flowTRY = (I - last.totalInvestment) - drift - (inp.realizedTodayTRY || 0) - (inp.payoutTodayTRY || 0);
   const gainEUR = V / inp.eurNow - last.totalValue / eurLast - flowTRY / inp.eurNow;
   const out: LiveGain = {
     gainEUR, wealthEUR: V / inp.eurNow, sinceDate: last.date, totalValueTRY: V,

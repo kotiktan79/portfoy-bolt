@@ -49,7 +49,7 @@ async function load(): Promise<EurModel> {
     // PORTFÖYDEN ÇIKAN temettü/kupon (2026-09-27): ödeme günü fiyat düşüşü ZARAR sayılmasın, akış olarak düşülsün.
     // Yalnız gerçekleşmiş (is_projected=false), hedefi 'kasa' olan ve realize zinciriyle çakışmayan türler.
     fetchAll<any>('payouts', () => supabase.from('income_records')
-      .select('income_date,amount,currency,income_type,destination,is_projected')
+      .select('income_date,amount,amount_try,currency,income_type,destination,is_projected')
       .eq('is_projected', false).eq('destination', 'kasa')
       .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
@@ -62,7 +62,10 @@ async function load(): Promise<EurModel> {
     transactions: txs, cashSells, holdings: holds,
     usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
-    payouts: (payouts || []).map((r: any) => ({ date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency })),
+    payouts: (payouts || []).map((r: any) => ({
+      date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency,
+      amountTRY: r.amount_try == null ? null : Number(r.amount_try),   // kullanıcının elle düzelttiği TL tutarı önceliklidir
+    })),
   });
   if (!value.health.ok) console.error(`eurPnl: kur serisi ${value.health.lastEurRateDay}'de bitiyor, snapshot ${value.health.lastSnapDay} — hesap GÜVENİLMEZ`);
   _cache = { ts: Date.now(), value };
@@ -132,12 +135,32 @@ export async function getLiveEurGain(holdings: Holding[]): Promise<LiveGain | nu
   const ccyById = new Map<string, string>(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
   const realizedTodayTRY = await realizedSince(sinceTs, fx.usd, eurNow, ccyById).catch(() => 0);
   const closePrices = await closePricesOn(model.lastSnapshot.date, sinceTs).catch(() => null);
+  // Son snapshot GÜNÜNDEN sonra portföyden çıkan temettü/kupon: anlık ekranda ZARAR görünmesin (hakem 2026-09-27)
+  const payoutTodayTRY = await payoutSince(model.lastSnapshot.date).catch(() => 0);
   // 2026-09-27 (hakem): SABİT çapraz tablo (USD_CROSS) kâr yoluna girmişti — 'sabit yedek kur YASAK' kuralına aykırı.
   // Artık 'şu anki kur' = motorun kur serisinin SON GÜNÜ (exchange_rates_daily, source=api). Seri yoksa birim
   // atlanır ve liveEurGain onu unknownCcy ile bildirir; uydurma çapraz kullanılmaz.
   const otherNow = { ...model.ratesAtLast };
   delete otherNow.USD; delete otherNow.EUR;
-  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, closePrices, otherNow });
+  return liveEurGain(model, { holdings, usdNow: fx.usd, eurNow, realizedTodayTRY, payoutTodayTRY, closePrices, otherNow });
+}
+
+/** Son snapshot gününden SONRA tarihli, portföyden çıkan temettü/kupon toplamı (TL). Günlük motor bunu
+ *  snapshot gelince işler; anlık ekranın da aynı davranması için burada ayrıca hesaplanır. */
+async function payoutSince(lastSnapDay: string): Promise<number> {
+  const rows = await fetchAll<{ amount: number; amount_try: number | null; currency: string | null }>('livePayouts', () => supabase
+    .from('income_records').select('amount,amount_try,currency')
+    .eq('is_projected', false).eq('destination', 'kasa').in('income_type', ['dividend', 'coupon'])
+    .gt('income_date', lastSnapDay));
+  let t = 0;
+  for (const r of rows) {
+    const v = r.amount_try == null ? null : Number(r.amount_try);
+    if (v !== null && Number.isFinite(v) && v > 0) { t += v; continue; }
+    const c = String(r.currency || 'TRY').toUpperCase();
+    if (c !== 'TRY') continue;      // kur çevrimi burada yok; TL dışı kayıt snapshot gelince işlenir
+    const a = Number(r.amount) || 0; if (a > 0) t += a;
+  }
+  return t;
 }
 
 /** Son snapshot GÜNÜNÜN fiyatları (price_history, sembol başına o günün son kaydı) — günlük kırılım için.
