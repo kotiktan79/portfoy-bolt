@@ -169,11 +169,15 @@ const _cpCache = new Map<string, Map<string, number>>();
 async function closePricesOn(day: string, untilTs: string): Promise<Map<string, number> | null> {
   const key = `${day}|${untilTs}`;
   const hit = _cpCache.get(key); if (hit) return hit;
-  // ÜST SINIR = snapshot'ın YAZILDIĞI AN (2026-09-24 hakem bulgusu): gece açılan uygulama aynı UTC gününe
-  // snapshot'tan SONRA fiyat satırı yazabiliyor; 'günün son kaydı' kuralı o satırı kapanış sanıyordu.
+  // ÜST SINIR = snapshot anı + 10 dk (2026-09-28): gece açılan uygulama aynı UTC gününe snapshot'tan SONRA fiyat
+  // satırı yazabiliyor, o satır kapanış sanılmasın. AMA cron price_history'yi snapshot'tan ~0,6 sn SONRA yazıyor
+  // (daily-snapshot: snapshot → fiyat geçmişi), yani tam snapshot anıyla sınırlarsak MEŞRU kapanış fiyatları da
+  // dışarıda kalıyordu → kırılım sessizce hiç görünmüyordu (kullanıcı 'neden eksi' diye sormak zorunda kaldı).
+  // 10 dakika, cron'un kendi yazımını içerir ama gece 3-4 saat sonraki uygulama yazımını almaz.
+  const until = new Date(new Date(untilTs).getTime() + 10 * 60 * 1000).toISOString();
   const rows = await fetchAll<{ symbol: string; price: number; recorded_at: string }>('closePrices', () => supabase
     .from('price_history').select('symbol,price,recorded_at')
-    .gte('recorded_at', `${day}T00:00:00Z`).lte('recorded_at', untilTs)
+    .gte('recorded_at', `${day}T00:00:00Z`).lte('recorded_at', until)
     .order('recorded_at', { ascending: true }).order('id', { ascending: true }));
   if (!rows.length) return null;
   const m = new Map<string, number>();
