@@ -22,7 +22,7 @@ YAPMAYACAKLARIN (KESİN):
 export interface WeekPlanRow { symbol: string; label: string; sharePct: number; amountEUR: number; instruction: string }
 export interface AiContext { text: string; eur: EurSummary; weekPlan: WeekPlanRow[]; anomalies: string[]; trancheEUR: number }
 
-type H = { id: string | number; symbol: string; asset_type: string; currency: string | null; quantity: number; current_price: number; purchase_price: number };
+type H = { id: string | number; symbol: string; asset_type: string; currency: string | null; quantity: number; current_price: number; purchase_price: number; maturity_date?: string | null };
 
 // Haftalık dilim: kullanıcının fiili pratiği ruble → ~$2.000 → Revolut (panel RUB_WEEKLY_USD ile aynı sabit)
 export const WEEKLY_TRANCHE_USD = 2000;
@@ -69,7 +69,7 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
   const buySince = new Date(now.getTime() - NO_BUY_DAYS * 86400000).toISOString().slice(0, 10);
   const [model, holdRes, cashRes, phRows, buyRes] = await Promise.all([
     loadEurModel(supabase),
-    supabase.from('holdings').select('id,symbol,asset_type,currency,quantity,current_price,purchase_price').gt('quantity', 0),
+    supabase.from('holdings').select('id,symbol,asset_type,currency,quantity,current_price,purchase_price,maturity_date').gt('quantity', 0),
     supabase.from('cash_balances').select('currency,balance').gt('balance', 0),
     // fetchAll: PostgREST max_rows=1000 tavanı (45 gün × 26 sembol > 1000 satır) — tek .range() kesiyordu
     fetchAll<{ symbol: string; price: number; recorded_at: string }>('price_history', () => supabase.from('price_history').select('symbol,price,recorded_at').gte('recorded_at', since).order('recorded_at', { ascending: true }).order('id', { ascending: true })),
@@ -114,7 +114,16 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
     const st = stale.get(h.symbol); if (!st) continue;
     anomalies.push(`${h.symbol} fiyatı ${st.atLeast ? 'en az ' : ''}${st.days} gündür değişmemiş (€${Math.round(valEUR(h)).toLocaleString('de-DE')}) — elle güncelle.`);
   }
-  if (inv.some(h => h.symbol === 'US900123CJ75')) anomalies.push('US900123CJ75 (Türkiye %4,25 kupon, 14 Nis 2026 vadeli) itfa olmuş görünüyor ama pozisyon açık — ekstre kontrolü.');
+  // VADE KONTROLÜ (2026-09-28): eskiden tek sembol elle yazılıydı ve US900123CJ75 5,5 ay hayalet durdu (€1.685).
+  // Artık maturity_date üzerinden GENEL: vadesi geçmiş ama açık duran pozisyon + 30 gün içinde yaklaşan vade.
+  const todayMs = new Date(todayStr + 'T00:00:00Z').getTime();
+  for (const h of inv) {
+    const m = h.maturity_date ? String(h.maturity_date).slice(0, 10) : '';
+    if (!m) continue;
+    const days = Math.round((new Date(m + 'T00:00:00Z').getTime() - todayMs) / 86400000);
+    if (days < 0) anomalies.push(`${h.symbol} vadesi ${m} (${-days} gün önce) GEÇMİŞ ama pozisyon açık (€${Math.round(valEUR(h)).toLocaleString('de-DE')}) — itfa oldu mu, ekstre kontrolü.`);
+    else if (days <= 30) anomalies.push(`${h.symbol} vadesi ${m} — ${days} gün kaldı (€${Math.round(valEUR(h)).toLocaleString('de-DE')}). İtfa gününde ana parayı ve kapanışı işle.`);
+  }
   if (!buyRes.error && (buyRes.count ?? 0) === 0) anomalies.push(`Son ${NO_BUY_DAYS} günde kayıtlı ALIM yok — haftalık dilim (V3YL + XEON) ya atlandı ya da işlenmedi.`);
 
   const alloc = Object.keys(TARGET_ALLOCATION).map(t => `${t}: %${(100 * (byType[t] || 0) / total).toFixed(0)} → hedef %${TARGET_ALLOCATION[t].target}${PHYSICAL_FIXED_TYPES.has(t) ? ' (fiziki, satılmaz)' : ''}`).join(' · ');

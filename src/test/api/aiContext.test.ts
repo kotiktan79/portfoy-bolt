@@ -88,7 +88,7 @@ function fixture(opts: { augLoss: boolean }) {
     { id: 3, symbol: 'ALTIN', asset_type: 'commodity', currency: 'TRY', quantity: 1, current_price: 10000 * E, purchase_price: 1, created_at: '2026-01-01' },
     { id: 4, symbol: 'EURO', asset_type: 'currency', currency: 'EUR', quantity: 30000, current_price: 1, purchase_price: 1, created_at: '2026-01-01' },
     { id: 5, symbol: 'KASA', asset_type: 'cash', currency: 'EUR', quantity: 99999, current_price: 1, purchase_price: 1, created_at: '2026-01-01' },
-    { id: 6, symbol: 'US900123CJ75', asset_type: 'eurobond', currency: 'USD', quantity: 0, current_price: 1000, purchase_price: 1000, created_at: '2026-01-01' },
+    { id: 6, symbol: 'US900123CJ75', asset_type: 'eurobond', currency: 'USD', quantity: 0, current_price: 1000, purchase_price: 1000, created_at: '2026-01-01', maturity_date: '2026-04-14' },
   ];
   const price_history: Row[] = [];
   for (const day of days) {
@@ -132,7 +132,7 @@ describe('buildAiContext — metin motordan türetilir, sabit rakam yok', () => 
     expect(before.anomalies.some(a => /^V3YL fiyatı en az 4[45] gündür/.test(a))).toBe(true);   // 45 günlük pencere boyunca sabit
     expect(before.anomalies.some(a => a.startsWith('IB01'))).toBe(false);
     expect(before.anomalies.some(a => a.includes('kayıtlı ALIM yok'))).toBe(true);
-    expect(before.anomalies.some(a => a.includes('US900123CJ75'))).toBe(false);   // quantity 0 → filtrelendi
+    expect(before.anomalies.some(a => a.includes('US900123CJ75'))).toBe(false);   // adet 0 → hem değerden hem vade kuralından düşer
     expect(before.anomalies.some(a => a.startsWith('Snapshot eksik'))).toBe(false); // 10:00 UTC: dünkü snapshot yeterli
     const after = await buildAiContext(fixture({ augLoss: false }), '2026-09-22', new Date('2026-09-22T19:00:00Z'));
     expect(after.anomalies.some(a => a.startsWith('Snapshot eksik: son 2026-09-21, beklenen 2026-09-22'))).toBe(true);
@@ -143,5 +143,52 @@ describe('buildAiContext — metin motordan türetilir, sabit rakam yok', () => 
     expect(ctx.eur.mtd?.carryResetApplied).toBeFalsy();
     expect(ctx.text).toMatch(/Bu aya devreden (havuz|açık)/);
     expect(ctx.text).toContain('Zarar devreder');
+  });
+});
+
+// ---------------------------------------------------------------------------------
+// VADE ANOMALİSİ (2026-09-28): US900123CJ75 itfa olmuş ama kayıtta 5,5 ay CANLI durdu (€1.685 hayalet).
+// Tek koruma elle yazılmış bir sembol kontrolüydü. Artık maturity_date üzerinden GENEL kural.
+// ---------------------------------------------------------------------------------
+describe('buildAiContext — tahvil vadesi', () => {
+  const vadeFixture = (maturity: string | null) => {
+    const E = 48, U = 41;
+    const days: string[] = [];
+    for (let d = new Date('2026-09-01T00:00:00Z'); d <= new Date('2026-09-21T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) days.push(d.toISOString().slice(0, 10));
+    const snapshots = days.map(day => ({ snapshot_date: day, total_value: 100_000 * E, total_investment: 50_000 * E, created_at: `${day}T18:00:00Z` }));
+    const rate = (r: number) => days.map(day => ({ day, rate: r }));
+    return fakeSupabase({
+      portfolio_snapshots: snapshots,
+      exchange_rates_daily: [
+        ...rate(E).map(r => ({ ...r, from_currency: 'EUR', to_currency: 'TRY', source: 'api' })),
+        ...rate(U).map(r => ({ ...r, from_currency: 'USD', to_currency: 'TRY', source: 'api' })),
+      ],
+      transactions: [], cash_transactions: [], salary_withdrawals: [], income_records: [],
+      holdings: [
+        { id: 1, symbol: 'V3YL', asset_type: 'stock', currency: 'EUR', quantity: 1, current_price: 90_000, purchase_price: 90_000, created_at: '2026-01-01' },
+        { id: 2, symbol: 'TAHVIL', asset_type: 'eurobond', currency: 'EUR', quantity: 1, current_price: 10_000, purchase_price: 10_000, created_at: '2026-01-01', maturity_date: maturity },
+      ],
+      cash_balances: [], price_history: [],
+    });
+  };
+
+  it('vadesi GEÇMİŞ ama açık duran pozisyon bildirilir (hayalet tahvil bir daha 5 ay gizlenmesin)', async () => {
+    const ctx = await buildAiContext(vadeFixture('2026-08-14'), '2026-09-22', new Date('2026-09-22T10:00:00Z'));
+    const a = ctx.anomalies.find(x => x.startsWith('TAHVIL vadesi'))!;
+    expect(a).toContain('2026-08-14');
+    expect(a).toContain('39 gün önce) GEÇMİŞ');
+    expect(a).toContain('pozisyon açık');
+  });
+
+  it('30 gün içinde YAKLAŞAN vade bildirilir (itfa günü kaçmasın)', async () => {
+    const ctx = await buildAiContext(vadeFixture('2026-10-10'), '2026-09-22', new Date('2026-09-22T10:00:00Z'));
+    expect(ctx.anomalies.some(x => x.startsWith('TAHVIL vadesi 2026-10-10 — 18 gün kaldı'))).toBe(true);
+  });
+
+  it('vadesi uzak ya da boş olan pozisyon anomali üretmez', async () => {
+    const uzak = await buildAiContext(vadeFixture('2027-03-25'), '2026-09-22', new Date('2026-09-22T10:00:00Z'));
+    expect(uzak.anomalies.some(x => x.includes('TAHVIL vadesi'))).toBe(false);
+    const bos = await buildAiContext(vadeFixture(null), '2026-09-22', new Date('2026-09-22T10:00:00Z'));
+    expect(bos.anomalies.some(x => x.includes('TAHVIL vadesi'))).toBe(false);
   });
 });
