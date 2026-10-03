@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback, ReactNode } from 'react';
 import { supabase, Holding, AssetType } from '../lib/supabase';
-import { holdingValueTRY, holdingCostTRY, FxRates } from '../lib/fx';
+import { holdingValueTRY, holdingCostTRY, getFxRatesFromHoldings, FxRates } from '../lib/fx';
+import { priceWriteGuard } from '../lib/priceGuard';
 import {
   fetchMultiplePrices,
   isFallbackPrice,
@@ -36,7 +37,7 @@ import { stopCacheCleanup } from '../services/cacheService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
 import { computePortfolioMetrics, computeIntradayChange } from '../lib/portfolioMetrics';
 import { useToast } from '../hooks/useToast';
-import { DEFAULT_USD_TRY_RATE, TIMING } from '../config';
+import { TIMING } from '../config';
 
 interface PortfolioContextType {
   // Holdings
@@ -127,8 +128,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [totalCashValue, setTotalCashValue] = useState(0);
-  const [liveUsdRate, setLiveUsdRate] = useState<number>(DEFAULT_USD_TRY_RATE);
-  const [liveEurRate, setLiveEurRate] = useState<number>(DEFAULT_USD_TRY_RATE * 1.08);
+  // null = canlı kur henüz gelmedi. Taban holdings'teki GERÇEK kur; canlı gelince üzerine yazar.
+  // Eskiden sabit 46,70 / 46,70×1,08 ile başlıyordu — ikisi de çürük (gerçek 49,13 / 55,31).
+  const [liveUsdRate, setLiveUsdRate] = useState<number | null>(null);
+  const [liveEurRate, setLiveEurRate] = useState<number | null>(null);
 
   // Filter/Sort
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,8 +156,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       try {
         const [usd, eur] = await Promise.all([fetchUSDTRYRate(), fetchEURTRYRate()]);
         if (!cancelled) {
-          if (usd > 1) setLiveUsdRate(usd);
-          if (eur > 1) setLiveEurRate(eur);
+          if (usd != null && usd > 1) setLiveUsdRate(usd);
+          if (eur != null && eur > 1) setLiveEurRate(eur);
         }
       } catch {
         // keep previous rates on failure
@@ -344,14 +347,11 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         // (US stock → USD, EU stock → EUR, BIST → TRY, crypto → TRY). Doğrudan yazılır.
         // Fallback fiyat DB'ye YAZILMAZ — eski gerçek fiyat, uydurma sabitten iyidir.
         const newPrice = prices[holding.symbol];
-        // 2026-09-24 (hakem bulgusu): KUR satırlarında (currency) sapma bandı — bozuk kaynak 51/44 gibi bir rakam
-        // dönerse DB'ye YAZILMAZ. Kur, servetin TAMAMINI böldüğü için tek hatalı yazım on binlerce euro sahte kâr
-        // üretip maaş havuzuna giriyordu. Diğer varlıklarda bant yok (hisse/kripto gerçekten %20 oynayabilir).
-        const sapmaVar = holding.asset_type === 'currency' && holding.current_price > 1 && newPrice
-          ? Math.abs(newPrice / holding.current_price - 1) > 0.05
-          : false;
-        if (sapmaVar) {
-          console.warn(`[kur] ${holding.symbol}: ${holding.current_price} → ${newPrice} (%${(100 * (newPrice / holding.current_price - 1)).toFixed(1)}) — bant dışı, DB'ye yazılmadı`);
+        // Sapma bandı tek yerde: src/lib/priceGuard.ts (kur %5, emtia %10, diğerleri bantsız).
+        // Gerekçe ve iki tetikleyen olay o dosyanın başında yazılı.
+        const guard = priceWriteGuard(holding.asset_type, holding.current_price, newPrice);
+        if (guard.blocked) {
+          console.warn(`[fiyat kapısı] ${holding.symbol} (${holding.asset_type}): ${holding.current_price} → ${newPrice} (%${(100 * guard.deviation!).toFixed(1)}, bant %${(100 * guard.band!).toFixed(0)}) — DB'ye yazılmadı`);
           return holding;
         }
         if (newPrice && !isFallbackPrice(holding.symbol, newPrice) && Math.abs(newPrice - holding.current_price) > 0.01) {
@@ -630,13 +630,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const portfolioMetrics = useMemo(() => {
     const m = computePortfolioMetrics(holdings);
     // Live FX override: API'den taze kur geldiyse onu kullan (holdings'teki son kur eski olabilir)
-    const usdRate = liveUsdRate > 1 ? liveUsdRate : (m.fxRates.usd > 1 ? m.fxRates.usd : DEFAULT_USD_TRY_RATE);
+    const usdRate = liveUsdRate ?? m.fxRates.usd;   // taban: holdings'teki gerçek kur
     const totalRealized = holdings.reduce((sum, h) => {
       const v = (h.total_realized_pnl || 0);
       const c = (h.currency || 'TRY').toUpperCase();
       if (c === 'TRY') return sum + v;
       if (c === 'USD') return sum + v * usdRate;
-      if (c === 'EUR') return sum + v * (liveEurRate > 1 ? liveEurRate : m.fxRates.eur);
+      if (c === 'EUR') return sum + v * (liveEurRate ?? m.fxRates.eur);
       return sum + v;
     }, 0);
     const totalProfitLoss = m.totalPnLTRY + totalRealized;
@@ -658,10 +658,14 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }, [holdings, totalCashValue, liveUsdRate, liveEurRate]);
 
   const filteredAndSortedHoldings = useMemo(() => {
+    // 2026-10-03: burada holdings'teki gerçek kurlar HİÇ kullanılmıyordu — sabit 46,70 ve yanlış
+    // çapraz (×1,08, doğrusu ×1,16) ile hesaplanıyordu. Artık taban getFxRatesFromHoldings,
+    // canlı kur varsa üzerine yazıyor.
+    const base = getFxRatesFromHoldings(holdings);
     const fxRates: FxRates = {
-      usd: liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE,
-      eur: liveEurRate > 1 ? liveEurRate : (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.08,
-      gbp: (liveUsdRate > 1 ? liveUsdRate : DEFAULT_USD_TRY_RATE) * 1.27,
+      usd: liveUsdRate ?? base.usd,
+      eur: liveEurRate ?? base.eur,
+      gbp: base.gbp,
     };
     return holdings
       .filter((holding) => {

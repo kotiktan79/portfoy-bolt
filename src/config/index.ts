@@ -21,9 +21,12 @@ export const TIMING = {
 } as const;
 
 // ── Currency ─────────────────────────────────────────────────────────────
-// Mutlak son çare (DB fiyatları henüz yüklenmemişken ekran için). Gerçek
-// fallback'ler DB'den beslenir: priceService.seedFallbackPrices.
-export const DEFAULT_USD_TRY_RATE = 46.70;
+// DEFAULT_USD_TRY_RATE 2026-10-03'te SİLİNDİ. 46,70'te kalmış bir sabitti, gerçek kur 49,13 —
+// yani %5 sapma, ve kimse fark etmiyordu. Çürüyen sabit yeniden eklenmeyecek:
+//   kur kaynağı → priceService.fetchUSDTRYRate/fetchEURTRYRate (düşerse null)
+//   son çare    → priceService.getLastKnownPrice() = DB'den tohumlanmış son GERÇEK kur
+//   ölçüm yolu  → eurPnlService, canlı kur yoksa kur serisinin son gerçek gününü kullanır
+// Sabit yedek kur 3 kez sahte kâr üretti (€14k, €6,5k, ₺13M) + 1 kez sahte zarar (−€3.707).
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 export const ANON_USER_ID = '00000000-0000-0000-0000-000000000001';

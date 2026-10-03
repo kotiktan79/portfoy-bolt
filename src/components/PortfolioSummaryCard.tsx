@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Wallet, PieChart, Coins, Package, LucideIcon } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { formatCurrency, formatCurrencyUSD, getCachedUSDRate } from '../services/priceService';
-import { DEFAULT_USD_TRY_RATE } from '../config';
 
 interface Props {
   holdings: Holding[];
@@ -33,14 +32,16 @@ export function PortfolioSummaryCard({
   monthlyChange,
   monthlyChangePct,
 }: Props) {
-  const [usdRate, setUsdRate] = useState(DEFAULT_USD_TRY_RATE);
+  // Kur gelmeden dolar rakamı basılmaz (null → formatCurrencyUSD '—' döner). Eskiden sabit
+  // 46,70 ile ilk render'da %5 sapmalı tutar görünüyordu.
+  const [usdRate, setUsdRate] = useState<number | null>(null);
 
   useEffect(() => {
     getCachedUSDRate().then(setUsdRate).catch(() => {});
   }, [totalValue]);
 
   const grandTotal = totalValue + totalCashValue;
-  const grandTotalUSD = usdRate > 0 ? grandTotal / usdRate : 0;
+  const grandTotalUSD = usdRate != null && usdRate > 0 ? grandTotal / usdRate : null;
   const assetCount = holdings.length;
   const isPositiveDaily = (dailyChange ?? 0) >= 0;
   const isPositivePnL = totalProfitLoss >= 0;
@@ -68,7 +69,7 @@ export function PortfolioSummaryCard({
             <span className="text-2xl md:text-3xl font-bold text-slate-400 dark:text-gray-500 ml-2">₺</span>
           </p>
           <p className="t-caption mt-1.5">
-            ≈ <span className="font-semibold text-slate-600 dark:text-gray-300">${formatCurrency(grandTotalUSD)}</span> USD
+            ≈ <span className="font-semibold text-slate-600 dark:text-gray-300">{grandTotalUSD == null ? '—' : `$${formatCurrency(grandTotalUSD)}`}</span> USD
           </p>
         </div>
 

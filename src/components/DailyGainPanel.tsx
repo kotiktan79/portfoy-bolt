@@ -7,7 +7,6 @@ import {
 import { Holding } from '../lib/supabase';
 import { formatCurrency, formatCurrencyUSD, formatPercentage, getCachedUSDRate } from '../services/priceService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
-import { DEFAULT_USD_TRY_RATE } from '../config';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 interface AssetDailyGain {
@@ -127,7 +126,9 @@ function HourlyTrendChart({ points }: { points: HourlyPoint[] }) {
 }
 
 export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: DailyGainPanelProps) {
-  const [usdRate, setUsdRate] = useState(DEFAULT_USD_TRY_RATE);
+  // Kur gelmeden dolar rakamı basılmaz (null → formatCurrencyUSD '—' döner). Eskiden sabit
+  // 46,70 ile ilk render'da %5 sapmalı tutar görünüyordu.
+  const [usdRate, setUsdRate] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [sessionPrices, setSessionPrices] = useState<Record<string, number>>({});
   const [hourlyPoints, setHourlyPoints] = useState<HourlyPoint[]>([]);

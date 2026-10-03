@@ -6,7 +6,6 @@ import { BuySellModal } from './BuySellModal';
 import { ManualPriceUpdateModal } from './ManualPriceUpdateModal';
 import { detectCurrency, calculatePnLWithCurrency, getCurrencySymbol, getExchangeRate } from '../services/currencyService';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
-import { DEFAULT_USD_TRY_RATE } from '../config';
 import { assetColor, fmtQty, fmtPrice } from '../lib/chartTheme';
 
 // Varlık tipi renk noktası — palet light/dark için farklı step kullanır,
@@ -31,7 +30,9 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
   const [showPriceUpdateModal, setShowPriceUpdateModal] = useState(false);
-  const [usdRate, setUsdRate] = useState(DEFAULT_USD_TRY_RATE);
+  // Kur gelmeden dolar rakamı basılmaz (null → formatCurrencyUSD '—' döner). Eskiden sabit
+  // 46,70 ile ilk render'da %5 sapmalı tutar görünüyordu.
+  const [usdRate, setUsdRate] = useState<number | null>(null);
   const [pnlData, setPnlData] = useState({ pnl: 0, pnlPercent: 0, currentValue: 0 });
   const [cashTRYRate, setCashTRYRate] = useState(1);
 

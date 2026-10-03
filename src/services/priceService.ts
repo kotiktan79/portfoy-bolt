@@ -1,7 +1,7 @@
 import { AssetType } from '../lib/supabase';
 import { getCachedPrice, setCachedPrice } from './persistentCache';
 import { trackAPICall, shouldUseService } from './priceMonitor';
-import { API_URLS, DEFAULT_USD_TRY_RATE } from '../config';
+import { API_URLS } from '../config';
 
 interface PriceData {
   [symbol: string]: number;
@@ -170,9 +170,11 @@ const US_STOCKS: Record<string, string> = {
 // guard'ı sayesinde asla DB'ye geri yazılmaz.
 // (Tarihçe: eski sabit liste çürümüştü — USD 38.50 kalmış, gerçek 46.71 iken
 // 2026-07-02'de DB'ye yazılıp portföyü ₺279K eksik gösterdi.)
+// 2026-10-03: 'USD': DEFAULT_USD_TRY_RATE buradan KALDIRILDI. O sabit 46,70'te çürümüştü
+// (gerçek 49,13) ve havuz DB'den tohumlanmadan önce kullanılırsa %5 sapmalı kur üretiyordu.
+// TRY=1,00 bir olgu, kalıyor; geri kalan her kur yalnız seedFallbackPrices() ile DB'den gelir.
 const FALLBACK_PRICES: PriceData = {
   'TRY': 1.00,
-  'USD': DEFAULT_USD_TRY_RATE,
 };
 
 // DB'deki son gerçek fiyatları fallback havuzuna aktar (symbol → current_price).
@@ -183,6 +185,12 @@ export function seedFallbackPrices(prices: Record<string, number>) {
   // Holdings 'EURO' sembolünü kullanır, kod yer yer 'EUR' arar — iki yönlü alias
   if (FALLBACK_PRICES['EURO'] && !FALLBACK_PRICES['EUR']) FALLBACK_PRICES['EUR'] = FALLBACK_PRICES['EURO'];
   if (FALLBACK_PRICES['EUR'] && !FALLBACK_PRICES['EURO']) FALLBACK_PRICES['EURO'] = FALLBACK_PRICES['EUR'];
+}
+
+/** Havuzdaki son GERÇEK fiyat/kur (DB'den tohumlanır). Bilinmiyorsa null — sabit uydurulmaz. */
+export function getLastKnownPrice(symbol: string): number | null {
+  const v = FALLBACK_PRICES[symbol];
+  return v != null && isFinite(v) && v > 0 ? v : null;
 }
 
 // Fiyat fallback havuzundaki değerle birebir aynıysa fallback say — bunlar
@@ -210,7 +218,7 @@ const USD_RATE_CACHE_MS = 60000;
 let eurTryRateCache: { rate: number; timestamp: number } | null = null;
 const EUR_RATE_CACHE_MS = 60000;
 
-export async function fetchUSDTRYRate(): Promise<number> {
+export async function fetchUSDTRYRate(): Promise<number | null> {
   if (usdTryRateCache && Date.now() - usdTryRateCache.timestamp < USD_RATE_CACHE_MS) {
     return usdTryRateCache.rate;
   }
@@ -229,7 +237,7 @@ export async function fetchUSDTRYRate(): Promise<number> {
   return await fetchUSDTRYFromAlternative();
 }
 
-async function fetchUSDTRYFromAlternative(): Promise<number> {
+async function fetchUSDTRYFromAlternative(): Promise<number | null> {
   if (!canMakeRequest('exchangerate')) await waitForRateLimit('exchangerate');
 
   const result = await retryFetch(async () => {
@@ -243,10 +251,12 @@ async function fetchUSDTRYFromAlternative(): Promise<number> {
     return result.rates.TRY;
   }
 
-  return FALLBACK_PRICES['USD'] || DEFAULT_USD_TRY_RATE;
+  // Buraya düşmek "kur BİLİNMİYOR" demektir. Havuzdaki değer DB'den gelen son GERÇEK kurdur;
+  // o da yoksa null — sabit sayı uydurulmaz (bkz. feedback_portfoy_no_hardcoded_fx_fallback).
+  return FALLBACK_PRICES['USD'] ?? null;
 }
 
-export async function fetchEURTRYRate(): Promise<number> {
+export async function fetchEURTRYRate(): Promise<number | null> {
   if (eurTryRateCache && Date.now() - eurTryRateCache.timestamp < EUR_RATE_CACHE_MS) {
     return eurTryRateCache.rate;
   }
@@ -278,7 +288,9 @@ export async function fetchEURTRYRate(): Promise<number> {
 
   // 2026-09-24: buraya düşmek "kur bilinmiyor" demektir. Dönen değer FALLBACK_PRICES'tan gelir ve
   // isFallbackPrice() onu yakalayıp DB'ye yazılmasını engeller (ekranda görünür, kalıcı olmaz).
-  return FALLBACK_PRICES['EURO'] || DEFAULT_USD_TRY_RATE * 1.08;
+  // 2026-10-03: ...o da yoksa null. Eski `DEFAULT_USD_TRY_RATE * 1.08` hem çürük hem de yanlış
+  // çapraz: 46,70×1,08 = 50,44, gerçek EUR/TRY 55,31 — %9 sapma.
+  return FALLBACK_PRICES['EURO'] ?? null;
 }
 
 export async function fetchCryptoPrice(symbol: string): Promise<number | null> {
@@ -311,13 +323,18 @@ async function fetchCryptoFromBinance(symbol: string): Promise<number | null> {
     if (!priceUSD || isNaN(priceUSD)) return null;
 
     const usdTryRate = await fetchUSDTRYRate();
+    if (usdTryRate == null) return null;   // kur bilinmiyorsa TL fiyat uydurulmaz
     return priceUSD * usdTryRate;
   } catch {
     return null;
   }
 }
 
-export async function fetchGoldPrice(): Promise<number> {
+// 2026-10-03: KAYNAK DÜŞERSE null. Eskiden burada "ons = $3300" sabiti vardı; iki kaynak da
+// cevap vermediği gün (3300/31,1035)×49,1349 = 5.213,08 TL/gram yazdı — gerçek 6.579,57'ydi.
+// Ekranda altın bir günde −%20,8, portföy −€3.687 göründü. Sabit yedek fiyat YASAK: null dönünce
+// çağıran taraf FALLBACK_PRICES'a (DB'deki son GERÇEK fiyat) düşer — bayat ama uydurma değil.
+export async function fetchGoldPrice(): Promise<number | null> {
   // Vercel proxy üzerinden (CORS bypass)
   try {
     const r = await fetchWithTimeout('/api/price-proxy?type=gold', {}, 8000);
@@ -325,12 +342,13 @@ export async function fetchGoldPrice(): Promise<number> {
       const d = await r.json();
       if (d.success && d.data?.pricePerGramTRY) return d.data.pricePerGramTRY;
     }
-  } catch { /* fallback */ }
+  } catch { /* alternatif kaynak denenir */ }
   const usdTryRate = await fetchUSDTRYRate();
+  if (usdTryRate == null) return null;   // kur bilinmiyorsa ons→TL çevrimi yapılmaz
   return await fetchGoldFromAlternative(usdTryRate);
 }
 
-async function fetchGoldFromAlternative(usdTryRate: number): Promise<number> {
+async function fetchGoldFromAlternative(usdTryRate: number): Promise<number | null> {
   try {
     const response = await fetchWithTimeout(`${API_URLS.METALS_API}/gold`, {}, 5000);
     if (!response.ok) throw new Error('Metals.live failed');
@@ -341,11 +359,11 @@ async function fetchGoldFromAlternative(usdTryRate: number): Promise<number> {
 
     return (goldPricePerOunce / 31.1035) * usdTryRate;
   } catch {
-    return (3300 / 31.1035) * usdTryRate;
+    return null;
   }
 }
 
-export async function fetchSilverPrice(): Promise<number> {
+export async function fetchSilverPrice(): Promise<number | null> {
   // Vercel proxy üzerinden (CORS bypass)
   try {
     const r = await fetchWithTimeout('/api/price-proxy?type=silver', {}, 8000);
@@ -355,10 +373,11 @@ export async function fetchSilverPrice(): Promise<number> {
     }
   } catch { /* fallback */ }
   const usdTryRate = await fetchUSDTRYRate();
+  if (usdTryRate == null) return null;
   return await fetchSilverFromAlternative(usdTryRate);
 }
 
-async function fetchSilverFromAlternative(usdTryRate: number): Promise<number> {
+async function fetchSilverFromAlternative(usdTryRate: number): Promise<number | null> {
   try {
     const response = await fetchWithTimeout(`${API_URLS.METALS_API}/silver`, {}, 5000);
     if (!response.ok) throw new Error('Metals.live silver failed');
@@ -369,7 +388,7 @@ async function fetchSilverFromAlternative(usdTryRate: number): Promise<number> {
 
     return (silverPricePerOunce / 31.1035) * usdTryRate;
   } catch {
-    return (32 / 31.1035) * usdTryRate;
+    return null;   // altınla aynı gerekçe: sabit yedek ons fiyatı YASAK
   }
 }
 
@@ -763,7 +782,10 @@ export function formatCurrency(value: number, decimals: number = 2): string {
   }).format(value);
 }
 
-export function formatCurrencyUSD(valueTRY: number, usdRate: number, decimals: number = 2): string {
+export function formatCurrencyUSD(valueTRY: number, usdRate: number | null, decimals: number = 2): string {
+  // Kur bilinmiyorsa rakam YERİNE tire. Eskiden çağıranlar sabit 46,70 ile ilk render'da
+  // %5 sapmalı dolar tutarı gösteriyordu ($200k portföyde ~$10k).
+  if (usdRate == null || !isFinite(usdRate) || usdRate <= 0) return '—';
   const valueUSD = valueTRY / usdRate;
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
@@ -779,12 +801,13 @@ export function formatPercentage(value: number): string {
 let cachedUSDRate: { rate: number; timestamp: number } | null = null;
 const USD_RATE_EXPORT_CACHE_DURATION = 5 * 60 * 1000;
 
-export async function getCachedUSDRate(): Promise<number> {
+export async function getCachedUSDRate(): Promise<number | null> {
   if (cachedUSDRate && Date.now() - cachedUSDRate.timestamp < USD_RATE_EXPORT_CACHE_DURATION) {
     return cachedUSDRate.rate;
   }
 
   const rate = await fetchUSDTRYRate();
+  if (rate == null) return null;         // bilinmeyen kur CACHE'LENMEZ, yoksa bir dakika boyunca yayılır
   cachedUSDRate = { rate, timestamp: Date.now() };
   return rate;
 }

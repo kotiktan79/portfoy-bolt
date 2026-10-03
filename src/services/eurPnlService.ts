@@ -2,7 +2,6 @@
 // Tüm K/Z ekranları, Kâr Cüzdanı ve maaş buradan okur. Dayanak: lib/eurPnl.ts başlığı.
 import { supabase } from '../lib/supabase';
 import { getCachedUSDRate } from './priceService';
-import { DEFAULT_USD_TRY_RATE } from '../config';
 import { buildEurModel, withdrawnMap, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type MonthRow, type EurModel, type EurDaily } from '../lib/eurPnl';
 export type { EurDaily };
 export { RELIABLE_FROM, INFLATION_EUR };
@@ -54,7 +53,13 @@ async function load(): Promise<EurModel> {
       .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
   ]);
-  const usdNow = await getCachedUSDRate().catch(() => DEFAULT_USD_TRY_RATE);
+  // 2026-10-03: ÖLÇÜM YOLUNDA SABİT YEDEK KUR YOK. Eskiden burada DEFAULT_USD_TRY_RATE (46,70)
+  // vardı; gerçek kur 49,13 iken kaynak düşse %5 sapmalı kurla ölçüm yapılacaktı. Canlı kur
+  // bilinmiyorsa ZATEN ÇEKİLMİŞ kur serisinin son GERÇEK günü kullanılır — bayat ama uydurma değil.
+  const liveUsd = await getCachedUSDRate().catch(() => null);
+  const lastSeriesUsd = Number(usdRates[usdRates.length - 1]?.rate) || null;
+  const usdNow = liveUsd ?? lastSeriesUsd;
+  if (usdNow == null) throw new Error('eurPnl: USD/TRY kuru ne canlı ne seriden bulunamadı — ölçüm yapılmadı (sabit yedek kur yasak)');
   const value = buildEurModel({
     snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
     // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın

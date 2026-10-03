@@ -3,7 +3,7 @@
 // Bu helper currency'e göre TRY'ye çevirir.
 
 import { Holding } from './supabase';
-import { DEFAULT_USD_TRY_RATE } from '../config';
+import { getLastKnownPrice } from '../services/priceService';
 
 export interface FxRates {
   usd: number;
@@ -16,11 +16,16 @@ export function getFxRatesFromHoldings(holdings: Holding[]): FxRates {
   // Currency cash row may be stored as either 'EURO' or 'EUR' across the app.
   const eurH = holdings.find(h => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
   const gbpH = holdings.find(h => h.symbol === 'GBP' && h.asset_type === 'currency');
-  const usd = (usdH?.current_price && usdH.current_price > 1) ? usdH.current_price : DEFAULT_USD_TRY_RATE;
+  // 2026-10-03: son çare artık SABİT DEĞİL. Eskiden DEFAULT_USD_TRY_RATE (46,70) vardı; gerçek
+  // 49,13 iken holdings henüz yüklenmediği ilk render'da %5 sapmalı kur kullanılıyordu. Şimdi
+  // havuzdaki son GERÇEK kur (DB'den tohumlanmış) kullanılıyor; o da yoksa 0 → döviz pozisyonu
+  // 0 TL görünür. Bu GÖZE BATAN bir hata; sabit kur ise akla yatkın ama YANLIŞ rakam üretiyordu.
+  // Akla yatkın yanlış, göze batan yanlıştan kötüdür — fark edilmez.
+  const usd = (usdH?.current_price && usdH.current_price > 1) ? usdH.current_price : (getLastKnownPrice('USD') ?? 0);
   // Fallbacks (only when no currency-cash holding exists) derive from USD via an
   // approximate cross rate. EUR/USD≈1.16 and GBP/USD≈1.35 as of 2026 — the old
   // 1.08 EUR peg under-valued EUR holdings (~41 vs real ~53 TRY).
-  const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : usd * 1.16;
+  const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : (getLastKnownPrice('EURO') ?? usd * 1.16);
   const gbp = gbpH?.current_price && gbpH.current_price > 1 ? gbpH.current_price : usd * 1.35;
   return { usd, eur, gbp };
 }
