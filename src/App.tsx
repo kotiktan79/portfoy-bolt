@@ -15,6 +15,7 @@ const DailyReportPage = lazy(() => import('./pages/DailyReportPage'));
 const LivePage = lazy(() => import('./pages/LivePage'));
 const ResearchPage = lazy(() => import('./pages/ResearchPage'));
 const ProjectionPage = lazy(() => import('./pages/ProjectionPage'));
+const MeasurePage = lazy(() => import('./pages/MeasurePage'));
 
 function PageLoader() {
   return (
@@ -61,6 +62,7 @@ function App() {
             <Route path="/daily-report" element={<SafePage><DailyReportPage /></SafePage>} />
             <Route path="/research" element={<SafePage><ResearchPage /></SafePage>} />
             <Route path="/projection" element={<SafePage><ProjectionPage /></SafePage>} />
+            <Route path="/olcu" element={<SafePage><MeasurePage /></SafePage>} />
           </Route>
         </Routes>
       </PortfolioProvider>

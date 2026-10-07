@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { dayPct } from '../lib/eurPnl';
 import { TrendingUp, TrendingDown, Wallet, Gauge, Coins, ArrowUpRight } from 'lucide-react';
@@ -130,7 +131,13 @@ export default function HeroDashboard({
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
   const isPos = todayEUR >= 0;
-  void dailyChange; void dailyChangePct;
+  // Euro cetveline ait alanlar artık Ölçü sekmesinde kullanılıyor; prop sözleşmesi bozulmasın diye
+  // burada duruyorlar ama ana ekranda basılmıyorlar.
+  void liveSince; void liveParts; void liveFxEUR; void liveOtherEUR; void todayWealthForPct;
+  // 2026-10-07: ANA EKRAN ESKİ ÖLÇÜYE DÖNDÜ (kullanıcı: "ben eskisi gibi görmek istiyorum").
+  // Rozet artık TL günlük değişimi gösteriyor. Euro cetveli ölçüsü /olcu sekmesinde duruyor —
+  // silinmedi, taşındı. Gerekçe: euro rozetinde günün hareketinin yarısı EUR/TRY'den geliyor
+  // (6 Eki +€705, 7 Eki −€577 aynı portföyle) ve kullanıcı bunu kâr/zarar olarak kabul etmiyor.
 
   const topHoldings = useMemo(() =>
     computeHoldingMetrics(holdings).sort((a, b) => b.weight - a.weight).slice(0, 3),
@@ -203,40 +210,32 @@ export default function HeroDashboard({
               </span>
               <span className="font-serif italic text-sm ml-1 opacity-60">USD</span>
             </p>
-            {liveGainEUR !== undefined && (
+            {dailyChange !== undefined && (
               <motion.div
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.4, type: 'spring', stiffness: 200 }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border-2 ${
-                  liveGainEUR >= 0
+                  dailyChange >= 0
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                     : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                 }`}
-                title="Anlık: son snapshot'tan şu ana, canlı fiyatlarla — euro, para giriş/çıkışı ve kur farkı hariç"
+                title="Bugünün TL cinsinden değişimi — eski ölçü. Euro cetveli ve kur ayrıştırması Ölçü sekmesinde."
               >
-                {liveGainEUR >= 0 ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
-                {liveGainEUR >= 0 ? '+' : '−'}€{fmtUSD(Math.abs(liveGainEUR))}
+                {dailyChange >= 0 ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
+                {dailyChange >= 0 ? '+' : '−'}₺{fmtTRY(Math.abs(dailyChange))}
                 <span className="opacity-70">·</span>
-                <span>{todayWealthForPct > 0 ? `${liveGainEUR >= 0 ? '+' : ''}${dayPct(liveGainEUR, todayWealthForPct).toFixed(2)}% ` : ''}anlık{liveSince ? ` (${liveSince.slice(5).replace('-', '/')} kapanışından beri)` : ''}</span>
+                <span>{dailyChangePct !== undefined ? `${dailyChangePct >= 0 ? '+' : ''}${dailyChangePct.toFixed(2)}% ` : ''}bugün</span>
               </motion.div>
             )}
-            {/* 2026-09-24: "neden eksi?" ekranda cevaplansın — hareketi yapan 3 pozisyon + kur payı */}
-            {(liveParts?.length || liveFxEUR !== undefined) && (
-              <p className="mt-1.5 text-[11px] text-white/70 leading-relaxed">
-                {(() => {
-                  // Basılanların TOPLAMI rozetteki rakama eşit olmalı: ilk 3'ün dışında kalanlar + otherEUR 'diğer'e toplanır.
-                  const top = (liveParts || []).slice(0, 3);
-                  const kalan = (liveParts || []).slice(3).reduce((t, p) => t + p.eurDelta, 0) + (liveOtherEUR || 0);
-                  const eur = (v: number) => `${v >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(v))}`;
-                  return [
-                    ...top.map(p => `${p.symbol} ${eur(p.eurDelta)} (${p.pricePct >= 0 ? '+' : ''}${p.pricePct.toFixed(1)}%)`),
-                    ...(liveFxEUR !== undefined && Math.abs(liveFxEUR) >= 1 ? [`kur ${eur(liveFxEUR)}`] : []),
-                    ...(Math.abs(kalan) >= 1 ? [`diğer ${eur(kalan)}`] : []),
-                  ].join(' · ');
-                })()}
-              </p>
+            {/* Euro cetveli rozeti KALDIRILMADI, Ölçü sekmesine taşındı. Burada yalnız sessiz bir not. */}
+            {liveGainEUR !== undefined && (
+              <Link to="/olcu" className="text-[11px] text-white/50 hover:text-white/80 underline decoration-dotted"
+                 title="Euro cetveliyle anlık: bu ölçüde günün hareketinin önemli kısmı EUR/TRY'den gelir">
+                euro cetveliyle {liveGainEUR >= 0 ? '+' : '−'}€{fmtUSD(Math.abs(liveGainEUR))} → Ölçü sekmesi
+              </Link>
             )}
+            {/* Euro kırılımı (pozisyon + kur payı) Ölçü sekmesine taşındı — ana ekran eski ölçüde kalıyor. */}
           </div>
 
           {/* Altın çizgi separator + sparkline */}
