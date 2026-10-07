@@ -17,7 +17,8 @@ interface HeroDashboardProps {
   // 2026-09-19: TEK CETVEL EURO. Kâr kartları euro motorundan gelir (HomePage geçirir):
   //   inceptionGainEUR/Pct = kuruluştan bugüne (alış günü kuruyla) — Performans sayfasıyla aynı rakam
   //   todayGainEUR = motorun son günü (euro servet artışı − dış akış), prevWealthEUR = dünkü servet € (yüzde tabanı)
-  // TL kâr (totalPnLTRY) artık KPI olarak gösterilmez; kur şişmesi taşır.
+  // 2026-10-07: TL kâr (totalPnLTRY/Pct) ANA KPI olarak geri geldi — kullanıcının kararı.
+  // Kur şişmesi uyarısı geçerli ama ölçü tercihi kullanıcıya ait; euro ölçüsü /olcu sekmesinde.
   inceptionGainEUR?: number;
   inceptionGainPct?: number;
   todayGainEUR?: number;
@@ -118,7 +119,7 @@ export default function HeroDashboard({
 
   // TL kâr yalnızca ikincil bilgi satırı için (kur dahil)
   const pnlTRY = totalPnLTRY ?? m.totalPnLTRY;
-  void totalPnLPct;
+  const pnlPct = totalPnLPct ?? m.totalPnLPct;      // 19 Eylül öncesi 'Toplam Kâr' kartının değeri
   const gainEUR = inceptionGainEUR ?? 0;
   const gainPct = inceptionGainPct ?? 0;
   const todayEUR = todayGainEUR ?? 0;
@@ -131,13 +132,12 @@ export default function HeroDashboard({
   const passiveYearlyUSD = useMemo(() => computePassiveYearlyUSD(holdings), [holdings]);
 
   const isPos = todayEUR >= 0;
-  // Euro cetveline ait alanlar artık Ölçü sekmesinde kullanılıyor; prop sözleşmesi bozulmasın diye
-  // burada duruyorlar ama ana ekranda basılmıyorlar.
-  void liveSince; void liveParts; void liveFxEUR; void liveOtherEUR; void todayWealthForPct;
-  // 2026-10-07: ANA EKRAN ESKİ ÖLÇÜYE DÖNDÜ (kullanıcı: "ben eskisi gibi görmek istiyorum").
-  // Rozet artık TL günlük değişimi gösteriyor. Euro cetveli ölçüsü /olcu sekmesinde duruyor —
-  // silinmedi, taşındı. Gerekçe: euro rozetinde günün hareketinin yarısı EUR/TRY'den geliyor
-  // (6 Eki +€705, 7 Eki −€577 aynı portföyle) ve kullanıcı bunu kâr/zarar olarak kabul etmiyor.
+  const isPos2 = (dailyChange ?? 0) >= 0;           // TL günlük değişimin işareti ('Bugün' kartı)
+  // Euro ölçüsüne ait alanlar: ana sayfada basılmıyorlar (Ölçü sekmesinde), ama prop sözleşmesi
+  // ve ileride geri açma ihtimali için duruyorlar.
+  void todayDate; void liveSince; void liveParts; void liveFxEUR; void liveOtherEUR;
+  void gainEUR; void gainPct; void todayPct; void todayWealthForPct; void isPos;
+  void dailyChange; void dailyChangePct;
 
   const topHoldings = useMemo(() =>
     computeHoldingMetrics(holdings).sort((a, b) => b.weight - a.weight).slice(0, 3),
@@ -220,22 +220,20 @@ export default function HeroDashboard({
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                     : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                 }`}
-                title="Bugünün TL cinsinden değişimi — eski ölçü. Euro cetveli ve kur ayrıştırması Ölçü sekmesinde."
+                title="Bugünün TL cinsinden değişimi (19 Eylül öncesi ölçü)"
               >
                 {dailyChange >= 0 ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
-                {dailyChange >= 0 ? '+' : '−'}₺{fmtTRY(Math.abs(dailyChange))}
+                {dailyChange >= 0 ? '+' : ''}₺{fmtTRY(dailyChange)}
                 <span className="opacity-70">·</span>
-                <span>{dailyChangePct !== undefined ? `${dailyChangePct >= 0 ? '+' : ''}${dailyChangePct.toFixed(2)}% ` : ''}bugün</span>
+                <span>{dailyChangePct !== undefined ? `${dailyChangePct >= 0 ? '+' : ''}${dailyChangePct.toFixed(2)}% ` : ''}piyasa</span>
               </motion.div>
             )}
-            {/* Euro cetveli rozeti KALDIRILMADI, Ölçü sekmesine taşındı. Burada yalnız sessiz bir not. */}
+            {/* Euro kırılımı (pozisyon + kur payı) → Ölçü sekmesi. 19 Eylül öncesi ana sayfada yoktu. */}
             {liveGainEUR !== undefined && (
-              <Link to="/olcu" className="text-[11px] text-white/50 hover:text-white/80 underline decoration-dotted"
-                 title="Euro cetveliyle anlık: bu ölçüde günün hareketinin önemli kısmı EUR/TRY'den gelir">
-                euro cetveliyle {liveGainEUR >= 0 ? '+' : '−'}€{fmtUSD(Math.abs(liveGainEUR))} → Ölçü sekmesi
+              <Link to="/olcu" className="text-[11px] text-white/40 hover:text-white/70 underline decoration-dotted">
+                euro ölçüsü → Ölçü
               </Link>
             )}
-            {/* Euro kırılımı (pozisyon + kur payı) Ölçü sekmesine taşındı — ana ekran eski ölçüde kalıyor. */}
           </div>
 
           {/* Altın çizgi separator + sparkline */}
@@ -263,20 +261,21 @@ export default function HeroDashboard({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
-            // Veri gelmediyse '—' göster: '+€0' bir OLGU gibi okunur, yanlış rakamdır (hakem 2026-09-19)
-            label: 'Kuruluştan Bugüne Kâr', icon: Coins, accent: inceptionGainEUR === undefined ? 'gold' : gainEUR >= 0 ? 'emerald' : 'rose',
-            valueRaw: gainEUR,
-            valueFmt: (n: number) => inceptionGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: inceptionGainEUR === undefined ? missingNote : `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · alış günü kuruyla · ≈ ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (kur dahil)`,
+            // 2026-10-07: 19 EYLÜL ÖNCESİ KARTLAR GERİ GELDİ (kullanıcı: "eski sistemimi istiyorum komple
+            // ana sayfada"). Maliyet-bazlı TL kârı: değer − maliyet. Euro ölçüsü /olcu sekmesinde.
+            label: 'Toplam Kâr', icon: Coins, accent: pnlTRY >= 0 ? 'emerald' : 'rose',
+            valueRaw: pnlPct,
+            valueFmt: (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`,
+            subtitle: `${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))}`,
             symbol: '✦',
           },
           {
-            label: todayDate ? `Kapanış ${todayDate.slice(5).replace('-', '/')}` : 'Son Gün', icon: isPos ? TrendingUp : TrendingDown,
-            accent: todayGainEUR === undefined ? 'gold' : isPos ? 'emerald' : 'rose',
-            valueRaw: todayEUR,
-            valueFmt: (n: number) => todayGainEUR === undefined ? '—' : `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}`,
-            subtitle: todayGainEUR === undefined ? missingNote : `${isPos ? '+' : ''}${todayPct.toFixed(2)}% · euro servet, para hariç · taban dünkü servet`,
-            symbol: isPos ? '↗' : '↘',
+            label: 'Bugün', icon: isPos2 ? TrendingUp : TrendingDown,
+            accent: isPos2 ? 'emerald' : 'rose',
+            valueRaw: dailyChange ?? 0,
+            valueFmt: (n: number) => `${n >= 0 ? '+' : ''}₺${fmtTRY(n)}`,
+            subtitle: `${isPos2 ? '+' : ''}${(dailyChangePct ?? 0).toFixed(2)}% piyasa`,
+            symbol: isPos2 ? '↗' : '↘',
           },
           {
             label: 'Pasif Gelir', icon: Wallet, accent: 'gold',
