@@ -48,7 +48,10 @@ interface PortfolioContextType {
 
   // PnL
   pnlData: { daily: PnLData; weekly: PnLData; monthly: PnLData } | null;
-  livePnlData: { daily: PnLData; weekly: PnLData; monthly: PnLData } | null;
+  // 2026-10-07: 'intraday' EKLENDİ. daily/weekly/monthly snapshot tabanlıdır (son İKİ KAPANIŞIN farkı),
+  // yani gün içinde SABİT durur — kullanıcı "bu sabit duruyor" diye bildirdi. Canlı hareket zaten
+  // hesaplanıyordu ama satır ~459'da pnlData ile ezilip çöpe gidiyordu. Artık ayrı alanda korunuyor.
+  livePnlData: { daily: PnLData; weekly: PnLData; monthly: PnLData; intraday: PnLData } | null;
   historicalData: PortfolioSnapshot[];
 
   // Connection
@@ -122,7 +125,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
 
   const [pnlData, setPnlData] = useState<{ daily: PnLData; weekly: PnLData; monthly: PnLData } | null>(null);
-  const [livePnlData, setLivePnlData] = useState<{ daily: PnLData; weekly: PnLData; monthly: PnLData } | null>(null);
+  const [livePnlData, setLivePnlData] = useState<{ daily: PnLData; weekly: PnLData; monthly: PnLData; intraday: PnLData } | null>(null);
   const [historicalData, setHistoricalData] = useState<PortfolioSnapshot[]>([]);
   const [targetAllocations, setTargetAllocations] = useState(getDefaultTargetAllocations());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
@@ -475,6 +478,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       daily: { period: 'Günlük', value: currentTotalValue, change: dailyChange, percentage: dailyPct },
       weekly: { period: 'Haftalık', value: currentTotalValue, change: weeklyChange, percentage: weeklyPct },
       monthly: { period: 'Aylık', value: currentTotalValue, change: monthlyChange, percentage: monthlyPct },
+      // ANLIK: canlı fiyatlarla gün açılışından bu yana. pnlData bunu EZMEZ.
+      intraday: { period: 'Anlık', value: currentTotalValue, change: safeIntradayChange, percentage: safeIntradayPct },
     });
   }
 
@@ -482,7 +487,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     try {
       const data = await getPnLData();
       setPnlData(data);
-      setLivePnlData(data);
+      // İlk yükleme: canlı fiyat henüz gelmedi → intraday 0 değil NULL anlamına gelsin diye
+      // change/percentage 0 ama period 'yok' ile işaretli; ekran bunu basmaz, '—' gösterir.
+      setLivePnlData({ ...data, intraday: { period: 'yok', value: 0, change: 0, percentage: 0 } });
     } catch (error) {
       console.error('Error loading PnL data:', error instanceof Error ? error.message : '');
     }

@@ -9,8 +9,11 @@ import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD
 interface HeroDashboardProps {
   holdings: Holding[];
   totalCashValue: number;
-  dailyChange?: number;
+  dailyChange?: number;          // KAPANMIŞ günün kârı (snapshot farkı) — gün içinde sabit
   dailyChangePct?: number;
+  closedDayDate?: string;        // o kapanışın tarihi — 'bugün' sanılmasın
+  intradayChange?: number;       // ANLIK: canlı fiyatlarla gün açılışından beri (TL)
+  intradayChangePct?: number;
   historicalData?: { date: string; value: number }[];
   dynamicSafeMaxUSD?: number;
   dynamicSalaryLabel?: string;
@@ -94,6 +97,9 @@ export default function HeroDashboard({
   totalCashValue,
   dailyChange,
   dailyChangePct,
+  closedDayDate,
+  intradayChange,
+  intradayChangePct,
   historicalData,
   dynamicSafeMaxUSD,
   dynamicSalaryLabel,
@@ -210,22 +216,22 @@ export default function HeroDashboard({
               </span>
               <span className="font-serif italic text-sm ml-1 opacity-60">USD</span>
             </p>
-            {dailyChange !== undefined && (
+            {intradayChange !== undefined && (
               <motion.div
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.4, type: 'spring', stiffness: 200 }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border-2 ${
-                  dailyChange >= 0
+                  intradayChange >= 0
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                     : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                 }`}
-                title="Bugünün TL cinsinden değişimi (19 Eylül öncesi ölçü)"
+                title="ANLIK: canlı fiyatlarla gün açılışından bu yana, TL. Fiyatlar yenilendikçe değişir."
               >
-                {dailyChange >= 0 ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
-                {dailyChange >= 0 ? '+' : ''}₺{fmtTRY(dailyChange)}
+                {intradayChange >= 0 ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
+                {intradayChange >= 0 ? '+' : ''}₺{fmtTRY(intradayChange)}
                 <span className="opacity-70">·</span>
-                <span>{dailyChangePct !== undefined ? `${dailyChangePct >= 0 ? '+' : ''}${dailyChangePct.toFixed(2)}% ` : ''}piyasa</span>
+                <span>{intradayChangePct !== undefined ? `${intradayChangePct >= 0 ? '+' : ''}${intradayChangePct.toFixed(2)}% ` : ''}anlık</span>
               </motion.div>
             )}
             {/* Euro kırılımı (pozisyon + kur payı) → Ölçü sekmesi. 19 Eylül öncesi ana sayfada yoktu. */}
@@ -270,11 +276,11 @@ export default function HeroDashboard({
             symbol: '✦',
           },
           {
-            label: 'Bugün', icon: isPos2 ? TrendingUp : TrendingDown,
+            label: closedDayDate ? `Kapanış ${closedDayDate.slice(5).replace('-', '/')}` : 'Son Kapanış', icon: isPos2 ? TrendingUp : TrendingDown,
             accent: isPos2 ? 'emerald' : 'rose',
             valueRaw: dailyChange ?? 0,
             valueFmt: (n: number) => `${n >= 0 ? '+' : ''}₺${fmtTRY(n)}`,
-            subtitle: `${isPos2 ? '+' : ''}${(dailyChangePct ?? 0).toFixed(2)}% piyasa`,
+            subtitle: `${isPos2 ? '+' : ''}${(dailyChangePct ?? 0).toFixed(2)}% piyasa · gün içinde sabit`,
             symbol: isPos2 ? '↗' : '↘',
           },
           {

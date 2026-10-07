@@ -178,6 +178,9 @@ export default function HomePage() {
                 totalCashValue={totalCashValue}
                 dailyChange={livePnlData?.daily.change}
                 dailyChangePct={livePnlData?.daily.percentage}
+                closedDayDate={historicalData.length ? historicalData[historicalData.length - 1].date.slice(0, 10) : undefined}
+                intradayChange={livePnlData?.intraday.period === 'yok' ? undefined : livePnlData?.intraday.change}
+                intradayChangePct={livePnlData?.intraday.period === 'yok' ? undefined : livePnlData?.intraday.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
                 dynamicSafeMaxUSD={dynamic?.entitlementEUR}
                 dynamicSalaryLabel={dynamic ? salaryLabel(dynamic) : undefined}

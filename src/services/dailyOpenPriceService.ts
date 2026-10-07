@@ -73,6 +73,23 @@ export async function loadDailyOpenPrices(holdingIds: string[]): Promise<Record<
     }
   }
 
+  // 2026-10-07: GÜN AÇILIŞI YOKSA DÜNKÜ KAPANIŞA DÜŞ.
+  // Cron price_history'ye günde BİR kez (21:00 Bükreş) yazıyor, dolayısıyla gün içinde bugüne ait
+  // satır YOKTUR. Eskiden burası boş dönüyor, çağıran taraf da 'uygulamayı ilk açtığın an' değerini
+  // taban alıyordu: açılışta rakam 0 görünüyor ve oturum boyunca kıpırdamıyordu ("bu sabit duruyor").
+  // Doğru taban SON KAPANIŞ fiyatlarıdır — hem anında hazır hem de 'dünden beri' anlamı doğru.
+  const missing = holdingIds.filter(id => !(id in result));
+  if (missing.length) {
+    const { data: prev } = await supabase
+      .from('price_history').select('holding_id, price, recorded_at')
+      .in('holding_id', missing)
+      .lt('recorded_at', getStartOfLocalDay())
+      .order('recorded_at', { ascending: false });
+    for (const row of prev ?? []) {
+      if (row.holding_id && !(row.holding_id in result)) result[row.holding_id] = Number(row.price);
+    }
+  }
+
   setMemoryCache(result);
   return result;
 }
