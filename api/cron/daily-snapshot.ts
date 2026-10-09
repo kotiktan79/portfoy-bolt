@@ -4,6 +4,7 @@ import { sendTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
 import { fetchTefasFundPrice } from '../lib/fundPrice.js';
+import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -686,6 +687,7 @@ const EUROBOND_ETF_YAHOO: Record<string, string> = {
   SGOV: 'SGOV',
   IEF: 'IEF',
   SHY: 'SHY',
+  XEON: 'XEON.DE',   // Xtrackers II EUR Overnight Rate Swap (Acc) — Xetra, EURO kote
 };
 
 async function updateEurobondPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
@@ -704,22 +706,18 @@ async function updateEurobondPrices(supabase: any, holdings: any[], result: Pric
       continue;
     }
     try {
-      const prices = await fetchYahooPrices(yahooTicker);
-      const usdPrice = prices[yahooTicker];
-      if (!usdPrice) { result.failed++; continue; }
-      // Yahoo USD verir. Holding currency'sine çevir.
+      const quotes = await fetchYahooQuotes(yahooTicker);
+      const q = quotes[yahooTicker];
+      if (!q) { result.failed++; continue; }
       const holdingCurrency = (h.currency || 'USD').toUpperCase();
-      let priceToWrite = usdPrice;
-      if (holdingCurrency === 'EUR') {
-        const usdTry = await fetchUsdTry();
-        const eurTry = await fetchEurTry();
-        if (usdTry == null || eurTry == null) continue;           // kur yoksa fiyat yazma
-        priceToWrite = usdPrice * (usdTry / eurTry); // USD → EUR
-      } else if (holdingCurrency === 'TRY') {
-        const usdTry = await fetchUsdTry();
-        if (usdTry == null) continue;
-        priceToWrite = usdPrice * usdTry;
-      }
+      // 2026-10-09: kaynağın KENDİ bildirdiği para birimi kullanılır. Eskiden 'hep USD' varsayılıyordu;
+      // XEON Xetra'da euro kote olduğu için o varsayım fiyatı ~%11 eksik yazardı.
+      const quoteCcy = q.currency;
+      if (!quoteCcy) { log.push(`${h.symbol}: kote para birimi bilinmiyor, fiyat yazılmadı`); result.failed++; continue; }
+      const rates = { USD: await fetchUsdTry(), EUR: await fetchEurTry() };
+      const converted = convertQuote(q.price, quoteCcy, holdingCurrency, rates);
+      if (converted == null) { log.push(`${h.symbol}: ${quoteCcy}→${holdingCurrency} çevrilemedi (kur yok), fiyat yazılmadı`); result.failed++; continue; }
+      const priceToWrite = converted;
       // Sanity guard
       const oldPrice = Number(h.current_price) || 0;
       const anomalous = oldPrice > 0 && (priceToWrite < oldPrice * 0.5 || priceToWrite > oldPrice * 2);
@@ -793,6 +791,40 @@ async function fetchUsdCrossRates(): Promise<Record<string, number> | null> {
     }
   } catch { /* fallback */ }
   return _crossRatesCache?.value || null;
+}
+
+/** Fiyat + KOTE PARA BİRİMİ. Yahoo v7 'currency', v8 'meta.currency' döner; dönmezse borsa ekinden
+ *  tahmin edilir, o da olmazsa null (fiyat yazılmaz). 2026-10-09: eski kod 'hep USD' varsayıyordu. */
+async function fetchYahooQuotes(symbols: string): Promise<Record<string, { price: number; currency: string | null }>> {
+  const out: Record<string, { price: number; currency: string | null }> = {};
+  const symbolList = symbols.split(',').filter(Boolean);
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,currency`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      for (const q of data?.quoteResponse?.result || []) {
+        if (q.regularMarketPrice && isFinite(q.regularMarketPrice) && q.regularMarketPrice > 0) {
+          out[q.symbol] = { price: q.regularMarketPrice, currency: q.currency || guessQuoteCcy(q.symbol) };
+        }
+      }
+    }
+  } catch { /* v8'e düş */ }
+  for (const sym of symbolList.filter(x => !(x in out))) {
+    try {
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+      if (!r.ok) continue;
+      const meta = (await r.json())?.chart?.result?.[0]?.meta;
+      const price = meta?.regularMarketPrice;
+      if (price && isFinite(price) && price > 0) {
+        out[sym] = { price, currency: meta?.currency || guessQuoteCcy(sym) };
+      }
+    } catch { /* atla */ }
+  }
+  return out;
 }
 
 async function fetchYahooPrices(symbols: string): Promise<Record<string, number>> {
