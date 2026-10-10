@@ -4,7 +4,7 @@ import { sendTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
 import { fetchTefasFundPrice } from '../lib/fundPrice.js';
-import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert';
+import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert.js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
