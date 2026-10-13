@@ -2,6 +2,7 @@
 -- Supabase SQL Editor'da çalıştır. supabase db push KULLANMA.
 -- Eklemedir, tekrar çalıştırılınca bozulmaz. Mevcut satırları silmez.
 -- Başka uygulamaların (panel / marketplace) tablolarına dokunmaz.
+-- Yeni tablolar public.portfoy_bolt_is_owner() kullanır (güvenlik migrasyonu önce çalışmış olmalı).
 
 -- 1) Maaş çekimi euro kolonları. Eski amount_usd kolonları durur (eski satırlar bozulmasın).
 alter table public.salary_withdrawals
@@ -39,15 +40,25 @@ create table if not exists public.portfoy_bolt_kasa_salary_moves (
 alter table public.portfoy_bolt_salary_policy enable row level security;
 alter table public.portfoy_bolt_kasa_salary_moves enable row level security;
 
+-- Diğer portföy tablolarıyla aynı kural: yalnız public.portfoy_bolt_is_owner().
+-- Eski açık politika adı da düşülür; tekrar çalışınca (true) kuralı geride kalmasın.
 drop policy if exists "portfoy_bolt_salary_policy all" on public.portfoy_bolt_salary_policy;
-create policy "portfoy_bolt_salary_policy all"
-  on public.portfoy_bolt_salary_policy for all to authenticated
-  using (true) with check (true);
+drop policy if exists portfoy_bolt_owner_all on public.portfoy_bolt_salary_policy;
+create policy portfoy_bolt_owner_all
+  on public.portfoy_bolt_salary_policy
+  for all
+  to authenticated
+  using (public.portfoy_bolt_is_owner())
+  with check (public.portfoy_bolt_is_owner());
 
 drop policy if exists "portfoy_bolt_kasa_salary_moves all" on public.portfoy_bolt_kasa_salary_moves;
-create policy "portfoy_bolt_kasa_salary_moves all"
-  on public.portfoy_bolt_kasa_salary_moves for all to authenticated
-  using (true) with check (true);
+drop policy if exists portfoy_bolt_owner_all on public.portfoy_bolt_kasa_salary_moves;
+create policy portfoy_bolt_owner_all
+  on public.portfoy_bolt_kasa_salary_moves
+  for all
+  to authenticated
+  using (public.portfoy_bolt_is_owner())
+  with check (public.portfoy_bolt_is_owner());
 
 revoke all on table public.portfoy_bolt_salary_policy from public, anon;
 revoke all on table public.portfoy_bolt_kasa_salary_moves from public, anon;
@@ -118,6 +129,8 @@ revoke execute on function public.withdraw_salary_eur(uuid, numeric, numeric, nu
 grant execute on function public.withdraw_salary_eur(uuid, numeric, numeric, numeric, numeric, text, numeric, text, numeric, numeric, numeric, numeric) to authenticated, service_role;
 
 -- 5) Kategori düzeltmesi. Satır silinmez; yalnız XEON ve IB01'in tipi değişir.
+-- holdings.asset_type düz metindir (text not null). Depodaki migrasyonlarda
+-- bu kolonda CHECK veya enum yoktur; yeni değerler ek kısıt gerektirmez.
 update public.holdings
    set asset_type = 'money_market'
  where upper(symbol) = 'XEON'
