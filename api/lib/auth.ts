@@ -83,7 +83,7 @@ async function defaultIsOwner(userId: string): Promise<boolean | null> {
   try {
     const sb = getServiceSupabase();
     const { data, error } = await sb
-      .from('app_owners')
+      .from('portfoy_bolt_owners')
       .select('user_id')
       .eq('user_id', userId)
       .maybeSingle();
@@ -102,7 +102,7 @@ const defaultDeps: SessionDeps = {
 /**
  * Portföy verisi veya AI kredisi harcayan uçlar için.
  * Geçerli yol: CRON_SECRET (sunucudan sunucuya) VEYA Supabase JWT'si
- * app_owners tablosundaki sahip.
+ * portfoy_bolt_owners tablosundaki sahip.
  * Reddedildiyse true döner ve 401 yazılmıştır.
  */
 export async function requirePortfolioAccess(
