@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { FlaskConical, Plus, Trash2, ArrowRight, AlertTriangle } from 'lucide-react';
 import { Holding, AssetType } from '../lib/supabase';
 import { applyTrades, ProposedTrade } from '../services/tradeSimulatorService';
-import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { CLASS_LABELS } from '../config/portfolioPolicy';
+import { policySnapshot } from '../lib/policyAllocation';
 import { assetColor, assetName, fmtTRY0, fmtSignedTRY0 } from '../lib/chartTheme';
 import { useDarkMode } from '../hooks/useDarkMode';
 
@@ -18,18 +19,12 @@ interface TypeSlice {
 }
 
 function allocationByType(holdings: Holding[]): { slices: TypeSlice[]; total: number } {
-  const rates = getFxRatesFromHoldings(holdings);
-  const agg = new Map<string, number>();
-  let total = 0;
-  for (const h of holdings) {
-    const v = holdingValueTRY(h, rates);
-    total += v;
-    agg.set(h.asset_type, (agg.get(h.asset_type) || 0) + v);
-  }
-  const slices = [...agg.entries()]
-    .map(([type, value]) => ({ type, value, pct: total > 0 ? (value / total) * 100 : 0 }))
+  const snap = policySnapshot(holdings);
+  const slices = snap.rows
+    .filter(r => r.valueEUR > 0)
+    .map(r => ({ type: r.key, value: snap.eurRate > 0 ? r.valueEUR * snap.eurRate : 0, pct: r.currentPct }))
     .sort((a, b) => b.value - a.value);
-  return { slices, total };
+  return { slices, total: snap.totalTRY };
 }
 
 let tradeSeq = 0;
@@ -223,7 +218,7 @@ export default function TradeSimulatorCard({ holdings }: { holdings: Holding[] }
                 <div key={type} className="flex items-center gap-2 text-sm">
                   <span className="w-28 shrink-0 font-semibold text-slate-700 dark:text-gray-200 flex items-center gap-1.5 truncate">
                     <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                    {assetName(type)}
+                    {CLASS_LABELS[type as keyof typeof CLASS_LABELS] || assetName(type)}
                   </span>
                   <div className="flex-1 h-4 bg-slate-100 dark:bg-gray-900/60 rounded overflow-hidden relative">
                     <div className="absolute inset-y-0 left-0 opacity-35 rounded" style={{ width: `${bPct}%`, backgroundColor: color }} />

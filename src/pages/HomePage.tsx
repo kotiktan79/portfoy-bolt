@@ -23,6 +23,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import InstallPWA from '../components/InstallPWA';
 import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
 import IncomeWidget from '../components/IncomeWidget';
+import { IncomePanel } from '../components/IncomePanel';
+import { ClosedPositions } from '../components/ClosedPositions';
 import PortfolioXRay from '../components/PortfolioXRay';
 import { RebalancePlan } from '../components/RebalancePlan';
 import { BuyPlanCard } from '../components/BuyPlanCard';
@@ -271,7 +273,7 @@ export default function HomePage() {
                 <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-300 tracking-wide">Varlıklar</h2>
                 {holdings.length > 0 && (
                   <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md border border-slate-200 dark:border-gray-600">
-                    {holdings.length}
+                    {holdings.filter(h => (Number(h.quantity) || 0) > 0).length}
                   </span>
                 )}
               </div>
@@ -318,14 +320,14 @@ export default function HomePage() {
                   <div className="w-16 h-16 bg-slate-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                     <PieChart className="text-slate-300 dark:text-gray-600" size={28} />
                   </div>
-                  <h3 className="text-base font-semibold text-slate-600 dark:text-gray-300 mb-1">Portfoyunuz bos</h3>
-                  <p className="text-sm text-slate-400 dark:text-gray-500 mb-5 max-w-xs mx-auto">Takip etmek istediginiz ilk varliginizi ekleyerek baslayabilirsiniz.</p>
+                  <h3 className="text-base font-semibold text-slate-600 dark:text-gray-300 mb-1">Portföyünüz boş</h3>
+                  <p className="text-sm text-slate-400 dark:text-gray-500 mb-5 max-w-xs mx-auto">Takip etmek istediğiniz ilk varlığınızı ekleyerek başlayabilirsiniz.</p>
                   <button
                     onClick={() => setShowAddModal(true)}
                     className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     <Plus size={16} />
-                    Varlik Ekle
+                    Varlık ekle
                   </button>
                 </div>
               ) : (
@@ -398,6 +400,12 @@ export default function HomePage() {
             </div>
           </div>
 
+          {holdings.some(h => (Number(h.quantity) || 0) <= 0) && (
+            <div className="mx-2 md:mx-6 mt-3">
+              <ClosedPositions holdings={holdings} />
+            </div>
+          )}
+
           {/* Analytics Toggle */}
           {holdings.length > 0 && (
             <div className="mx-4 md:mx-6 mt-4 mb-2">
@@ -439,7 +447,7 @@ export default function HomePage() {
                 connectionStatus === 'connecting' ? 'bg-yellow-400' :
                 connectionStatus === 'error' ? 'bg-red-400' : 'bg-slate-300'
               }`} />
-              <span>{connectionStatus === 'connected' ? 'Canli' : connectionStatus === 'connecting' ? 'Baglaniyor' : connectionStatus === 'error' ? 'Hata' : 'Cevrimdisi'}</span>
+              <span>{connectionStatus === 'connected' ? 'Canlı' : connectionStatus === 'connecting' ? 'Bağlanıyor' : connectionStatus === 'error' ? 'Hata' : 'Çevrimdışı'}</span>
             </div>
             {lastUpdate && <span className="truncate max-w-[200px]">{lastUpdate}</span>}
           </div>
@@ -537,7 +545,12 @@ function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; tota
           </>
         )}
         {tab === 'xray' && <PortfolioXRay />}
-        {tab === 'income' && <IncomeWidget />}
+        {tab === 'income' && (
+          <div className="space-y-3">
+            <IncomeWidget />
+            <IncomePanel />
+          </div>
+        )}
       </div>
     </div>
   );

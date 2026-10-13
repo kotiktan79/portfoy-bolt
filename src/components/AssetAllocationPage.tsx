@@ -3,8 +3,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Ba
 import { TrendingUp, TrendingDown, PieChart as PieIcon } from 'lucide-react';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 import { useDarkMode } from '../hooks/useDarkMode';
-import { assetColor, assetName, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
-import { effectiveAssetType } from '../config/portfolioPolicy';
+import { assetColor, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
+import { CLASS_LABELS, TARGET_ALLOCATION, allocationClassOf, type AllocationClass } from '../config/portfolioPolicy';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -28,18 +28,21 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
   const assetTypeMap = new Map<string, AssetTypeData>();
   const fxRates = getFxRatesFromHoldings(holdings);
 
+  const activeCount = holdings.filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash' && allocationClassOf(h.asset_type, h.symbol)).length;
+
   holdings
-    .filter(h => h.asset_type !== 'cash')
+    .filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash')
     .forEach((holding) => {
     const currentValue = holdingValueTRY(holding, fxRates);
     const investmentValue = holdingCostTRY(holding, fxRates);
     const profit = currentValue - investmentValue;
 
-    const type = effectiveAssetType(holding.asset_type, holding.symbol);
+    const type = allocationClassOf(holding.asset_type, holding.symbol);
+    if (!type) return;
     if (!assetTypeMap.has(type)) {
       assetTypeMap.set(type, {
         type,
-        typeName: assetName(type),
+        typeName: CLASS_LABELS[type as AllocationClass] || type,
         value: 0,
         investment: 0,
         profit: 0,
@@ -56,6 +59,21 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
     data.count += 1;
   });
 
+  for (const key of Object.keys(TARGET_ALLOCATION) as AllocationClass[]) {
+    if (!assetTypeMap.has(key)) {
+      assetTypeMap.set(key, {
+        type: key,
+        typeName: CLASS_LABELS[key],
+        value: 0,
+        investment: 0,
+        profit: 0,
+        profitPercent: 0,
+        count: 0,
+        color: assetColor(key, isDark),
+      });
+    }
+  }
+
   const assetData = Array.from(assetTypeMap.values()).map(data => ({
     ...data,
     profitPercent: data.investment > 0 ? (data.profit / data.investment) * 100 : 0,
@@ -66,10 +84,11 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
   const totalProfit = assetData.reduce((sum, d) => sum + d.profit, 0);
   const totalProfitPercent = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
 
-  const pieData = assetData.map(d => ({
+  const pieData = assetData.filter(d => d.value > 0).map(d => ({
     name: d.typeName,
     value: d.value,
     percent: totalValue > 0 ? (d.value / totalValue) * 100 : 0,
+    color: d.color,
   }));
 
   const profitData = assetData
@@ -105,16 +124,16 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
         {/* Total Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Toplam Değer', value: fmtTRY0(totalValue), tone: '' },
-            { label: 'Toplam Yatırım', value: fmtTRY0(totalInvestment), tone: '' },
+            { label: 'Toplam değer (TL, kasa hariç)', value: fmtTRY0(totalValue), tone: '' },
+            { label: 'TL maliyet', value: fmtTRY0(totalInvestment), tone: '' },
             {
-              label: 'Toplam K/Z',
+              label: 'TL maliyet kârı',
               value: `${totalProfit >= 0 ? '+' : '−'}${fmtTRY0(Math.abs(totalProfit))}`,
               tone: totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
               icon: totalProfit >= 0 ? TrendingUp : TrendingDown,
             },
             {
-              label: 'Getiri Oranı',
+              label: 'TL getiri (euro cetveli değil)',
               value: `${totalProfitPercent >= 0 ? '+' : ''}${totalProfitPercent.toFixed(2)}%`,
               tone: totalProfitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
             },
@@ -136,7 +155,8 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Pie Chart */}
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-slate-200 dark:border-gray-700 shadow-sm">
-            <h2 className="text-lg sm:text-xl font-bold mb-4 text-gray-900 dark:text-white">Varlık Dağılımı</h2>
+            <h2 className="text-lg sm:text-xl font-bold mb-1 text-gray-900 dark:text-white">Politika dağılımı</h2>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mb-4">Hisse 62 · güvenli taraf 14 · altın 10 · kripto 5 · fon 4 · nakit 5. Kasa yok. Kapalı pozisyon yok.</p>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -152,10 +172,9 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                   strokeWidth={2}
                   dataKey="value"
                 >
-                  {pieData.map((_entry, index) => {
-                    const assetInfo = assetData[index];
-                    return <Cell key={`cell-${index}`} fill={assetInfo.color} />;
-                  })}
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
                 </Pie>
                 <Tooltip
                   formatter={(value: number) => fmtTRY0(value)}
@@ -204,8 +223,10 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                   <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Yatırım</th>
                   <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Değer</th>
                   <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">K/Z</th>
-                  <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Oran</th>
-                  <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Getiri %</th>
+                  <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Pay</th>
+                  <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Hedef</th>
+                  <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">Sapma</th>
+                  <th className="px-4 py-3 text-right text-xs sm:text-sm font-semibold">TL getiri %</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
@@ -228,6 +249,17 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
                       <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">
                         {totalValue > 0 ? ((asset.value / totalValue) * 100).toFixed(1) : 0}%
                       </td>
+                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">
+                        %{TARGET_ALLOCATION[asset.type as AllocationClass]?.target ?? '—'}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm sm:text-base text-gray-700 dark:text-gray-300">
+                        {(() => {
+                          const tgt = TARGET_ALLOCATION[asset.type as AllocationClass]?.target;
+                          if (tgt == null || totalValue <= 0) return '—';
+                          const d = (asset.value / totalValue) * 100 - tgt;
+                          return `${d >= 0 ? '+' : ''}${d.toFixed(1)}`;
+                        })()}
+                      </td>
                       <td className={`px-4 py-4 text-right font-semibold text-sm sm:text-base ${asset.profitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {asset.profitPercent >= 0 ? '+' : ''}{asset.profitPercent.toFixed(2)}%
                       </td>
@@ -237,13 +269,15 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
               <tfoot className="bg-slate-100 dark:bg-gray-700/50 font-bold text-gray-900 dark:text-white">
                 <tr>
                   <td className="px-4 py-4 text-sm sm:text-base">TOPLAM</td>
-                  <td className="px-4 py-4 text-right text-sm sm:text-base">{holdings.length}</td>
+                  <td className="px-4 py-4 text-right text-sm sm:text-base">{activeCount}</td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">{fmtTRY0(totalInvestment)}</td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">{fmtTRY0(totalValue)}</td>
                   <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {totalProfit >= 0 ? '+' : ''}{fmtTRY0(totalProfit)}
                   </td>
                   <td className="px-4 py-4 text-right text-sm sm:text-base">100%</td>
+                  <td className="px-4 py-4 text-right text-sm sm:text-base">100%</td>
+                  <td className="px-4 py-4 text-right text-sm sm:text-base">0</td>
                   <td className={`px-4 py-4 text-right text-sm sm:text-base ${totalProfitPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {totalProfitPercent >= 0 ? '+' : ''}{totalProfitPercent.toFixed(2)}%
                   </td>

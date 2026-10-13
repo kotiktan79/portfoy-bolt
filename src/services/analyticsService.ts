@@ -237,7 +237,7 @@ export function calculateRebalance(
   // FX-aware: USD/EUR pozisyonları TRY'ye çevirip topluyoruz.
   // Eski sürüm raw price×qty topluyordu → multicurrency portföyde yanlış yüzdeler.
   const fxRates = getFxRatesFromHoldings(holdings as never);
-  const valued = holdings.map((h) => ({
+  const valued = holdings.filter(h => (Number(h.quantity) || 0) > 0 && allocationClassOf(h.asset_type, h.symbol)).map((h) => ({
     h,
     value: holdingValueTRY(h as never, fxRates),
   }));

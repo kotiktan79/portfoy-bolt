@@ -97,7 +97,7 @@ export const translations: Translations = {
     en: 'Refresh',
   },
   'button.rebalance': {
-    tr: 'Rebalance',
+    tr: 'Dengele',
     en: 'Rebalance',
   },
   'button.save': {
@@ -157,12 +157,12 @@ export const translations: Translations = {
     en: 'Automation Settings',
   },
   'automation.autoRebalance': {
-    tr: 'Otomatik Rebalance',
-    en: 'Auto Rebalance',
+    tr: 'Otomatik dengeleme',
+    en: 'Auto rebalance',
   },
   'automation.dca': {
-    tr: 'Dollar Cost Averaging',
-    en: 'Dollar Cost Averaging',
+    tr: 'Düzenli alım',
+    en: 'Dollar cost averaging',
   },
   'report.portfolio': {
     tr: 'Portföy Raporu',
@@ -184,7 +184,7 @@ export const translations: Translations = {
   'nav.home': { tr: 'Ana Sayfa', en: 'Home' },
   'nav.analytics': { tr: 'Gelişmiş Analitik', en: 'Advanced Analytics' },
   'nav.allocation': { tr: 'Varlık Dağılımı', en: 'Asset Allocation' },
-  'nav.rebalancing': { tr: 'Portföy Rebalancing', en: 'Portfolio Rebalancing' },
+  'nav.rebalancing': { tr: 'Portföy dengeleme', en: 'Portfolio rebalancing' },
   'nav.scenario': { tr: 'Senaryo Analizi', en: 'Scenario Analysis' },
   'nav.aiAdvisor': { tr: 'AI Danışman', en: 'AI Advisor' },
   'nav.back': { tr: '← Geri', en: '← Back' },
@@ -199,10 +199,10 @@ export const translations: Translations = {
   'dashboard.chartsTitle': { tr: 'Grafikler & Analizler', en: 'Charts & Analysis' },
   'dashboard.hide': { tr: 'Gizle', en: 'Hide' },
   'dashboard.show': { tr: 'Göster', en: 'Show' },
-  'dashboard.periodicPnl': { tr: 'Periyodik PnL', en: 'Periodic PnL' },
+  'dashboard.periodicPnl': { tr: 'Dönemsel kâr', en: 'Periodic profit' },
   'dashboard.noHistory': { tr: 'Henüz geçmiş veri yok. Lütfen bekleyin...', en: 'No historical data yet. Please wait...' },
   // Status bar
-  'status.wsActive': { tr: 'WebSocket Aktif', en: 'WebSocket Active' },
+  'status.wsActive': { tr: 'Canlı bağlantı açık', en: 'Live connection on' },
   'status.connectionError': { tr: 'Bağlantı Hatası', en: 'Connection Error' },
   'status.offline': { tr: 'Çevrimdışı', en: 'Offline' },
   'status.lastUpdate': { tr: 'Son', en: 'Last' },
@@ -223,7 +223,7 @@ export const translations: Translations = {
   'mobileNav.home': { tr: 'Ana Sayfa', en: 'Home' },
   'mobileNav.analytics': { tr: 'Analitik', en: 'Analytics' },
   'mobileNav.allocation': { tr: 'Dağılım', en: 'Allocation' },
-  'mobileNav.rebalance': { tr: 'Rebalance', en: 'Rebalance' },
+  'mobileNav.rebalance': { tr: 'Dengele', en: 'Rebalance' },
   'mobileNav.scenario': { tr: 'Senaryo', en: 'Scenario' },
 };
 

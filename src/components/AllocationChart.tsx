@@ -1,35 +1,23 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Holding } from '../lib/supabase';
-import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
-import { effectiveAssetType } from '../config/portfolioPolicy';
-import { ASSET_TYPE_LABELS, ASSET_TYPE_COLORS } from '../constants/assetTypes';
+import { CLASS_LABELS } from '../config/portfolioPolicy';
+import { policySnapshot } from '../lib/policyAllocation';
+import { ASSET_TYPE_COLORS } from '../constants/assetTypes';
 
 interface AllocationChartProps {
   holdings: Holding[];
 }
 
 export function AllocationChart({ holdings }: AllocationChartProps) {
-  const fxRates = getFxRatesFromHoldings(holdings);
-  const investmentHoldings = holdings.filter(h => h.asset_type !== 'cash');
-  const totalValue = investmentHoldings.reduce((sum, h) => sum + holdingValueTRY(h, fxRates), 0);
-
-  const allocationData = investmentHoldings.reduce((acc, holding) => {
-    const value = holdingValueTRY(holding, fxRates);
-    const type = effectiveAssetType(holding.asset_type, holding.symbol);
-    const existing = acc.find((item) => item.type === type);
-
-    if (existing) {
-      existing.value += value;
-    } else {
-      acc.push({
-        type,
-        name: ASSET_TYPE_LABELS[type] || type,
-        value: value,
-      });
-    }
-
-    return acc;
-  }, [] as Array<{ type: string; name: string; value: number }>);
+  const snap = policySnapshot(holdings);
+  const totalValue = snap.totalTRY;
+  const allocationData = snap.rows
+    .filter(r => r.valueEUR > 0)
+    .map(r => ({
+      type: r.key,
+      name: CLASS_LABELS[r.key],
+      value: snap.eurRate > 0 ? r.valueEUR * snap.eurRate : r.valueEUR,
+    }));
 
   const chartData = allocationData.map((item) => ({
     ...item,

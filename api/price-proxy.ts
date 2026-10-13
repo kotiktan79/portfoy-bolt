@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { fetchTefasFundPrice } from './lib/fundPrice.js';
+import { fetchTRGramGold } from './lib/gramGold.js';
 
 /**
  * Fiyat proxy — tarayıcının CORS nedeniyle doğrudan çağıramadığı API'leri proxy'ler.
@@ -81,11 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case 'gold': {
+        // Önce Türkiye gram altın (yerel prim). Cron ile aynı kaynak; ons spot yedek.
+        const trGram = await fetchTRGramGold();
         const usdTry = await fetchFXRate('USD');
         const goldOz = await fetchMetalPrice('gold');
-        // kur yoksa TL fiyatı üretme (uydurma sabit yok) — ons fiyatı yine döner
-        const pricePerGramTRY = goldOz && usdTry != null ? (goldOz / 31.1035) * usdTry : null;
-        return res.json({ success: true, data: { pricePerOz: goldOz, pricePerGramTRY } });
+        const spotGram = goldOz && usdTry != null ? (goldOz / 31.1035) * usdTry : null;
+        const pricePerGramTRY = trGram ?? spotGram;
+        return res.json({ success: true, data: { pricePerOz: goldOz, pricePerGramTRY, source: trGram ? 'tr-gram' : 'spot' } });
       }
 
       case 'silver': {

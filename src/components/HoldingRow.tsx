@@ -9,6 +9,10 @@ import { displayCurrency, nativeUnrealized } from '../lib/holdingPnl';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
 import { effectiveAssetType } from '../config/portfolioPolicy';
 import { assetColor, fmtQty, fmtPrice } from '../lib/chartTheme';
+import { assetName } from '../lib/assetNames';
+import { StaleBadge } from './StaleBadge';
+import { holdingPriceDay, isPriceStale } from '../lib/freshness';
+import { dayInTZ } from '../lib/eurPnl';
 
 // Varlık tipi renk noktası — palet light/dark için farklı step kullanır,
 // hook'suz CSS-only çözüm: iki nokta, biri light'ta biri dark'ta görünür.
@@ -137,8 +141,9 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
               <TypeDot assetType={effectiveAssetType(holding.asset_type, holding.symbol)} />
               {holding.symbol}
+              {isPriceStale(holdingPriceDay(holding), dayInTZ(new Date())) && <StaleBadge kind="price" />}
             </span>
-            <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 pl-[14px]">{getAssetTypeLabel(holding.asset_type)}</span>
+            <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 pl-[14px]">{assetName(holding.symbol, holding.price_notes)} · {getAssetTypeLabel(holding.asset_type)}</span>
             {holding.price_notes && (
               <span className="text-[9px] text-gray-400 dark:text-gray-500">
                 {holding.price_notes.includes('Binance') ? '\u2B21 Binance' :

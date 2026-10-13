@@ -61,6 +61,21 @@ export interface XRayReport {
   currencyMix: { currency: string; value: number; pct: number }[];
 }
 
+export type LetterGrade = 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D';
+
+/** Yüksek uyarı (atıl nakit vb.) varken A / A+ verilmez. Puanın kendisi değişmez. */
+export function letterGrade(score: number, findings: Array<{ severity: string }>): { grade: LetterGrade; capped: boolean } {
+  const raw: LetterGrade =
+    score >= 85 ? 'A+' :
+    score >= 75 ? 'A' :
+    score >= 65 ? 'B+' :
+    score >= 55 ? 'B' :
+    score >= 40 ? 'C' : 'D';
+  const high = findings.some(f => f.severity === 'high');
+  if (high && (raw === 'A+' || raw === 'A')) return { grade: 'B+', capped: true };
+  return { grade: raw, capped: false };
+}
+
 const BIST_SECTORS: Record<string, string> = {
   GARAN: 'Bankacılık', AKBNK: 'Bankacılık', ISCTR: 'Bankacılık', YKBNK: 'Bankacılık',
   HALKB: 'Bankacılık', VAKBN: 'Bankacılık',
@@ -233,7 +248,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       id: 'dead-money',
       severity: deadMoneyTotal > totalValue * 0.20 ? 'high' : deadMoneyTotal > totalValue * 0.08 ? 'medium' : 'low',
       category: 'dead-money',
-      title: `Getirisiz nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
+      title: `Getirisi olmayan nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
       detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%${Math.round(INFLATION_EUR * 100)}'ünü yiyor. Esnek plan: VWCE %76 / V3YL %16 / XEON %8.`,
       amount: deadMoneyTotal,
       symbols: cashPositions.map(p => p.symbol),

@@ -5,6 +5,7 @@ import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
 import { fetchTefasFundPrice } from '../lib/fundPrice.js';
 import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert.js';
+import { fetchTRGramGold } from '../lib/gramGold.js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -675,7 +676,7 @@ async function updateFundPrices(supabase: any, holdings: any[], result: PriceRes
 // Eurobond/Treasury ETF'leri için Yahoo ticker haritası (hepsi USD-quoted).
 // Holding'in currency'sine göre USD fiyatı çevrilir.
 const EUROBOND_ETF_YAHOO: Record<string, string> = {
-  IB01: 'IB01.L',   // iShares USD Treasury 0-1yr Acc
+  IB01: 'IB01.L',  // iShares USD Treasury 0-1yr Acc. Xetra IB01.DE yok; Londra USD kote, convertQuote EUR'ya çevirir.
   IBTA: 'IBTA.L',   // iShares USD Treasury 1-3yr
   IBTL: 'IBTL.L',   // iShares USD Treasury 20+yr
   CBU0: 'CBU0.L',   // iShares USD Treasury 1-3yr Dist
@@ -866,24 +867,7 @@ async function fetchYahooPrices(symbols: string): Promise<Record<string, number>
   return prices;
 }
 
-// Türkiye gram altın (satış) — truncgil. Değer zaten TRY/gram, yerel prim dahil.
-// Format "6.409,16" → 6409.16 (binlik nokta sil, ondalık virgülü noktaya çevir).
-async function fetchTRGramGold(): Promise<number | null> {
-  try {
-    const res = await fetch('https://finans.truncgil.com/today.json', {
-      headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    const d = await res.json();
-    const raw = d?.['gram-altin']?.['Satış'] ?? d?.['gram-altin']?.['Selling'];
-    if (!raw) return null;
-    const num = parseFloat(String(raw).replace(/\./g, '').replace(',', '.'));
-    // Sanity: gram altın makul aralıkta mı (1.000–50.000 TRY)
-    if (isFinite(num) && num > 1000 && num < 50000) return num;
-    return null;
-  } catch { return null; }
-}
-
+// Uluslararası ons (spot). Gram altın önce truncgil'den gelir; bu yalnız yedek.
 async function fetchGoldPrice(): Promise<number | null> {
   try {
     const res = await fetch('https://api.metals.live/v1/spot/gold', { signal: AbortSignal.timeout(5000) });

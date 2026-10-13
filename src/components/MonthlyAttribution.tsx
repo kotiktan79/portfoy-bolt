@@ -77,8 +77,8 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   const [cashTx, setCashTx] = useState<CashTx[]>([]);
   const [lotTx, setLotTx] = useState<LotTx[]>([]);
   const [motorGainEUR, setMotorGainEUR] = useState<number | null>(null);
-  const [fxStart, setFxStart] = useState<{ eur: number; usd: number } | null>(null);
-  const [fxEnd, setFxEnd] = useState<{ eur: number; usd: number } | null>(null);
+  const [fxStart, setFxStart] = useState<{ eur: number; usd: number; rub: number; ron: number } | null>(null);
+  const [fxEnd, setFxEnd] = useState<{ eur: number; usd: number; rub: number; ron: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -125,11 +125,14 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
       const months = await getEurMonths();
       const mrow = months.find(m => m.month === selectedMonth) || null;
       const fxAt = async (dateMax: string) => {
-        const [e, u] = await Promise.all([
-          supabase.from('exchange_rates').select('rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
-          supabase.from('exchange_rates').select('rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
-        ]);
-        return { eur: Number(e.data?.rate) || 0, usd: Number(u.data?.rate) || 0 };
+        const one = (ccy: string) => supabase.from('exchange_rates').select('rate').eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle();
+        const [e, u, rub, ron] = await Promise.all([one('EUR'), one('USD'), one('RUB'), one('RON')]);
+        return {
+          eur: Number(e.data?.rate) || 0,
+          usd: Number(u.data?.rate) || 0,
+          rub: Number(rub.data?.rate) || 0,
+          ron: Number(ron.data?.rate) || 0,
+        };
       };
       const prevEnd = lastDayOf(prev);
       const [fs, fe] = await Promise.all([fxAt(prevEnd), fxAt(lastDayOf(selectedMonth))]);
@@ -189,11 +192,15 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
     return rows.sort((a, b) => b.gainEUR - a.gainEUR);
   }, [prices, holdings, selectedMonth, fxStart, fxEnd, lotTx]);
 
-  // Nakit akışı € karşılığı (ay sonu kuru; RUB/RON yaklaşık)
+  // Nakit akışı € karşılığı (ay sonu kuru). RUB/RON için sabit çapraz yok; kur yoksa 0.
   const toEurAmt = (amt: number, ccy: string) => {
     const c = (ccy || 'TRY').toUpperCase(); if (!fxEnd || !fxEnd.eur) return 0;
-    if (c === 'EUR') return amt; if (c === 'TRY') return amt / fxEnd.eur; if (c === 'USD') return (amt * fxEnd.usd) / fxEnd.eur;
-    if (c === 'RUB') return (amt * 0.555) / fxEnd.eur; if (c === 'RON') return amt / 4.97; return 0;
+    if (c === 'EUR') return amt;
+    if (c === 'TRY') return amt / fxEnd.eur;
+    if (c === 'USD') return fxEnd.usd > 0 ? (amt * fxEnd.usd) / fxEnd.eur : 0;
+    if (c === 'RUB') return fxEnd.rub > 0 ? (amt * fxEnd.rub) / fxEnd.eur : 0;
+    if (c === 'RON') return fxEnd.ron > 0 ? (amt * fxEnd.ron) / fxEnd.eur : 0;
+    return 0;
   };
   // Aynı zaman damgasında hem çıkış hem giriş varsa bu bir İÇ TRANSFERdir
   // (ör. kasadaki ruble → EUR pozisyonu): para portföyden çıkmadı, yer değiştirdi.
