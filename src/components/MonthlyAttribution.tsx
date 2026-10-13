@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, ArrowDownToLine, Calendar } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { ymInTZ, prevYMOf } from '../lib/eurPnl';
+import { qtyAsOf, heldPriceMove } from '../lib/attributionQty';
 import { getEurMonths, RELIABLE_FROM } from '../services/eurPnlService';
 import { fmtEUR0, fmtSignedEUR0 } from '../lib/chartTheme';
 // 2026-09-19 gece: EURO cetveli. Pozisyon katkısı = ay sonu € değeri − ay başı € değeri (o günlerin kurlarıyla)
@@ -13,6 +14,8 @@ interface PricePoint {
   price: number;
   recorded_at: string;
 }
+
+interface LotTx { holding_id: string; transaction_date: string; transaction_type: string; quantity: number }
 
 interface CashTx {
   id: string;
@@ -72,6 +75,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => ymInTZ());
   const [prices, setPrices] = useState<PricePoint[]>([]);
   const [cashTx, setCashTx] = useState<CashTx[]>([]);
+  const [lotTx, setLotTx] = useState<LotTx[]>([]);
   const [motorGainEUR, setMotorGainEUR] = useState<number | null>(null);
   const [fxStart, setFxStart] = useState<{ eur: number; usd: number } | null>(null);
   const [fxEnd, setFxEnd] = useState<{ eur: number; usd: number } | null>(null);
@@ -113,6 +117,9 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         .gte('created_at', monthStart)
         .lte('created_at', periodEnd)
         .order('created_at', { ascending: true });
+      const { data: lots } = await supabase
+        .from('transactions')
+        .select('holding_id,transaction_date,transaction_type,quantity');
 
       // Resmi ay kârı = euro motoru; ay başı/sonu kurları = exchange_rates (api)
       const months = await getEurMonths();
@@ -130,13 +137,14 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
       if (!cancelled) {
         setPrices(all);
         setCashTx(tx || []);
+        setLotTx((lots || []) as LotTx[]);
         setMotorGainEUR(mrow ? mrow.gainEUR : null);
         setFxStart(fs); setFxEnd(fe);
         setLoading(false);
       }
     })().catch((e) => {
       // Hata: eski ayın verisi YENİ ay etiketiyle görünmesin (hakem 2026-09-19)
-      if (!cancelled) { setPrices([]); setCashTx([]); setFxStart(null); setFxEnd(null); setMotorGainEUR(null); setErr(e?.message || 'veri yüklenemedi'); setLoading(false); }
+      if (!cancelled) { setPrices([]); setCashTx([]); setLotTx([]); setFxStart(null); setFxEnd(null); setMotorGainEUR(null); setErr(e?.message || 'veri yüklenemedi'); setLoading(false); }
     });
 
     return () => { cancelled = true; };
@@ -169,16 +177,17 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
       const c = (h.currency || 'TRY').toUpperCase();
       // pozisyonun € değeri, o günün kuruyla: TL fiyat ÷ EUR/TL; USD fiyat × USD/TL ÷ EUR/TL; EUR fiyat aynen
       const toEur = (price: number, f: { eur: number; usd: number }) => c === 'TRY' ? price / f.eur : c === 'USD' ? (price * f.usd) / f.eur : price;
-      const vs = toEur(s, fxStart) * h.quantity, ve = toEur(e, fxEnd) * h.quantity;
+      const held = lotTx.filter(t => String(t.holding_id) === String(h.id)).map(t => ({ date: t.transaction_date, type: t.transaction_type, quantity: t.quantity }));
+      const qty0 = qtyAsOf(Number(h.quantity) || 0, held, lastDayOf(prevMonth(selectedMonth)));
       const pricePct = ((e - s) / s) * 100;
       rows.push({
         symbol: h.symbol, type: h.asset_type, currency: c,
-        qty: h.quantity, startPrice: s, endPrice: e, pricePct, gainEUR: ve - vs,
+        qty: qty0, startPrice: s, endPrice: e, pricePct, gainEUR: heldPriceMove(qty0, toEur(s, fxStart), toEur(e, fxEnd)),
         splitAdjusted: splitRatio || undefined,
       });
     }
     return rows.sort((a, b) => b.gainEUR - a.gainEUR);
-  }, [prices, holdings, selectedMonth, fxStart, fxEnd]);
+  }, [prices, holdings, selectedMonth, fxStart, fxEnd, lotTx]);
 
   // Nakit akışı € karşılığı (ay sonu kuru; RUB/RON yaklaşık)
   const toEurAmt = (amt: number, ccy: string) => {

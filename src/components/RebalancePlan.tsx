@@ -10,7 +10,7 @@ const fmtEUR = (n: number) => `€${Math.round(n).toLocaleString('de-DE')}`;
 export function RebalancePlan({ holdings, totalCashValue }: { holdings: Holding[]; totalCashValue: number }) {
   const model = useMemo(() => {
     const fx = getFxRatesFromHoldings(holdings);
-    const eur = fx.eur > 0 ? fx.eur : (fx.usd > 0 ? fx.usd * 1.16 : 0);
+    const eur = fx.eur > 0 ? fx.eur : 0;
     const values: Partial<Record<AllocationClass, number>> = {};
     let xeonEUR = 0;
     for (const h of holdings) {
@@ -33,6 +33,9 @@ export function RebalancePlan({ holdings, totalCashValue }: { holdings: Holding[
       <p className="text-[11px] text-slate-500 dark:text-gray-400 mb-3">
         Portföy {fmtEUR(model.totalEUR)} (kasa hariç). Bant dışına çıkınca uyarı; somut al/sat yalnız sapma ±10 puanı geçince.
       </p>
+      {!(getFxRatesFromHoldings(holdings).eur > 0) && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-300 mb-2">Euro kuru yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.</p>
+      )}
 
       {model.annual && (
         <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-2.5">

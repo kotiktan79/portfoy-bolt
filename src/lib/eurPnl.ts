@@ -4,7 +4,7 @@
 // IAS 21 para 9 (fonksiyonel para = harcamaların yapıldığı para → kullanıcı EUR harcıyor),
 // IAS 29 (TL hiperenflasyonist, nominal TL kâr geçersiz), Conceptual Framework 8.7
 // (enflasyonu aşan kısım kârdır). Kullanıcı kararı 2026-09-19: tek EUR cetveli; kasa
-// (cash_balances) portföy DIŞINDA; enflasyon sabit %2/yıl.
+// (cash_balances) portföy DIŞINDA. Enflasyon varsayılanı %3/yıl, sahip ayardan değiştirir.
 //
 //   g_t (EUR) = V_t/e_t − V_{t−1}/e_{t−1} − F_t/e_t
 //   V = snapshot total_value (TL), e = o günün EUR/TRY kuru
@@ -20,7 +20,7 @@
 //   çekilebilir D_m = max(0, C_{m−1} + G^r) ; maaş = 0,85 × D_m
 
 export const RELIABLE_FROM = '2026-04-06';   // EUR/USD 'api' kur serisinin başladığı gün — uygulama ve cron TEK kaynak
-export const INFLATION_EUR = 0.02;           // Euro Bölgesi HICP, yıllık, sabit (kullanıcı kararı 2026-09-19)
+export const INFLATION_EUR = 0.03;           // varsayılan yıllık euro enflasyon; portfoy_bolt_salary_policy.inflation_annual ezebilir
 export const ROW_CAP = 1000;                  // PostgREST max_rows — sayfalama adımı (fetchAll)
 export const TZ = 'Europe/Bucharest';         // kullanıcının yaşadığı yer: ay sınırları buna göre
 
@@ -135,6 +135,48 @@ export interface MonthRow {
   salaryEUR: number;          // min(aylık tavan, 0,85 × havuz)
   withdrawnEUR?: number;      // o ay gerçekten çekilen maaş
   poolSpilloverEUR?: number;  // havuz tavanını aşıp portföyde kalan kısım
+  /** Snapshot'ı hiç olmayan takvim ayı: kâr 0, enflasyon yine düşülür */
+  gapFilled?: boolean;
+  /** Bu ayın snapshot'ları arasındaki en uzun boşluk (gün). Hafta sonu 1–2 gündür. */
+  maxHoleDays?: number;
+  /** İçinde bulunulan ay: enflasyon gün sayısına bölündü */
+  openMonth?: boolean;
+}
+
+/** YYYY-AA ayının gün sayısı */
+export function daysInCalendarMonth(ym: string): number {
+  const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** Açık ayda gün/ay; kapanmış ayda 1. `today` YYYY-AA-GG. */
+export function inflationFraction(month: string, today?: string | null): number {
+  if (!today || today.slice(0, 7) !== month) return 1;
+  const dim = daysInCalendarMonth(month);
+  const day = Number(today.slice(8, 10));
+  if (!Number.isFinite(day) || day <= 0 || !dim) return 1;
+  return Math.min(day, dim) / dim;
+}
+
+/** (from, to) arasındaki takvim ayları, uçlar hariç. */
+export function monthsBetween(fromYM: string, toYM: string): string[] {
+  const out: string[] = [];
+  let y = Number(fromYM.slice(0, 4)), m = Number(fromYM.slice(5, 7));
+  const step = () => { m += 1; if (m === 13) { m = 1; y += 1; } return `${y}-${String(m).padStart(2, '0')}`; };
+  let cur = step();
+  while (cur < toYM) { out.push(cur); cur = step(); }
+  return out;
+}
+
+function daySpan(a: string, b: string): number {
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+
+/** 0–0,25 dışı ya da boş değer varsayılana döner. Ayar sütunu henüz yoksa da bu kullanılır. */
+export function normalizeInflation(raw: unknown, fallback = INFLATION_EUR): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 0.25) return fallback;
+  return n;
 }
 
 export const SALARY_SAFETY = 0.85;
@@ -160,12 +202,21 @@ export const MONTHLY_CAP_EUR = 1000;     // geçim planı: aylık üst sınır
 export const entitlementEUR = (poolEUR: number, safety = SALARY_SAFETY, monthlyCap = MONTHLY_CAP_EUR) =>
   Math.min(monthlyCap, safety * Math.max(0, poolEUR));
 
+/** Kalan hak. Havuz çekimleri zaten düşülmüş bakiyedir; burada yalnız bu ayın, çekim günündeki euro tutarı düşülür. */
+export function remainingEntitlementEUR(poolCarryOutEUR: number, thisMonthWithdrawnEUR: number): number {
+  return Math.max(0, entitlementEUR(poolCarryOutEUR) - Math.max(0, thisMonthWithdrawnEUR));
+}
+
 export interface MonthlyOpts {
   safety?: number;                       // 0,85 güvenlik payı
   carryResetFrom?: string | null;        // zarar devri sıfırlama ayı
   poolCapEUR?: number;                   // havuz tavanı: üstü portföyde kalır, çalışmaya devam eder
   monthlyCapEUR?: number;                // aylık çekim tavanı (geçim planı)
   withdrawnByMonth?: Map<string, number> | null;   // o ay gerçekten çekilen maaş (EUR) — havuzdan düşer
+  /** Bükreş günü YYYY-AA-GG. Bu ayın enflasyonu gün/ay oranında alınır. */
+  today?: string | null;
+  /** Arada snapshot'ı olmayan takvim ayına da tam ay enflasyonu yaz. */
+  fillGapMonths?: boolean;
 }
 
 export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: MonthlyOpts | number = {}, carryResetFromLegacy: string | null = CARRY_RESET_MONTH): MonthRow[] {
@@ -177,21 +228,55 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
   const monthlyCap = o.monthlyCapEUR ?? MONTHLY_CAP_EUR;
   const withdrawn = o.withdrawnByMonth ?? null;
   const m = new Map<string, MonthRow>();
+  const datesOf = new Map<string, string[]>();
   let prevWealth = daily.length ? daily[0].wealthEUR : 0;
   const mRate = Math.pow(1 + annualInflation, 1 / 12) - 1;
   for (let i = 0; i < daily.length; i++) {
     const d = daily[i]; const k = d.date.slice(0, 7);
     if (!m.has(k)) m.set(k, { month: k, firstDate: d.date, lastDate: d.date, startWealthEUR: prevWealth, endWealthEUR: d.wealthEUR, gainEUR: 0, inflationEUR: 0, realGainEUR: 0, carryInEUR: 0, withdrawableEUR: 0, carryOutEUR: 0, salaryEUR: 0 });
+    if (!datesOf.has(k)) datesOf.set(k, []);
+    datesOf.get(k)!.push(d.date);
     const r = m.get(k)!;
     if (i > 0) r.gainEUR += d.gainEUR;
     r.endWealthEUR = d.wealthEUR; r.lastDate = d.date; prevWealth = d.wealthEUR;
   }
-  const rows = Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month));
+  let rows = Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month));
+  for (const r of rows) {
+    const ds = (datesOf.get(r.month) || []).slice().sort();
+    let hole = 0;
+    for (let i = 1; i < ds.length; i++) {
+      const h = daySpan(ds[i - 1], ds[i]) - 1;
+      if (h > hole) hole = h;
+    }
+    r.maxHoleDays = hole;
+  }
+  if (o.fillGapMonths && rows.length > 1) {
+    const filled: MonthRow[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      if (i > 0) {
+        const wealth = rows[i - 1].endWealthEUR;
+        for (const g of monthsBetween(rows[i - 1].month, rows[i].month)) {
+          const dim = daysInCalendarMonth(g);
+          const last = `${g}-${String(dim).padStart(2, '0')}`;
+          filled.push({
+            month: g, firstDate: `${g}-01`, lastDate: last,
+            startWealthEUR: wealth, endWealthEUR: wealth,
+            gainEUR: 0, inflationEUR: 0, realGainEUR: 0, carryInEUR: 0, withdrawableEUR: 0, carryOutEUR: 0, salaryEUR: 0,
+            gapFilled: true, maxHoleDays: dim,
+          });
+        }
+      }
+      filled.push(rows[i]);
+    }
+    rows = filled;
+  }
   let carry = 0, didReset = false;
   for (const r of rows) {
     // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin)
     if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; didReset = true; }
-    r.inflationEUR = r.startWealthEUR * mRate;
+    const frac = inflationFraction(r.month, o.today);
+    r.openMonth = frac < 1;
+    r.inflationEUR = r.startWealthEUR * mRate * frac;
     r.realGainEUR = r.gainEUR - r.inflationEUR;
     r.carryInEUR = carry;                                    // havuz (+) ya da devreden açık (−)
     const bal = carry + r.realGainEUR;
@@ -220,6 +305,8 @@ export interface EurHealth {
   pendingAdjustments?: number;
   /** aynı tutar+gün iki kaynaktan geldi (mükerrer): bir kez sayıldı, kalanı elendi */
   duplicateAdjustments?: number;
+  /** EUR serisi boş: usd×1,15 UYDURULMAZ. Son gerçek kur da yoksa ölçüm güvenilmez. */
+  missingEurRate?: boolean;
 }
 export interface EurModel {
   daily: EurDaily[]; months: MonthRow[]; health: EurHealth;
@@ -298,12 +385,14 @@ export interface EurModelInput {
   usdRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
   /** TRY/USD/EUR dışı birimlerin TL kurları (RUB/RON/GBP/CHF). Yoksa o birimdeki kayıt 0 sayılır ve health'te uyarı çıkar. */
   otherRates?: Record<string, Array<{ recorded_at: string; rate: number | string }>> | null;
-  transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null }>;
-  cashSells: Array<{ created_at: string; currency: string | null; notes: string | null }>;
+  transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null; currency?: string | null }>;
+  cashSells: Array<{ created_at: string; currency: string | null; notes: string | null; related_holding_id?: string | number | null }>;
   holdings: Array<{ id: string | number; currency: string | null; quantity: number | string | null; purchase_price: number | string | null; created_at: string | null }>;
   usdNow: number;            // seri boşsa yedek
   reliableFrom: string;
   annualInflation: number;
+  /** Bükreş günü. Verilirse içinde bulunulan ayın enflasyonu gün sayısına bölünür. */
+  asOf?: string | null;
   /** ay → o ay çekilen maaş (EUR); havuzdan düşülür. Yoksa çekim yok sayılır. */
   withdrawnByMonth?: Map<string, number> | null;
   /** PORTFÖYDEN ÇIKAN temettü/kupon (income_records.destination='kasa'): gün → tutar (kendi para biriminde).
@@ -325,7 +414,8 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     const m = new Map<string, number>(); for (const r of rows) m.set(String(r.recorded_at).slice(0, 10), Number(r.rate));
     return { series: makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), fb, minRate), lastDay: Array.from(m.keys()).sort().pop() || '' };
   };
-  const E = toSeries(inp.eurRates, inp.usdNow * 1.15), U = toSeries(inp.usdRates, inp.usdNow);
+  // Boş EUR serisinde usd×1,15 YOK. Seri varsa makeRateSeries son gerçek kuru taşır.
+  const E = toSeries(inp.eurRates, Number.NaN), U = toSeries(inp.usdRates, inp.usdNow);
   const eur = E.series, usd = U.series;
   // TRY/USD/EUR dışı birimler (RUB/RON/GBP/CHF) — varsa kendi serisiyle, yoksa 'bilinmeyen' listesine
   const otherSeries = new Map<string, RateSeries>();
@@ -347,6 +437,27 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   // realize (TL, holding para birimine göre çevrilmiş), mükerrer elenir, snapshot gününe hizalanır
   const holds = inp.holdings;
   const ccyById = new Map<string, string>(holds.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
+  const hourInTZ = (ts: string): number => {
+    const dt = new Date(ts);
+    if (Number.isNaN(dt.getTime())) return 12;
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' }).formatToParts(dt);
+    return Number(p.find(x => x.type === 'hour')!.value);
+  };
+  // Gün = Bükreş. Snapshot o gün 21:00'dan önce yazıldıysa satış bir sonraki snapshot gününe gider
+  // (cron 18:00 UTC = 21:00 Bükreş). 21:00 UTC yaz satında zaten ertesi Bükreş günüdür.
+  const alignEvent = (ts: string): string | null => {
+    const day = dayInTZ(ts);
+    if (!day) return null;
+    const hour = hourInTZ(ts);
+    for (const s of snaps) {
+      if (s.date < day) continue;
+      if (s.date > day) return s.date;
+      if (s.createdAt) { if (s.createdAt >= ts) return s.date; continue; }
+      if (hour >= 21) continue;
+      return s.date;
+    }
+    return null;
+  };
   // TL'ye çevrim: TRY=1, bilinen her birim kendi serisiyle. Bilinmeyen birim 0 (temkinli) ve health'te uyarı —
   // eskiden USD/EUR dışı her şey sessizce 0'dı; artık en az görünür. (2026-09-27)
   const toTRY = (amt: number, ccy: string, d: string) => {
@@ -356,27 +467,43 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     const r = s2.rateAt(d);
     return Number.isFinite(r) ? amt * r : 0;
   };
-  // HİZALAMA (2026-09-27 hakem bulgusu): eskiden ileri gün bulunamazsa SON snapshot gününe geri yazıyordu.
-  // Bugün girilen bir kayıt (snapshot henüz yok) kapanmış güne düşüyor ve karşılığında servet düşüşü olmadığı
-  // için TAM TUTAR KADAR SAHTE KÂR üretiyordu — ay sonuysa doğrudan maaş havuzuna giriyordu.
-  // Artık ileri gün yoksa null: düzeltme ERTELENİR, snapshot gelince doğru güne işlenir.
-  const align = (d: string): string | null => snapDays.find(x => x >= d) ?? null;
+  // HİZALAMA: ileri snapshot yoksa ERTELENİR (kapanmış güne sahte kâr yazılmaz).
+  // Gün sınırı Bükreş'tir; 21:00'dan sonraki satış, o günün snapshot'ı çoktan yazıldıysa ertesi güne gider.
+  const eventDay = (ts: string) => dayInTZ(ts) || String(ts).slice(0, 10);
   let pendingAdjustments = 0;
+  let duplicateAdjustments = 0;
   const realizedByDay = new Map<string, number>(); const seen = new Set<string>();
-  for (const c of inp.cashSells) {
-    // iki not formatı: "(Kar/Zarar: 11161.92 ₺)" ve "(K/Z +272.95)"
-    const m = String(c.notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/) || String(c.notes || '').match(/K\/Z\s*\+?(-?[\d.]+)/); if (!m) continue;
-    const d = String(c.created_at).slice(0, 10); const tl = toTRY(Number(m[1]), String(c.currency || 'TRY').toUpperCase(), d);
-    if (!Number.isFinite(tl) || tl === 0 || d < reliableFrom) continue;
-    const k = align(d); if (!k) { pendingAdjustments++; continue; }
-    realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl); seen.add(`${d}|${Math.round(tl)}`);
-  }
+  const txNative = new Set<string>();
+  const noteNative = (notes: string | null) => {
+    const m = String(notes || '').match(/Zarar[:\s]*\+?(-?[\d.]+)/) || String(notes || '').match(/K\/Z\s*\+?(-?[\d.]+)/);
+    return m ? Number(m[1]) : null;
+  };
   for (const t of inp.transactions) {
     const rp = Number(t.realized_profit) || 0; if (!rp) continue;
-    const d = String(t.transaction_date).slice(0, 10); const tl = toTRY(rp, ccyById.get(String(t.holding_id)) || 'TRY', d);
-    if (!Number.isFinite(tl) || tl === 0 || d < reliableFrom || seen.has(`${d}|${Math.round(tl)}`)) continue;
-    const k = align(d); if (!k) { pendingAdjustments++; continue; }
-    realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl);
+    const day = eventDay(String(t.transaction_date));
+    if (!day || day < reliableFrom) continue;
+    const ccy = ccyById.get(String(t.holding_id)) || String(t.currency || 'TRY').toUpperCase();
+    const tl = toTRY(rp, ccy, day);
+    txNative.add(`${day}|n|${Math.round(rp)}`);
+    if (t.holding_id != null) txNative.add(`${day}|${t.holding_id}|${Math.round(rp)}`);
+    if (!Number.isFinite(tl) || tl === 0) continue;
+    const k = alignEvent(String(t.transaction_date)); if (!k) { pendingAdjustments++; continue; }
+    realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl); seen.add(`${day}|${Math.round(tl)}`);
+  }
+  for (const c of inp.cashSells) {
+    const native = noteNative(c.notes); if (native == null || !native) continue;
+    const day = eventDay(String(c.created_at));
+    if (!day || day < reliableFrom) continue;
+    const hid = c.related_holding_id == null ? '' : String(c.related_holding_id);
+    if (txNative.has(`${day}|n|${Math.round(native)}`) || (hid && txNative.has(`${day}|${hid}|${Math.round(native)}`))) {
+      duplicateAdjustments++; continue;
+    }
+    const ccy = (hid && ccyById.get(hid)) || String(c.currency || 'TRY').toUpperCase();
+    const tl = toTRY(native, ccy, day);
+    if (!Number.isFinite(tl) || tl === 0) continue;
+    if (seen.has(`${day}|${Math.round(tl)}`)) { duplicateAdjustments++; continue; }
+    const k = alignEvent(String(c.created_at)); if (!k) { pendingAdjustments++; continue; }
+    realizedByDay.set(k, (realizedByDay.get(k) || 0) + tl); seen.add(`${day}|${Math.round(tl)}`);
   }
 
   // DÖVİZ MALİYET TAKVİMİ: her snapshot günü için USD/EUR cinsi pozisyonların native maliyeti.
@@ -386,7 +513,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   const txByHolding = new Map<string, Array<{ d: string; dCost: number }>>();
   for (const t of inp.transactions) {
     const h = foreign.find(x => String(x.id) === String(t.holding_id)); if (!h) continue;
-    const d = String(t.transaction_date).slice(0, 10);
+    const d = eventDay(String(t.transaction_date));
     const q = Number(t.quantity) || 0, amt = Number(t.total_amount) || 0;
     const dCost = t.transaction_type === 'buy' ? amt : -(q * (Number(h.purchase_price) || 0));
     if (!txByHolding.has(String(h.id))) txByHolding.set(String(h.id), []);
@@ -395,7 +522,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   const costsOn = (date: string): ForeignCost[] => foreign.map(h => {
     let c = (Number(h.quantity) || 0) * (Number(h.purchase_price) || 0);
     for (const t of txByHolding.get(String(h.id)) || []) if (t.d > date) c -= t.dCost;
-    if (String(h.created_at || '').slice(0, 10) > date) c = 0;
+    if (h.created_at && eventDay(String(h.created_at)) > date) c = 0;
     return { currency: String(h.currency).toUpperCase(), costNative: Math.max(0, c) };
   });
   const driftByDay = new Map<string, number>();
@@ -406,9 +533,8 @@ export function buildEurModel(inp: EurModelInput): EurModel {
 
   // PORTFÖYDEN ÇIKAN temettü/kupon → TL'ye çevrilip snapshot gününe hizalanır (realize ile aynı yöntem)
   const payoutByDay = new Map<string, number>();
-  let duplicateAdjustments = 0;
   for (const p of inp.payouts || []) {
-    const d = String(p.date).slice(0, 10);
+    const d = eventDay(String(p.date));
     if (!d || d < reliableFrom) continue;
     // amountTRY verilmişse O kullanılır (kullanıcının elle düzelttiği gerçek tutar); yoksa kurla çevrilir
     const tl = Number.isFinite(Number(p.amountTRY)) && Number(p.amountTRY) > 0
@@ -420,17 +546,18 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     const key = `${d}|${Math.round(tl)}`;
     if (seen.has(key)) { duplicateAdjustments++; continue; }
     seen.add(key);
-    const k = align(d); if (!k) { pendingAdjustments++; continue; }
+    const k = alignEvent(String(p.date)); if (!k) { pendingAdjustments++; continue; }
     payoutByDay.set(k, (payoutByDay.get(k) || 0) + tl);
   }
 
   const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay, payoutByDay);
   const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
-  const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null });
+  const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null, today: inp.asOf ?? null, fillGapMonths: true });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
   const health: EurHealth = {
-    ok: E.lastDay >= lastSnapDay && U.lastDay >= lastSnapDay,
+    ok: Boolean(E.lastDay) && E.lastDay >= lastSnapDay && Boolean(U.lastDay) && U.lastDay >= lastSnapDay,
     lastEurRateDay: E.lastDay, lastSnapDay,
+    ...(!E.lastDay ? { missingEurRate: true } : {}),
     ...(unknownCcy.size ? { unknownCcy: Array.from(unknownCcy).sort() } : {}),
     ...(pendingAdjustments ? { pendingAdjustments } : {}),
     ...(duplicateAdjustments ? { duplicateAdjustments } : {}),

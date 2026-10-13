@@ -12,7 +12,7 @@ interface BuyRow { symbol: string; amountEUR: number; date: string }
 
 function cashEUR(holdings: Holding[], symbols: string[]): number {
   const fx = getFxRatesFromHoldings(holdings);
-  const eur = fx.eur > 0 ? fx.eur : (fx.usd > 0 ? fx.usd * 1.16 : 0);
+  const eur = fx.eur > 0 ? fx.eur : 0;
   if (!(eur > 0)) return 0;
   return holdings
     .filter(h => h.asset_type === 'currency' && symbols.includes(h.symbol.toUpperCase()))
@@ -28,7 +28,7 @@ export function BuyPlanCard({ holdings }: { holdings: Holding[] }) {
     let cancel = false;
     (async () => {
       const fx = getFxRatesFromHoldings(holdings);
-      const eur = fx.eur > 0 ? fx.eur : (fx.usd > 0 ? fx.usd * 1.16 : 0);
+      const eur = fx.eur > 0 ? fx.eur : 0;
       const byId = new Map(holdings.map(h => [String(h.id), h]));
       const since = new Date(Date.now() - 10 * 86400000).toISOString();
       const [txRes, pxRes] = await Promise.all([
@@ -93,6 +93,9 @@ export function BuyPlanCard({ holdings }: { holdings: Holding[] }) {
           : `Ayda yaklaşık €${fmt(pace.perMonthEUR)} yatırırsan ${BUY_TARGET_DATE.split('-').reverse().join('.')} tarihine yetişir. Yetişmezse de sorun değil.`}
       </p>
       <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">Kaynak sırası: {fundingHint(euroCash, usdCash)}</p>
+      {!(getFxRatesFromHoldings(holdings).eur > 0) && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">Euro kuru yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.</p>
+      )}
       {!hasVwce && (
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
           VWCE henüz yok. Eklemek için sembol <strong>VWCE</strong> — {BUY_INSTRUMENTS.VWCE.venue} {BUY_INSTRUMENTS.VWCE.yahoo}, ISIN {BUY_INSTRUMENTS.VWCE.isin}, EUR.

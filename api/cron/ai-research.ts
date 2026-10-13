@@ -26,7 +26,7 @@ Pozisyon notu = "ne oldu / neden" bilgisi; "al/sat/azalt/tut" DEĞİL.
   "headline": "2-3 cümle: bugün portföyü ne etkiledi",
   "macro_summary": {
     "bist100": "endeks durumu, son hafta yön, yabancı akım",
-    "eur_try": "kur hareketi ve sebebi (kur artışı kâr DEĞİL — TL varlıkların euro değerine etkisi)",
+    "eur_try": "kur hareketi ve sebebi (euro baz: TL veya USD'nin euro karşısındaki hareket kârdır)",
     "tcmb": "faiz / enflasyon görünümü",
     "global": "ABD/Avrupa makro önemli not"
   },
