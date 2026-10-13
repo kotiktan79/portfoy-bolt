@@ -1,20 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { buildAiContext, AI_RULES } from './lib/aiContext.js';
 import { dayInTZ } from '../src/lib/eurPnl.js';
-
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase credentials missing');
-  return createClient(url, key);
-}
+import { requirePortfolioAccess } from './lib/auth.js';
+import { applyApiCors } from './lib/cors.js';
+import { getServiceSupabase } from './lib/serviceSupabase.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyApiCors(req, res, 'POST, OPTIONS');
+  res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -23,6 +16,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  if (await requirePortfolioAccess(req, res)) return;
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) {
@@ -36,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let systemPrompt: string;
     try {
       // gün/ay anahtarı Bükreş takvimi (uygulama ymInTZ/dayInTZ ile aynı) — ayın 1'i 00-03 arası UTC bir önceki ayı gösteriyordu
-      const ctx = await buildAiContext(getSupabase(), dayInTZ(new Date()));
+      const ctx = await buildAiContext(getServiceSupabase(), dayInTZ(new Date()));
       systemPrompt = `${AI_RULES}\n\n${ctx.text}`;
     } catch (e: any) {
       console.error('aiContext:', e?.message);

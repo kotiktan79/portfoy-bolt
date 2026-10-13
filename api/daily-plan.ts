@@ -1,29 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { buildAiContext } from './lib/aiContext.js';
 import { dayInTZ } from '../src/lib/eurPnl.js';
+import { requirePortfolioAccess } from './lib/auth.js';
+import { applyApiCors } from './lib/cors.js';
+import { getServiceSupabase } from './lib/serviceSupabase.js';
 
 // "BUGÜNKÜ PLANINIZ" — 2026-09-22: AI ÇAĞRISI YOK. Eski sürüm her açılışta Claude'a "ne alayım" diye soruyordu
 // (USD mantığı, $2.000 maaş, IB01/altın-trim önerileri) ve tek planla çelişiyordu. Plan sabittir ve deterministik
 // üretilir (api/lib/aiContext = uygulama RebalancePlan = panel rubLane ile aynı formül). AI yalnız sohbette açıklar.
 
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase credentials missing');
-  return createClient(url, key);
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyApiCors(req, res, 'POST, OPTIONS');
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (await requirePortfolioAccess(req, res)) return;
 
   try {
     const todayStr = dayInTZ(new Date());   // Bükreş takvimi (uygulama ile aynı ay sınırı)
-    const ctx = await buildAiContext(getSupabase(), todayStr);
+    const ctx = await buildAiContext(getServiceSupabase(), todayStr);
     const { eur, weekPlan, anomalies, trancheEUR } = ctx;
 
     const actions = weekPlan.map(p => ({

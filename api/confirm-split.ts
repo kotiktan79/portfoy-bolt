@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { getServiceSupabase } from './lib/serviceSupabase.js';
 
 // GET /api/confirm-split?symbol=BIMAS&ratio=2&key=SECRET
 // Telegram'dan gelen split onayını uygular: quantity × ratio, purchase_price / ratio.
@@ -17,10 +17,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'symbol ve ratio (1-100) gerekli' });
   }
 
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !supaKey) return res.status(500).json({ error: 'Supabase credentials missing' });
-  const sb = createClient(url, supaKey);
+  let sb;
+  try {
+    sb = getServiceSupabase();
+  } catch {
+    return res.status(500).json({ error: 'Supabase service role missing' });
+  }
 
   const { data: h, error: fetchErr } = await sb.from('holdings').select('*').eq('symbol', symbol).maybeSingle();
   if (fetchErr) return res.status(500).json({ error: fetchErr.message });

@@ -1,22 +1,15 @@
 // AI Araştırma — 'Araştır' sayfası butonu (zamanlanmış cron YOK)
 // EUR bağlam + web search → Claude → haber/makro özeti → ai_research_reports. Öneri üretmez.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import { hasCronAuth } from '../lib/auth.js';
+import { hasCronAuth, requirePortfolioAccess } from '../lib/auth.js';
 import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
+import { getServiceSupabase } from '../lib/serviceSupabase.js';
 import { dayInTZ } from '../../src/lib/eurPnl.js';
 
 // Vercel function timeout — Claude + web search 30-60s sürebilir
 export const config = {
   maxDuration: 60,
 };
-
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase credentials missing');
-  return createClient(url, key);
-}
 
 // 2026-09-22: AI işlem ÖNERMEZ (kullanıcı kararı "küçült"). Eski sürüm trim/sell/buy/rotate önerisi üretip
 // ai_recommendations'a yazıyor, sayfa TRİM/SAT/AL rozetleriyle gösteriyordu. Artık: AI_RULES + tek EUR bağlam,
@@ -81,13 +74,12 @@ async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  res.setHeader('Cache-Control', 'no-store');
 
-  // This endpoint is intentionally reachable without CRON_SECRET because it is
-  // the manual "Research" button (there is no scheduled cron for it). To keep
-  // it from being a public Claude-spend faucet we bound the cost: an
-  // unauthenticated caller can only ever trigger ONE generation per day — once
-  // today's report exists, every further unauthenticated hit returns the cached
-  // report without calling Claude. Forced regeneration requires CRON_SECRET.
+  // Elle "Şimdi Çalıştır" sahip oturumu ister. CRON_SECRET de geçer (sunucudan
+  // sunucuya). Zorla yeniden üretim yalnız CRON_SECRET + ?force=true.
+  // Günün raporu varsa Claude bir daha çağrılmaz.
+  if (await requirePortfolioAccess(req, res)) return;
   const authorized = hasCronAuth(req);
   const force = authorized && (req.query?.force === 'true' || req.query?.force === '1');
 
@@ -95,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const log: string[] = [];
 
   try {
-    const supabase = getSupabase();
+    const supabase = getServiceSupabase();
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) return res.status(200).json({ success: false, error: 'ANTHROPIC_API_KEY missing' });
 

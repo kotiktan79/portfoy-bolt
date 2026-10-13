@@ -1,6 +1,7 @@
 // AI sohbet istemcisi — 2026-09-22: bağlam SUNUCUDA kuruluyor (api/lib/aiContext, EUR motoru, tek plan).
 // Eski sürüm TL/USD nominal portföyü gönderiyordu; sunucu artık onu kullanmıyor → yalnız soru + geçmiş gider.
 import { Holding } from '../lib/supabase';
+import { authorizedHeaders } from '../lib/apiAuth';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -11,12 +12,11 @@ export async function askClaude(
   question: string,
   _holdings: Holding[],
   conversationHistory: ConversationMessage[] = [],
-  _riskScore: number = 50
 ): Promise<{ response: string; isAI: boolean }> {
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authorizedHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ question, conversationHistory: conversationHistory.slice(-6) }),
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);

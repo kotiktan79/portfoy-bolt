@@ -1,13 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
+import { requirePortfolioAccess } from './lib/auth.js';
+import { applyApiCors } from './lib/cors.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyApiCors(req, res, 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 'private, no-store');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (await requirePortfolioAccess(req, res)) return;
 
   // Env'e kazara kaçmış literal "\n" / boşlukları temizle (bilinen tuzak:
   // değerler trailing \n ile kaydedilince Binance "-2014 API-key format invalid" döner).

@@ -15,6 +15,9 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+# macOS AppleDouble / resource-fork junk
+._*
+.AppleDouble
 *.suo
 *.ntvs*
 *.njsproj
