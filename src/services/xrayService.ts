@@ -1,5 +1,5 @@
 import { Holding } from '../lib/supabase';
-import { TARGET_ALLOCATION, TARGET_PCT, PHYSICAL_FIXED_TYPES } from '../config/portfolioPolicy';
+import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassOf, effectiveAssetType, CLASS_LABELS, type AllocationClass } from '../config/portfolioPolicy';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 export interface XRayFinding {
@@ -90,7 +90,14 @@ const FUND_CURRENCY_PROXY: Record<string, string> = {
 // Hedef dağılım TEK KAYNAKTAN — config/portfolioPolicy (memory ile senkron).
 // Eskiden burada ayrı hardcoded hedef vardı (%25 hisse/%25 nakit/%20 eurobond) → AI
 // Yönetici ile çelişiyordu. Artık üçü de aynı politikadan okuyor.
-const DEFAULT_TARGETS: Record<string, number> = TARGET_PCT;
+const DEFAULT_TARGETS: Record<AllocationClass, number> = {
+  stock: TARGET_ALLOCATION.stock.target,
+  safe: TARGET_ALLOCATION.safe.target,
+  commodity: TARGET_ALLOCATION.commodity.target,
+  crypto: TARGET_ALLOCATION.crypto.target,
+  fund: TARGET_ALLOCATION.fund.target,
+  currency: TARGET_ALLOCATION.currency.target,
+};
 
 // Sembol → coğrafi bölge (Global = ABD/Avrupa yabancı hisseler, TR = BIST/TL)
 const GLOBAL_SYMBOLS = new Set([
@@ -127,7 +134,8 @@ function isCurrencyHolding(h: Holding): boolean {
   // Eurobonds count as foreign-currency exposure ONLY when actually denominated
   // in a foreign currency. A TRY-denominated bond (e.g. US900123CJ75, currency
   // ='TRY') would otherwise be double-miscounted as both EUR and TL exposure.
-  if (h.asset_type === 'eurobond') return (h.currency || 'TRY').toUpperCase() !== 'TRY';
+  const kind = effectiveAssetType(h.asset_type, h.symbol);
+  if (kind === 'eurobond' || kind === 'money_market' || kind === 'treasury_etf') return (h.currency || 'TRY').toUpperCase() !== 'TRY';
   return false;
 }
 
@@ -225,7 +233,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: deadMoneyTotal > totalValue * 0.20 ? 'high' : deadMoneyTotal > totalValue * 0.08 ? 'medium' : 'low',
       category: 'dead-money',
       title: `Getirisiz nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
-      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%2'sini yiyor. Tek plan: dilimlerle V3YL + XEON'a.`,
+      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%2'sini yiyor. Esnek plan: VWCE %76 / V3YL %16 / XEON %8.`,
       amount: deadMoneyTotal,
       symbols: cashPositions.map(p => p.symbol),
     });
@@ -254,7 +262,8 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
     const sym = p.symbol.toUpperCase();
     if (cur !== 'TRY') return false;
     // TL FİYATLI ≠ TL VARLIĞI: altın, kripto, eurobond ve global ETF'ler TL ile fiyatlansa da TL riski taşımaz (2026-09-22)
-    if (p.asset_type === 'commodity' || p.asset_type === 'crypto' || p.asset_type === 'eurobond') return false;
+    const kind = effectiveAssetType(p.asset_type, p.symbol);
+    if (kind === 'commodity' || kind === 'crypto' || kind === 'eurobond' || kind === 'money_market' || kind === 'treasury_etf') return false;
     if (GLOBAL_SYMBOLS.has(sym)) return false;
     // currency tipi pozisyonlar TL fiyatlı saklanır ama yalnız TRY/TL nakit gerçekten TL'dir
     if (p.asset_type === 'currency') return sym === 'TRY' || sym === 'TL';
@@ -389,9 +398,11 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
   // ── 9. Asset Class Hedef Sapması (Drift) ─────────────────────
   const valueByClass: Record<string, number> = {};
   for (const p of positions) {
-    valueByClass[p.asset_type] = (valueByClass[p.asset_type] || 0) + p.value;
+    const cls = allocationClassOf(p.asset_type, p.symbol);
+    if (!cls) continue;
+    valueByClass[cls] = (valueByClass[cls] || 0) + p.value;
   }
-  const allocationDrift: AllocationDrift[] = Object.keys(DEFAULT_TARGETS).map(at => {
+  const allocationDrift: AllocationDrift[] = (Object.keys(DEFAULT_TARGETS) as AllocationClass[]).map(at => {
     const value = valueByClass[at] || 0;
     const currentPct = (value / totalValue) * 100;
     const targetPct = DEFAULT_TARGETS[at];
@@ -406,7 +417,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: Math.abs(top.drift) > 20 ? 'medium' : 'low',
       category: 'drift',
       title: `${bigDrifts.length} varlık sınıfı hedeften sapmış`,
-      detail: `En büyük sapma: ${top.asset_type} %${top.currentPct.toFixed(0)} (hedef %${top.targetPct}, sapma ${top.drift > 0 ? '+' : ''}${top.drift.toFixed(0)} puan). Rebalance düşün.`,
+      detail: `En büyük sapma: ${CLASS_LABELS[top.asset_type as AllocationClass] || top.asset_type} %${top.currentPct.toFixed(0)} (hedef %${top.targetPct}, sapma ${top.drift > 0 ? '+' : ''}${top.drift.toFixed(0)} puan). Bant dışındaysa önce satışsız adım; ±10 puanı geçince tutar.`,
     });
   }
 

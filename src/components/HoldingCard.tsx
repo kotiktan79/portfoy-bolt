@@ -6,6 +6,7 @@ import { formatCurrency, formatPercentage } from '../services/priceService';
 import { BuySellModal } from './BuySellModal';
 import { detectCurrency, calculatePnLWithCurrency } from '../services/currencyService';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
+import { effectiveAssetType } from '../config/portfolioPolicy';
 import { Sparkline } from './ui/Sparkline';
 
 interface Props {
@@ -30,6 +31,8 @@ const ASSET_ICONS: Record<string, LucideIcon> = {
   commodity: Gem,
   fund: Package,
   eurobond: Banknote,
+  money_market: Banknote,
+  treasury_etf: Banknote,
   cash: Wallet,
 };
 
@@ -40,6 +43,8 @@ const ASSET_TONES: Record<string, string> = {
   commodity: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
   fund: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
   eurobond: 'bg-accent-100 text-accent-700 dark:bg-accent-900/40 dark:text-accent-300',
+  money_market: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  treasury_etf: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
   cash: 'bg-slate-100 text-slate-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
@@ -66,9 +71,10 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
   }, [holding]);
 
   const isPositive = pnlData.pnl >= 0;
-  const Icon = ASSET_ICONS[holding.asset_type] || Package;
-  const toneClass = ASSET_TONES[holding.asset_type] || ASSET_TONES.stock;
-  const typeLabel = ASSET_TYPE_LABELS[holding.asset_type] || holding.asset_type;
+  const shownType = effectiveAssetType(holding.asset_type, holding.symbol);
+  const Icon = ASSET_ICONS[shownType] || Package;
+  const toneClass = ASSET_TONES[shownType] || ASSET_TONES.stock;
+  const typeLabel = ASSET_TYPE_LABELS[shownType] || shownType;
 
   const rankStyle = rank && rank >= 1 && rank <= 3 ? RANK_STYLES[rank] : null;
 

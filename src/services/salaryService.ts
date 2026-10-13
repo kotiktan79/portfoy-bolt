@@ -37,6 +37,14 @@ export interface SalaryAccrual {
   withdrawnEUR: number; availableEUR: number; deficitEUR: number;
 }
 
+async function loadWithdrawalAmounts(): Promise<Array<{ amount_usd: number | null; amount_eur?: number | null }>> {
+  const wide = await supabase.from('salary_withdrawals').select('amount_usd,amount_eur,withdrawn_at');
+  if (!wide.error) return wide.data || [];
+  if (!/amount_eur|column|schema cache/i.test(wide.error.message)) return [];
+  const legacy = await supabase.from('salary_withdrawals').select('amount_usd,withdrawn_at');
+  return legacy.data || [];
+}
+
 const toRow = (r: MonthRow): DynamicSalary => ({
   month: r.month, monthLabel: monthLabel(r.month), carryResetApplied: r.carryResetApplied, profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
@@ -65,13 +73,17 @@ export async function getDynamicSalary(): Promise<DynamicSalary | null> {
 }
 
 export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
-  const [rows, allMonths, wdRes] = await Promise.all([getMonthlySalarySeries(36), getEurMonths(), supabase.from('salary_withdrawals').select('amount_usd,withdrawn_at')]);
+  const [rows, allMonths, wdRows] = await Promise.all([getMonthlySalarySeries(36), getEurMonths(), loadWithdrawalAmounts()]);
   if (!rows.length) return null;
   const nominalEUR = rows.reduce((s, r) => s + r.profitEUR, 0);
   const inflationEUR = rows.reduce((s, r) => s + r.inflationEUR, 0);
   const realEUR = nominalEUR - inflationEUR;
-  // salary_withdrawals USD tutuyor (eski şema); EUR'ya yaklaşık 1,15 ile — çekim yoksa 0
-  const withdrawnEUR = (wdRes.data || []).reduce((s, w) => s + (Number(w.amount_usd) || 0) / 1.15, 0);
+  // amount_eur varsa o (yeni kayıt). Eski satır USD; yaklaşık 1,15.
+  const withdrawnEUR = wdRows.reduce((s, w) => {
+    const eur = Number((w as { amount_eur?: number | null }).amount_eur);
+    if (Number.isFinite(eur) && eur > 0) return s + eur;
+    return s + (Number(w.amount_usd) || 0) / 1.15;
+  }, 0);
   const last = rows[0];                                      // en yeni ay (reverse edilmiş)
   const available = last.withdrawableEUR * 1 - Math.max(0, withdrawnEUR - 0); // çekilebilir: son ayın devir-sonrası bakiyesi
   // Açık = GÜNCEL devir (cari ay dahil son satırın carryOut'u). Son tam aydan hesaplanınca

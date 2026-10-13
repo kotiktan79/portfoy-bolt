@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { TARGET_PCT } from '../config/portfolioPolicy';
+import { TARGET_PCT, allocationClassOf } from '../config/portfolioPolicy';
 import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
@@ -245,13 +245,14 @@ export function calculateRebalance(
 
   const allocations: AssetAllocation[] = valued.map(({ h, value }) => {
     const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
-    const targetPercentage = targetAllocations[h.asset_type] || 0;
+    const cls = allocationClassOf(h.asset_type, h.symbol);
+    const targetPercentage = (cls ? targetAllocations[cls] : undefined) ?? targetAllocations[h.asset_type] ?? 0;
     const targetValue = (totalValue * targetPercentage) / 100;
     const rebalanceAmount = targetValue - value;
 
     return {
       symbol: h.symbol,
-      asset_type: h.asset_type,
+      asset_type: cls || h.asset_type,
       value,
       percentage,
       target_percentage: targetPercentage,
@@ -262,7 +263,7 @@ export function calculateRebalance(
   return allocations.sort((a, b) => b.value - a.value);
 }
 
-// TEK KAYNAK: src/config/portfolioPolicy.ts (hisse 50 / eurobond 25 / fon 5 / altın 10 / kripto 5 / nakit 5).
+// TEK KAYNAK: src/config/portfolioPolicy.ts (hisse 62 / güvenli taraf 14 / fon 4 / altın 10 / kripto 5 / nakit 5).
 // Eski sabit tablo (hisse 40 / kripto 20 / döviz 15 / fon 15 / eurobond 5 / altın 5) ana sayfada
 // 'Hedefe Ulaşma Planı' ile ÇELİŞEN öneriler üretiyordu ('altın sat, ₺1,3M BTC al') — denetim 2026-09-20.
 export function getDefaultTargetAllocations(): Record<string, number> {

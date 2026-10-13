@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Wallet } from 'lucide-react';
 import { AssetType } from '../lib/supabase';
+import { instrumentHint } from '../constants/instruments';
 
 interface AddHoldingModalProps {
   onClose: () => void;
@@ -143,6 +144,8 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
               <option value="currency">Döviz</option>
               <option value="fund">Fon</option>
               <option value="eurobond">Eurobond</option>
+              <option value="money_market">Para Piyasası</option>
+              <option value="treasury_etf">Hazine Bonosu ETF</option>
               <option value="commodity">Emtia</option>
               <option value="cash">Nakit</option>
             </select>
@@ -198,11 +201,22 @@ export function AddHoldingModal({ onClose, onAdd }: AddHoldingModalProps) {
                 <input
                   type="text"
                   value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  placeholder="AKSEN, BTC, USD..."
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSymbol(v);
+                    const hint = instrumentHint(v);
+                    if (hint) {
+                      setAssetType(hint.assetType);
+                      setAssetCurrency(hint.currency);
+                    }
+                  }}
+                  placeholder="AKSEN, BTC, VWCE..."
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   required
                 />
+                {instrumentHint(symbol) && (
+                  <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">{instrumentHint(symbol)!.note}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

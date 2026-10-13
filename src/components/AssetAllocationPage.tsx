@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, PieChart as PieIcon } from 'lucide-react';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { assetColor, assetName, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
+import { effectiveAssetType } from '../config/portfolioPolicy';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -34,20 +35,21 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
     const investmentValue = holdingCostTRY(holding, fxRates);
     const profit = currentValue - investmentValue;
 
-    if (!assetTypeMap.has(holding.asset_type)) {
-      assetTypeMap.set(holding.asset_type, {
-        type: holding.asset_type,
-        typeName: assetName(holding.asset_type),
+    const type = effectiveAssetType(holding.asset_type, holding.symbol);
+    if (!assetTypeMap.has(type)) {
+      assetTypeMap.set(type, {
+        type,
+        typeName: assetName(type),
         value: 0,
         investment: 0,
         profit: 0,
         profitPercent: 0,
         count: 0,
-        color: assetColor(holding.asset_type, isDark),
+        color: assetColor(type, isDark),
       });
     }
 
-    const data = assetTypeMap.get(holding.asset_type)!;
+    const data = assetTypeMap.get(type)!;
     data.value += currentValue;
     data.investment += investmentValue;
     data.profit += profit;

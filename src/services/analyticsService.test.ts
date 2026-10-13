@@ -59,13 +59,13 @@ describe('getDefaultTargetAllocations', () => {
     expect(total).toBe(100);
   });
 
-  it('should include all asset types', () => {
+  it('should include the policy classes', () => {
     const defaults = getDefaultTargetAllocations();
-    expect(defaults.stock).toBeDefined();
-    expect(defaults.crypto).toBeDefined();
-    expect(defaults.currency).toBeDefined();
-    expect(defaults.fund).toBeDefined();
-    expect(defaults.eurobond).toBeDefined();
-    expect(defaults.commodity).toBeDefined();
+    expect(defaults.stock).toBe(62);
+    expect(defaults.safe).toBe(14);
+    expect(defaults.commodity).toBe(10);
+    expect(defaults.crypto).toBe(5);
+    expect(defaults.fund).toBe(4);
+    expect(defaults.currency).toBe(5);
   });
 });

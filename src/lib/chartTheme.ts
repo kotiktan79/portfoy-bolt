@@ -11,7 +11,7 @@
 
 export type AssetTypeKey =
   | 'stock' | 'commodity' | 'currency' | 'crypto'
-  | 'eurobond' | 'cash' | 'fund';
+  | 'eurobond' | 'money_market' | 'treasury_etf' | 'cash' | 'fund';
 
 // Slot sırası CVD-güvenliği için seçildi (blue→yellow→aqua→orange→violet→green→magenta)
 const ASSET_COLORS: Record<AssetTypeKey, { light: string; dark: string; name: string }> = {
@@ -20,6 +20,8 @@ const ASSET_COLORS: Record<AssetTypeKey, { light: string; dark: string; name: st
   currency:  { light: '#1baf7a', dark: '#199e70', name: 'Döviz' },
   crypto:    { light: '#eb6834', dark: '#d95926', name: 'Kripto Para' },
   eurobond:  { light: '#4a3aa7', dark: '#9085e9', name: 'Eurobond' },
+  money_market: { light: '#0e7490', dark: '#22d3ee', name: 'Para Piyasası' },
+  treasury_etf: { light: '#4338ca', dark: '#a5b4fc', name: 'Hazine Bonosu ETF' },
   cash:      { light: '#008300', dark: '#008300', name: 'Nakit' },
   fund:      { light: '#e87ba4', dark: '#d55181', name: 'Fon' },
 };

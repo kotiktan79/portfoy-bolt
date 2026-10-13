@@ -25,6 +25,7 @@ import { PriceUpdateNotification } from '../components/PriceUpdateNotification';
 import IncomeWidget from '../components/IncomeWidget';
 import PortfolioXRay from '../components/PortfolioXRay';
 import { RebalancePlan } from '../components/RebalancePlan';
+import { BuyPlanCard } from '../components/BuyPlanCard';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
@@ -529,7 +530,12 @@ function RightRailTabs({ holdings, totalCashValue }: { holdings: Holding[]; tota
         ))}
       </div>
       <div>
-        {tab === 'rebalance' && <RebalancePlan holdings={holdings} totalCashValue={totalCashValue} />}
+        {tab === 'rebalance' && (
+          <>
+            <BuyPlanCard holdings={holdings} />
+            <RebalancePlan holdings={holdings} totalCashValue={totalCashValue} />
+          </>
+        )}
         {tab === 'xray' && <PortfolioXRay />}
         {tab === 'income' && <IncomeWidget />}
       </div>

@@ -3,9 +3,9 @@ import { requireCronAuth } from '../lib/auth.js';
 import { getServiceSupabase } from '../lib/serviceSupabase.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, fmtEUR, fmtSignedEUR, fmtSignedPct } from '../lib/eurEngine.js';
-import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES } from '../../src/config/portfolioPolicy.js';
+import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassOf, CLASS_LABELS } from '../../src/config/portfolioPolicy.js';
 
-const PLAN_NOTE = 'Plan sabit: satış yok, haftalık dilim V3YL + XEON devam. Bilgi amaçlı.';
+const PLAN_NOTE = 'Esnek plan: VWCE %76 / V3YL %16 / XEON %8. Sabit haftalık takvim yok. Bilgi amaçlı.';
 
 // RİSK MONİTÖRÜ — eşikler EUR (2026-09-19): portföy düşüşü = motorun akış düzeltilmiş EUR kârı (TL nominal değil;
 // TL'de kur artışı 'yükseliş', düşüşü 'çöküş' gibi görünüyordu). Pozisyon tutarları bugünkü kurla EUR.
@@ -130,31 +130,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const invHoldings = holdings.filter((h: any) => h.asset_type !== 'cash');
     const invTotal = invHoldings.reduce((s: number, h: any) => s + valTRY(h), 0);
     for (const h of invHoldings) {
-      const band = TARGET_ALLOCATION[h.asset_type]; if (!band) continue;
+      const cls = allocationClassOf(h.asset_type, h.symbol); if (!cls) continue;
+      const band = TARGET_ALLOCATION[cls];
       const weight = invTotal > 0 ? (valTRY(h) / invTotal) * 100 : 0;
       if (weight > band.max) {
         alerts.push({
           type: 'info',
           title: `${h.symbol} tek başına ${h.asset_type} üst bandını aşıyor`,
-          detail: `Portföyün %${weight.toFixed(1)}'i (${fmtEUR(toEUR(valTRY(h)))}); ${h.asset_type} bandı %${band.min}-${band.max}`,
-          action: PHYSICAL_FIXED_TYPES.has(h.asset_type) ? 'Fiziki — satılmaz; diğer sınıflar büyüdükçe seyrelir.' : `Yeni dilimler açıklara oranlı gider, seyrelme kendiliğinden. ${PLAN_NOTE}`,
+          detail: `Portföyün %${weight.toFixed(1)}'i (${fmtEUR(toEUR(valTRY(h)))}); ${CLASS_LABELS[cls]} bandı %${band.min}-${band.max}`,
+          action: PHYSICAL_FIXED_TYPES.has(cls) ? 'Fiziki — satılmaz; diğer sınıflar büyüdükçe seyrelir.' : `Yeni para geride kalan sınıfa gider. ${PLAN_NOTE}`,
         });
       }
     }
 
     // 5. Sınıf dağılımı — politika bandı dışına çıkan sınıf (bilgi; dilim bölünmesi bunu zaten hedefler)
-    const byType: Record<string, number> = {};
-    for (const h of invHoldings) byType[h.asset_type || 'other'] = (byType[h.asset_type || 'other'] || 0) + valTRY(h);
-    const typeNames: Record<string, string> = { stock: 'Hisse', crypto: 'Kripto', currency: 'Nakit', fund: 'Fon', commodity: 'Altın', eurobond: 'Tahvil' };
-    for (const [type, value] of Object.entries(byType)) {
-      const band = TARGET_ALLOCATION[type]; if (!band || !(invTotal > 0)) continue;
+    const byClass: Record<string, number> = {};
+    for (const h of invHoldings) {
+      const cls = allocationClassOf(h.asset_type, h.symbol);
+      if (!cls) continue;
+      byClass[cls] = (byClass[cls] || 0) + valTRY(h);
+    }
+    for (const [type, value] of Object.entries(byClass)) {
+      const band = TARGET_ALLOCATION[type as keyof typeof TARGET_ALLOCATION]; if (!band || !(invTotal > 0)) continue;
       const pct = (value / invTotal) * 100;
       if (pct > band.max + 10) {
         alerts.push({
           type: 'info',
-          title: `${typeNames[type] || type} ağırlığı bandın çok üstünde`,
+          title: `${CLASS_LABELS[type as keyof typeof CLASS_LABELS] || type} ağırlığı bandın çok üstünde`,
           detail: `%${pct.toFixed(1)} — hedef %${band.target} (bant %${band.min}-${band.max})`,
-          action: PHYSICAL_FIXED_TYPES.has(type) ? 'Fiziki — satılmaz; seyrelme zamanla.' : type === 'currency' ? `Getirisiz nakit — haftalık dilimlerle V3YL + XEON'a gider. ${PLAN_NOTE}` : `Yeni dilim bu sınıfa gitmez, gerisi büyüdükçe seyrelir. ${PLAN_NOTE}`,
+          action: PHYSICAL_FIXED_TYPES.has(type) ? 'Fiziki — satılmaz; seyrelme zamanla.' : type === 'currency' ? `Getirisiz nakit — esnek planla VWCE / V3YL / XEON'a gider. ${PLAN_NOTE}` : `Yeni para bu sınıfa gitmez, gerisi büyüdükçe seyrelir. ${PLAN_NOTE}`,
         });
       }
     }

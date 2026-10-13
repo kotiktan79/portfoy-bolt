@@ -229,9 +229,23 @@ export interface EurModel {
   ratesAtLast: Record<string, number>;
 }
 
-/** salary_withdrawals USD tutuyor (eski şema) → çekim GÜNÜNÜN kurlarıyla EUR'ya çevrilip aya toplanır. */
+/** Çekim tutarı EUR. amount_eur doluysa o esas alınır (yeni kayıtlar).
+ *  Eski satırlarda yalnız amount_usd vardır; çekim gününün kuruyla EUR'ya çevrilir. */
+export function withdrawalEUR(
+  w: { amount_usd?: number | string | null; amount_eur?: number | string | null },
+  eurPerTry: number,
+  usdPerTry: number,
+): number {
+  const eur = Number(w.amount_eur);
+  if (Number.isFinite(eur) && eur > 0) return eur;
+  const usd = Number(w.amount_usd) || 0;
+  if (!(eurPerTry > 0) || !(usdPerTry > 0) || !(usd > 0)) return 0;
+  return usd * usdPerTry / eurPerTry;
+}
+
+/** salary_withdrawals: yeni satırlar amount_eur yazar; eskiler USD kolonundan çevrilir. */
 export function withdrawnMap(
-  rows: Array<{ withdrawn_at: string; amount_usd: number | string | null }>,
+  rows: Array<{ withdrawn_at: string; amount_usd?: number | string | null; amount_eur?: number | string | null }>,
   eurRates: Array<{ recorded_at: string; rate: number }>,
   usdRates: Array<{ recorded_at: string; rate: number }>,
 ): Map<string, number> {
@@ -240,12 +254,24 @@ export function withdrawnMap(
   const m = new Map<string, number>();
   for (const w of rows) {
     const d = dayInTZ(String(w.withdrawn_at)); if (!d) continue;
-    const u = usd.rateAt(d), e = eur.rateAt(d);
-    if (!Number.isFinite(u) || !Number.isFinite(e) || e <= 0) continue;
-    const amt = (Number(w.amount_usd) || 0) * u / e;
+    const direct = Number(w.amount_eur);
+    const amt = Number.isFinite(direct) && direct > 0
+      ? direct
+      : withdrawalEUR(w, eur.rateAt(d), usd.rateAt(d));
     if (amt > 0) m.set(d.slice(0, 7), (m.get(d.slice(0, 7)) || 0) + amt);
   }
   return m;
+}
+
+/** amount_eur kolonu migration'dan önce yoksa eski seçime düşer; ölçüm kırılmaz. */
+export async function fetchSalaryWithdrawalRows<T>(load: (columns: string) => Promise<T[]>): Promise<T[]> {
+  try {
+    return await load('withdrawn_at,amount_usd,amount_eur,from_pool_eur');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/amount_eur|from_pool_eur|column|schema cache/i.test(msg)) throw e;
+    return await load('withdrawn_at,amount_usd');
+  }
 }
 
 /** PostgREST max_rows=1000 tavanını sayfalayarak aşar (.range tek başına YETMEZ — tavan sunucuda).

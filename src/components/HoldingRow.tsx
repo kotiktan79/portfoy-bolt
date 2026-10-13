@@ -6,6 +6,7 @@ import { BuySellModal } from './BuySellModal';
 import { ManualPriceUpdateModal } from './ManualPriceUpdateModal';
 import { detectCurrency, calculatePnLWithCurrency, getCurrencySymbol, getExchangeRate } from '../services/currencyService';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
+import { effectiveAssetType } from '../config/portfolioPolicy';
 import { assetColor, fmtQty, fmtPrice } from '../lib/chartTheme';
 
 // Varlık tipi renk noktası — palet light/dark için farklı step kullanır,
@@ -65,7 +66,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
 
   const isPositive = pnlData.pnl >= 0;
 
-  const getAssetTypeLabel = (type: string) => ASSET_TYPE_LABELS[type] || type;
+  const getAssetTypeLabel = (type: string) => ASSET_TYPE_LABELS[effectiveAssetType(type, holding.symbol)] || type;
 
   if (isCash) {
     const tryValue = holding.quantity * cashTRYRate;
@@ -145,7 +146,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
         <td className="px-3 md:px-5 py-3 md:py-4">
           <div className="flex flex-col">
             <span className="font-semibold text-xs md:text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
-              <TypeDot assetType={holding.asset_type} />
+              <TypeDot assetType={effectiveAssetType(holding.asset_type, holding.symbol)} />
               {holding.symbol}
             </span>
             <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 pl-[14px]">{getAssetTypeLabel(holding.asset_type)}</span>
