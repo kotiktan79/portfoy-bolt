@@ -1,4 +1,5 @@
 import { Holding } from '../lib/supabase';
+import { INFLATION_EUR } from '../lib/eurPnl';
 import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassOf, effectiveAssetType, CLASS_LABELS, type AllocationClass } from '../config/portfolioPolicy';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
@@ -233,7 +234,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: deadMoneyTotal > totalValue * 0.20 ? 'high' : deadMoneyTotal > totalValue * 0.08 ? 'medium' : 'low',
       category: 'dead-money',
       title: `Getirisiz nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
-      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%2'sini yiyor. Esnek plan: VWCE %76 / V3YL %16 / XEON %8.`,
+      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%${Math.round(INFLATION_EUR * 100)}'ünü yiyor. Esnek plan: VWCE %76 / V3YL %16 / XEON %8.`,
       amount: deadMoneyTotal,
       symbols: cashPositions.map(p => p.symbol),
     });
