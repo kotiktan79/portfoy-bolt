@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { INFLATION_EUR } from '../../src/lib/eurPnl.js';
 
 // Resend API key Vercel env'den okunur. Yoksa email atılmaz, sessizce geçer.
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
@@ -308,7 +309,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
   const html = `
     <div style="${styleBase}">
       <h1 style="font-size:18px;margin:0 0 4px;color:#312e81;">Aylık Rapor · ${m.monthLabel}</h1>
-      <p style="font-size:13px;color:#64748b;margin:0 0 16px;">tek ölçü EUR · kâr = servet farkı − dış akış · enflasyon %2/yıl · zarar devreder</p>
+      <p style="font-size:13px;color:#64748b;margin:0 0 16px;">tek ölçü EUR · kâr = servet farkı − dış akış · enflasyon %${Math.round(INFLATION_EUR * 100)}/yıl · zarar devreder</p>
       ${m.healthOk ? '' : `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">⚠️ Kur serisi güncel değil — rakamlar güvenilmez olabilir.</div>`}
 
       ${card(`
