@@ -331,7 +331,7 @@ export default function PerformancePage() {
               color={isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
             />
             <StatCard
-              label="Kur EUR/TL (bilgi, kâr değil)"
+              label="Kur EUR/TL (euro kârına dahil)"
               value={`${stats.rateStart.toFixed(2)} → ${stats.rateEnd.toFixed(2)}`}
               sub={`TL ${stats.rateEnd >= stats.rateStart ? '−' : '+'}${Math.abs(100 * (stats.rateEnd / stats.rateStart - 1)).toFixed(1)}%`}
             />

@@ -10,7 +10,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getEurMonths, monthLabel, RELIABLE_FROM, INFLATION_EUR } from './eurPnlService';
-import { ymInTZ, prevYMOf, entitlementEUR, type MonthRow } from '../lib/eurPnl';
+import { ymInTZ, prevYMOf, dayInTZ, entitlementEUR, withdrawalEUR, makeRateSeries, type MonthRow } from '../lib/eurPnl';
 export { SALARY_SAFETY, POOL_CAP_EUR, MONTHLY_CAP_EUR } from '../lib/eurPnl';
 export const ACCRUAL_START_MONTH = RELIABLE_FROM.slice(0, 7);
 export { INFLATION_EUR };
@@ -60,7 +60,7 @@ export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalary
   const thisMonth = currentYM();
   return rows.filter(r => r.month < thisMonth).map(r => ({
     ...toRow(r),
-    gapDays: Math.round((new Date(r.lastDate + 'T00:00:00').getTime() - new Date(r.firstDate + 'T00:00:00').getTime()) / 86400000),
+    gapDays: r.gapFilled ? (r.maxHoleDays || 0) : (r.maxHoleDays || 0),
   })).slice(-months).reverse();
 }
 
@@ -78,14 +78,19 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
   const nominalEUR = rows.reduce((s, r) => s + r.profitEUR, 0);
   const inflationEUR = rows.reduce((s, r) => s + r.inflationEUR, 0);
   const realEUR = nominalEUR - inflationEUR;
-  // amount_eur varsa o (yeni kayıt). Eski satır USD; yaklaşık 1,15.
+  // Çekim gününün kuru. amount_eur varsa o. usd/1,15 yok. Havuz bu çekimleri zaten düşmüştür.
+  const [eurRates, usdRates] = await Promise.all([
+    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
+    supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
+  ]);
+  const eurS = makeRateSeries((eurRates.data || []).map(r => ({ date: String(r.day), rate: Number(r.rate) })), Number.NaN);
+  const usdS = makeRateSeries((usdRates.data || []).map(r => ({ date: String(r.day), rate: Number(r.rate) })), Number.NaN);
   const withdrawnEUR = wdRows.reduce((s, w) => {
-    const eur = Number((w as { amount_eur?: number | null }).amount_eur);
-    if (Number.isFinite(eur) && eur > 0) return s + eur;
-    return s + (Number(w.amount_usd) || 0) / 1.15;
+    const d = dayInTZ(String((w as { withdrawn_at?: string }).withdrawn_at || ''));
+    return s + withdrawalEUR(w, eurS.rateAt(d), usdS.rateAt(d));
   }, 0);
   const last = rows[0];                                      // en yeni ay (reverse edilmiş)
-  const available = last.withdrawableEUR * 1 - Math.max(0, withdrawnEUR - 0); // çekilebilir: son ayın devir-sonrası bakiyesi
+  const available = last.poolOutEUR ?? 0;                    // çekimler havuzdan bir kez düştü; tekrar düşülmez
   // Açık = GÜNCEL devir (cari ay dahil son satırın carryOut'u). Son tam aydan hesaplanınca
   // zarar devri sıfırlandığı ay 'açık −€1.666' yazıp sıfırlama cümlesiyle çelişiyordu (hakem 2026-09-20).
   const curRow = allMonths[allMonths.length - 1];

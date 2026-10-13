@@ -4,7 +4,8 @@ import { Holding } from '../lib/supabase';
 import { formatCurrency, formatCurrencyUSD, formatPercentage, getCachedUSDRate } from '../services/priceService';
 import { BuySellModal } from './BuySellModal';
 import { ManualPriceUpdateModal } from './ManualPriceUpdateModal';
-import { detectCurrency, calculatePnLWithCurrency, getCurrencySymbol, getExchangeRate } from '../services/currencyService';
+import { getCurrencySymbol, getExchangeRate } from '../services/currencyService';
+import { displayCurrency, nativeUnrealized } from '../lib/holdingPnl';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
 import { effectiveAssetType } from '../config/portfolioPolicy';
 import { assetColor, fmtQty, fmtPrice } from '../lib/chartTheme';
@@ -34,8 +35,10 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
   // Kur gelmeden dolar rakamı basılmaz (null → formatCurrencyUSD '—' döner). Eskiden sabit
   // 46,70 ile ilk render'da %5 sapmalı tutar görünüyordu.
   const [usdRate, setUsdRate] = useState<number | null>(null);
-  const [pnlData, setPnlData] = useState({ pnl: 0, pnlPercent: 0, currentValue: 0 });
   const [cashTRYRate, setCashTRYRate] = useState(1);
+  const ccy = displayCurrency(holding);
+  const native = nativeUnrealized({ ...holding, currency: ccy });
+  const sym = getCurrencySymbol(ccy);
 
   const isCash = holding.asset_type === 'cash';
 
@@ -47,24 +50,10 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
     } else {
       setCashTRYRate(1);
     }
-
-    (async () => {
-      const currency = holding.currency || detectCurrency(holding.symbol, holding.asset_type);
-      const purchaseCurrency = holding.purchase_currency || currency;
-      const result = await calculatePnLWithCurrency(
-        holding.purchase_price, purchaseCurrency,
-        holding.current_price, currency,
-        holding.quantity, 'TRY'
-      );
-      if (!cancelled) {
-        setPnlData({ pnl: result.pnl, pnlPercent: result.pnlPercent, currentValue: result.currentValue });
-      }
-    })();
-
     return () => { cancelled = true; };
-  }, [holding]);
+  }, [holding, isCash]);
 
-  const isPositive = pnlData.pnl >= 0;
+  const isPositive = native.pnl >= 0;
 
   const getAssetTypeLabel = (type: string) => ASSET_TYPE_LABELS[effectiveAssetType(type, holding.symbol)] || type;
 
@@ -173,7 +162,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
             <div className="flex flex-col items-end">
               <div className="flex items-center gap-1">
                 <span className="font-semibold text-xs md:text-sm tabular-nums text-gray-900 dark:text-white">
-                  {fmtPrice(holding.current_price)}
+                  {fmtPrice(holding.current_price)} {sym}
                 </span>
                 {holding.manual_price && (
                   <Lock size={10} className="text-brand-600 md:hidden" />
@@ -211,14 +200,11 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
         <td className="px-3 md:px-5 py-3 md:py-4 text-right hidden lg:table-cell">
           <div className="flex flex-col items-end">
             <span className="font-bold text-sm text-gray-900 dark:text-white">
-              {formatCurrency(pnlData.currentValue)} ₺
+              {formatCurrency(native.value)} {sym}
             </span>
-            <span className="text-xs text-brand-600 dark:text-brand-400">
-              ${formatCurrencyUSD(pnlData.currentValue, usdRate)}
-            </span>
-            {(holding.currency && holding.currency !== 'TRY') && (
-              <span className="text-[10px] text-brand-600">
-                {getCurrencySymbol(holding.currency)} bazlı
+            {ccy === 'TRY' && (
+              <span className="text-xs text-brand-600 dark:text-brand-400">
+                ${formatCurrencyUSD(native.value, usdRate)}
               </span>
             )}
           </div>
@@ -227,10 +213,10 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
         <td className="px-3 md:px-5 py-3 md:py-4 text-right">
           <div className="flex flex-col items-end">
             <span className={`font-bold text-xs md:text-sm tabular-nums ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {isPositive ? '+' : ''}{formatCurrency(pnlData.pnl)} ₺
+              {isPositive ? '+' : ''}{formatCurrency(native.pnl)} {sym}
             </span>
             <span className={`text-[10px] md:text-xs font-semibold tabular-nums ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatPercentage(pnlData.pnlPercent)}
+              {formatPercentage(native.pnlPercent)}
             </span>
           </div>
         </td>

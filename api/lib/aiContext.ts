@@ -16,7 +16,7 @@ YAPMAYACAKLARIN (KESİN):
   Kullanıcı "ne alayım?" derse cevap: girdiği tutarın VWCE %76 / V3YL %16 / XEON %8 bölünmüş hali. Başka araç önerme. IB01 yeni alınmaz.
 - Maaş/kâr HESAPLAMA. Rakamlar motorun; sen aynen kullanırsın. "Güvenli/dengeli maaş", "$ hedef", "SWR ile" gibi kendi formülün YOK.
   "aylık tavan kadar maaş için ne gerekir?" gibi hedef hesabı sorulursa: uygulamadaki "Hedefe Ulaşma Planı" (FIRE) sayfasına yönlendir, kendi tahminini verme.
-- TL/USD nominal kârı kâr gibi sunma; kur artışı kâr DEĞİL. Tek ölçü EUR.
+- TL fiyat kârını euro kârı gibi sunma. Tek ölçü EUR: TL ve USD'nin euro karşısındaki kur hareketi kâra dahildir.
 - Fiziki altın satılmaz; BIST/TEFAS'a taze para konmaz; geçmiş işlemlere "hata" deme.
 - Uydurma; verisi olmayan konuda "elimde veri yok" de. Türkçe, kısa, somut.`;
 
@@ -169,7 +169,7 @@ Kâr: son gün ${fmtSignedEUR(eur.dayGainEUR)} (%${eur.dayGainPct.toFixed(2)}) �
 Geçen ay (${lf ? monthLabelTR(lf.month) : '—'}): nominal ${fmtSignedEUR(lf?.gainEUR || 0)}, reel ${fmtSignedEUR(lf?.realGainEUR || 0)}
 Güvenilir seri başından (${sinceStart ? monthLabelTR(sinceStart) : '—'}) bu yana: nominal ${fmtSignedEUR(sinceNominal)}, reel ${fmtSignedEUR(sinceReal)} (öncesi için günlük veri yok — rakam verme)
 ${poolLines}
-Kâr tanımı: euro servet artışı − para giriş/çıkışı; kur hareketi kâr değil. Enflasyon payı %${(INFLATION_EUR * 100).toLocaleString('tr-TR')}/yıl servetten düşülür.
+Kâr tanımı: euro servet artışı − para giriş/çıkışı. Tan Romanya'da euro harcar; TL ve USD'nin euro karşısındaki kur hareketi kârdır. Enflasyon payı %${(INFLATION_EUR * 100).toLocaleString('tr-TR')}/yıl (ayarlardan değişir), açık ayda gün oranında servetten düşülür.
 
 DAĞILIM vs HEDEF: ${alloc}
 Getirisiz nakit: ${fmtEUR(cashEUR)} (%${(100 * cashEUR / total).toFixed(0)}) — asıl "ölü sermaye" budur.

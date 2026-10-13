@@ -11,6 +11,8 @@ export interface Transaction {
   notes?: string;
   transaction_date: string;
   created_at: string;
+  currency?: string;
+  realized_profit?: number;
 }
 
 export interface PriceAlert {
@@ -38,6 +40,14 @@ export async function addTransaction(transaction: Omit<Transaction, 'id' | 'crea
     .insert([transaction])
     .select()
     .maybeSingle();
+
+  if (error && transaction.currency && /currency|column|schema cache/i.test(error.message)) {
+    const rest = { ...transaction };
+    delete rest.currency;
+    const retry = await supabase.from('transactions').insert([rest]).select().maybeSingle();
+    if (retry.error) throw retry.error;
+    return retry.data;
+  }
 
   if (error) throw error;
   return data;

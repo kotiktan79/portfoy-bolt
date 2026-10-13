@@ -5,7 +5,7 @@ import type { MonthRow } from '../lib/eurPnl';
 
 // KAR/ZARAR GEÇMİŞİ — TEK CETVEL: EURO (2026-09-19 gece; standart araştırması + kullanıcı kararı)
 // Kâr = euro servetin artışı, koyduğun/çektiğin para hariç (GIPS). Euro, çünkü harcanan para
-// (IAS 21 §9); TL hiperenflasyonist (IAS 29); USD harcanmıyor. Kur hareketi kâr değildir.
+// (IAS 21 §9); TL hiperenflasyonist (IAS 29). Kurun euro karşılığı kârdır: harcanan para euro.
 // Motor: lib/eurPnl.ts (6 test), veri: services/eurPnlService.ts; 4 bağımsız denetçi ±€40.
 
 type Tab = 'daily' | 'weekly' | 'monthly';
@@ -26,7 +26,7 @@ function Badge({ gain, base }: { gain: number; base: number }) {
 
 export function DailyMonthlyPnL() {
   const [tab, setTab] = useState<Tab>('daily');
-  type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number; carryResetApplied?: boolean };
+  type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; gapFilled?: boolean; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number; carryResetApplied?: boolean };
   const [daily, setDaily] = useState<EurDaily[]>([]);
   const [weekly, setWeekly] = useState<Period[]>([]);
   const [monthly, setMonthly] = useState<Period[]>([]);
@@ -42,7 +42,7 @@ export function DailyMonthlyPnL() {
       const [d, w, m] = await Promise.all([getEurDaily(), getEurWeeks(), getEurMonths()]).catch((e) => { setErr(e?.message || 'veri yüklenemedi'); return [[], [], []] as const; });
       setDaily([...d].reverse());
       setWeekly([...w].map((x, i, arr) => ({ ...x, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate) })).reverse());
-      setMonthly([...m].map((x: MonthRow, i, arr) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate), inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR, carryResetApplied: x.carryResetApplied })).reverse());
+      setMonthly([...m].map((x: MonthRow) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: x.maxHoleDays || 0, gapFilled: x.gapFilled, inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR, carryResetApplied: x.carryResetApplied })).reverse());
       setLoading(false);
     })();
   }, []);
@@ -65,7 +65,7 @@ export function DailyMonthlyPnL() {
                   <p className="text-xs text-slate-500 dark:text-gray-400">
                     servet {fmtW(r.startWealthEUR)} → {fmtW(r.endWealthEUR)}
                     {r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">· reel {fmtEur(r.realGainEUR ?? 0)} → maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
-                    {r.gapDays > 45 && <span className="ml-1 text-amber-600">⚠ {r.gapDays} günlük dönem — arada kayıt yok</span>}
+                    {(r.gapFilled || (r.key.length === 7 && r.gapDays >= 4)) && <span className="ml-1 text-amber-600">⚠ {r.gapFilled ? 'bu ayın snapshot kaydı yok, enflasyon yine düşüldü' : `${r.gapDays} gün snapshot yok`}</span>}
                   </p>
                 </div>
               </div>
@@ -131,7 +131,7 @@ export function DailyMonthlyPnL() {
                       <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posM}/{rows.length} ay kâr</p>
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
-                      Kâr = euro servetin artışı; kur hareketi kâr sayılmaz. Maaş = (kâr − %2/yıl enflasyon payı, zarar devirli) × 0,85 (Kâr Cüzdanı).
+                      Kâr = euro servetin artışı. Kurun euro karşılığı kârdır. Maaş = (kâr − enflasyon payı, varsayılan %3/yıl, açık ay gün oranında, zarar devirli) × 0,85 (Kâr Cüzdanı).
                     </p>
                   </div>
                 );

@@ -13,7 +13,6 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, FireInputs } from '../services/fireProjectionService';
-import { usePortfolio } from '../contexts/PortfolioContext';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { chartChrome } from '../lib/chartTheme';
 
@@ -40,7 +39,7 @@ const DEFAULTS: StoredInputs = {
   annualReturnPct: 4,                         // politika dağılımı ~%4-5 nominal EUR; bugünkü (%40 nakit) ~%3
   targetMonthlyIncome: MONTHLY_CAP_EUR,       // €1.000/ay (geçim planı)
   safeWithdrawalRatePct: 3.5,                 // Morningstar 2025 %3,9 / ERN %3,25-3,4 bandının ortası
-  annualInflationPct: INFLATION_EUR * 100,    // motorla aynı (%2)
+  annualInflationPct: INFLATION_EUR * 100,    // motorla aynı (varsayılan %3)
 };
 
 function loadStored(): StoredInputs | null {
@@ -55,7 +54,6 @@ function loadStored(): StoredInputs | null {
 }
 
 export default function FireProjection() {
-  const { portfolioMetrics } = usePortfolio();
   const { isDark } = useDarkMode();
   const chrome = chartChrome(isDark);
 
@@ -75,9 +73,9 @@ export default function FireProjection() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  // Yedek: USD toplamı EUR'ya (motor gelene kadar); EUR/USD ≈ 1,15 varsayımı yalnız ilk render için
-  const fallbackEUR = portfolioMetrics.totalCurrentValueUSD > 0 ? portfolioMetrics.totalCurrentValueUSD / 1.15 : 0;
-  const currentValueEUR = wealthEUR ?? fallbackEUR;
+  // Motor gelene kadar uydurma EUR/USD yok. Servet 0 görünür ve uyarı yazılır.
+  const wealthMissing = wealthEUR == null;
+  const currentValueEUR = wealthEUR ?? 0;
 
   // Havuz kuralının (Kâr Cüzdanı) aynı hedef için istediği sermaye ve bugünkü portföyün beklentisi —
   // sayfanın kendi getiri/enflasyon girdilerinden türetilir, sabit rakam yok.
@@ -122,7 +120,9 @@ export default function FireProjection() {
         <div>
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Hedefe Ulaşma Planı (€)</h3>
           <p className="text-xs text-slate-500 dark:text-gray-400">
-            Portföy €{Math.round(currentValueEUR).toLocaleString('de-DE')} (kasa hariç) + dış katkı → hedef aylık gelir. Hedef REEL: enflasyonla birlikte büyür.
+            {wealthMissing
+              ? 'Euro servet henüz yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.'
+              : `Portföy €${Math.round(currentValueEUR).toLocaleString('de-DE')} (kasa hariç) + dış katkı → hedef aylık gelir. Hedef REEL: enflasyonla birlikte büyür.`}
           </p>
         </div>
       </div>

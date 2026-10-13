@@ -66,6 +66,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
         fee: feeVal,
         notes: notes || undefined,
         transaction_date: new Date().toISOString(),
+        currency: holding.currency || 'TRY',
       };
 
       const transactionResult = await addTransaction(transactionData);
@@ -121,28 +122,17 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
         const currentRealized = holding.total_realized_pnl || 0;
         const newTotalRealized = currentRealized + realizedProfit;
 
-        if (newQuantity <= 0) {
-          const { error: deleteError } = await supabase
-            .from('holdings')
-            .delete()
-            .eq('id', holding.id);
+        const { error: updateError } = await supabase
+          .from('holdings')
+          .update({
+            quantity: Math.max(0, newQuantity),
+            total_realized_pnl: newTotalRealized,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', holding.id);
 
-          if (deleteError) {
-            throw new Error(`Varlık silinemedi: ${deleteError.message}`);
-          }
-        } else {
-          const { error: updateError } = await supabase
-            .from('holdings')
-            .update({
-              quantity: newQuantity,
-              total_realized_pnl: newTotalRealized,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', holding.id);
-
-          if (updateError) {
-            throw new Error(`Varlık güncellenemedi: ${updateError.message}`);
-          }
+        if (updateError) {
+          throw new Error(`Varlık güncellenemedi: ${updateError.message}`);
         }
       }
 

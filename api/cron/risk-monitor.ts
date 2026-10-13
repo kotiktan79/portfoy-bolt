@@ -212,7 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             title: `USD/TRY sert hareket: %${fxChange.toFixed(1)}`,
             detail: `${previous.toFixed(2)} → ${current.toFixed(2)}`,
             action: fxChange > 0
-              ? 'Bilgi: TL varlıkların euro değeri düşer (kur artışı kâr değil).'
+              ? 'Bilgi: TL varlıkların euro değeri düşer. Bu hareket euro kârına dahildir.'
               : 'Bilgi: TL varlıkların euro değeri artar; plan değişmez (BIST/TL\'ye taze para yok).',
           });
         }

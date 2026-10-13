@@ -3,7 +3,7 @@
 // Satır limiti: PostgREST max_rows=1000 tavanı .range()'i EZER → kur serisi exchange_rates_daily görünümünden okunur,
 // diğer tablolar fetchAll() ile sayfalanır.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildEurModel, summarizeEur, withdrawnMap, fetchSalaryWithdrawalRows, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
+import { buildEurModel, summarizeEur, withdrawnMap, fetchSalaryWithdrawalRows, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, dayInTZ, normalizeInflation, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
 
 export { RELIABLE_FROM, INFLATION_EUR };
 export type { EurModel, EurSummary, MonthRow };
@@ -35,8 +35,11 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
     fetchAll<{ day: string; rate: number }>('usd', rateQ('USD')),
     Promise.all(OTHER_CCY.map(c => fetchAll<{ day: string; rate: number }>(c.toLowerCase(), rateQ(c)))),
-    fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true })),
-    fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
+    fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id,currency').order('transaction_date', { ascending: true }).order('id', { ascending: true })).catch((e: Error) => {
+      if (!/currency|column|schema cache/i.test(e.message)) throw e;
+      return fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true }));
+    }),
+    fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes,related_holding_id').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
     fetchSalaryWithdrawalRows<any>(cols => fetchAll('withdrawals', () => supabase.from('salary_withdrawals').select(cols).order('withdrawn_at', { ascending: true }))),
     // PORTFÖYDEN ÇIKAN temettü/kupon (2026-09-27): ödeme günü fiyat düşüşü ZARAR sayılmasın, akış olarak düşülsün.
@@ -47,13 +50,21 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
       .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
   ]);
-  const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : 45;
+  const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : null;
+  if (usdNow == null) throw new Error('eurEngine: USD/TRY kuru seriden bulunamadı — ölçüm yapılmadı (sabit yedek kur yasak)');
+  let annualInflation = INFLATION_EUR;
+  try {
+    const pol = await supabase.from('portfoy_bolt_salary_policy').select('inflation_annual').eq('id', 1).maybeSingle();
+    if (pol && !pol.error && pol.data) annualInflation = normalizeInflation(pol.data.inflation_annual);
+  } catch {
+    annualInflation = INFLATION_EUR;
+  }
   return buildEurModel({
     snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
     // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın
     otherRates: Object.fromEntries(OTHER_CCY.map((c, i) => [c, dailyRows(otherRates[i])])),
     transactions: txs, cashSells, holdings: holds,
-    usdNow, reliableFrom: RELIABLE_FROM, annualInflation: INFLATION_EUR,
+    usdNow, reliableFrom: RELIABLE_FROM, annualInflation, asOf: dayInTZ(new Date()),
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
     payouts: (payouts || []).map((r: any) => ({
       date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency,

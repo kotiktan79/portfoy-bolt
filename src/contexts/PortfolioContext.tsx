@@ -603,16 +603,51 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDeleteId) return;
-    const { error } = await supabase.from('holdings').delete().eq('id', pendingDeleteId);
-
+    const h = holdings.find(x => x.id === pendingDeleteId);
+    if (!h || (Number(h.quantity) || 0) <= 0) {
+      toast.error('Kapanmış pozisyon durur. Geçmiş silinmez.');
+      setPendingDeleteId(null);
+      return;
+    }
+    const qty = Number(h.quantity);
+    const px = Number(h.current_price) || Number(h.purchase_price) || 0;
+    const realized = (px - (Number(h.purchase_price) || 0)) * qty;
+    const row = {
+      holding_id: h.id,
+      transaction_type: 'sell',
+      quantity: qty,
+      price: px,
+      total_amount: px * qty,
+      fee: 0,
+      transaction_date: new Date().toISOString(),
+      currency: h.currency || 'TRY',
+      realized_profit: realized,
+    };
+    let ins = await supabase.from('transactions').insert([row]);
+    if (ins.error && /currency|column|schema cache/i.test(ins.error.message)) {
+      const rest: Record<string, unknown> = { ...row };
+      delete rest.currency;
+      ins = await supabase.from('transactions').insert([rest]);
+    }
+    if (ins.error) {
+      toast.error('Kapanış işlemi yazılamadı. Pozisyon silinmedi.');
+      setPendingDeleteId(null);
+      return;
+    }
+    const newRealized = (Number(h.total_realized_pnl) || 0) + realized;
+    const { error } = await supabase.from('holdings').update({
+      quantity: 0,
+      total_realized_pnl: newRealized,
+      updated_at: new Date().toISOString(),
+    }).eq('id', h.id);
     if (error) {
-      toast.error('Varlık silinirken hata oluştu!');
+      toast.error('Pozisyon kapatılamadı.');
     } else {
-      setHoldings(prev => prev.filter((h) => h.id !== pendingDeleteId));
-      toast.success('Varlık başarıyla silindi!');
+      setHoldings(prev => prev.map(x => x.id === h.id ? { ...x, quantity: 0, total_realized_pnl: newRealized } : x));
+      toast.success('Pozisyon kapatıldı. Satır duruyor, geçmiş silinmedi.');
     }
     setPendingDeleteId(null);
-  }, [pendingDeleteId, toast]);
+  }, [pendingDeleteId, holdings, toast]);
 
   const cancelDelete = useCallback(() => {
     setPendingDeleteId(null);
@@ -676,6 +711,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     };
     return holdings
       .filter((holding) => {
+        if ((Number(holding.quantity) || 0) <= 0) return false;
         const matchesSearch = searchQuery === '' || holding.symbol.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesType = selectedAssetType === 'all' || holding.asset_type === selectedAssetType;
         return matchesSearch && matchesType;

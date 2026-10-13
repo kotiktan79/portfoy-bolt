@@ -22,11 +22,9 @@ export function getFxRatesFromHoldings(holdings: Holding[]): FxRates {
   // 0 TL görünür. Bu GÖZE BATAN bir hata; sabit kur ise akla yatkın ama YANLIŞ rakam üretiyordu.
   // Akla yatkın yanlış, göze batan yanlıştan kötüdür — fark edilmez.
   const usd = (usdH?.current_price && usdH.current_price > 1) ? usdH.current_price : (getLastKnownPrice('USD') ?? 0);
-  // Fallbacks (only when no currency-cash holding exists) derive from USD via an
-  // approximate cross rate. EUR/USD≈1.16 and GBP/USD≈1.35 as of 2026 — the old
-  // 1.08 EUR peg under-valued EUR holdings (~41 vs real ~53 TRY).
-  const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : (getLastKnownPrice('EURO') ?? usd * 1.16);
-  const gbp = gbpH?.current_price && gbpH.current_price > 1 ? gbpH.current_price : usd * 1.35;
+  // Euro kuru uydurulmaz (usd×1,16 yok). Holding fiyatı, yoksa son gerçek EURO fiyatı. O da yoksa 0 — ekran uyarı verir.
+  const eur = (eurH?.current_price && eurH.current_price > 1) ? eurH.current_price : (getLastKnownPrice('EURO') ?? getLastKnownPrice('EUR') ?? 0);
+  const gbp = gbpH?.current_price && gbpH.current_price > 1 ? gbpH.current_price : (getLastKnownPrice('GBP') ?? 0);
   return { usd, eur, gbp };
 }
 

@@ -437,7 +437,7 @@ export default function DailyReportPage() {
                     <div key={row.month} className="bg-slate-50 dark:bg-gray-800/50 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{row.monthLabel}</span>
-                        {row.gapDays > 45 && <span className="text-[10px] text-amber-600">⚠ {row.gapDays} günlük dönem</span>}
+                        {row.gapDays >= 4 && <span className="text-[10px] text-amber-600">⚠ {row.gapDays} gün snapshot yok</span>}
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div>

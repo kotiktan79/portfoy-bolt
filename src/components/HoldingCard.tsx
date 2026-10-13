@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Pencil, Trash2, TrendingUp, TrendingDown, Lock, Wallet, Coins, Banknote, PieChart, Package, Gem, LucideIcon } from 'lucide-react';
 import { Holding } from '../lib/supabase';
 import { fmtQty, fmtPrice } from '../lib/chartTheme';
 import { formatCurrency, formatPercentage } from '../services/priceService';
 import { BuySellModal } from './BuySellModal';
-import { detectCurrency, calculatePnLWithCurrency } from '../services/currencyService';
+import { getCurrencySymbol } from '../services/currencyService';
+import { displayCurrency, nativeUnrealized } from '../lib/holdingPnl';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
 import { effectiveAssetType } from '../config/portfolioPolicy';
 import { Sparkline } from './ui/Sparkline';
@@ -51,26 +52,10 @@ const ASSET_TONES: Record<string, string> = {
 export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, onTransactionComplete }: Props) {
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
-  const [pnlData, setPnlData] = useState({ pnl: 0, pnlPercent: 0, currentValue: 0 });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const currency = holding.currency || detectCurrency(holding.symbol, holding.asset_type);
-      const purchaseCurrency = holding.purchase_currency || currency;
-      const result = await calculatePnLWithCurrency(
-        holding.purchase_price, purchaseCurrency,
-        holding.current_price, currency,
-        holding.quantity, 'TRY'
-      );
-      if (!cancelled) {
-        setPnlData({ pnl: result.pnl, pnlPercent: result.pnlPercent, currentValue: result.currentValue });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [holding]);
-
-  const isPositive = pnlData.pnl >= 0;
+  const ccy = displayCurrency(holding);
+  const native = nativeUnrealized({ ...holding, currency: ccy });
+  const sym = getCurrencySymbol(ccy);
+  const isPositive = native.pnl >= 0;
   const shownType = effectiveAssetType(holding.asset_type, holding.symbol);
   const Icon = ASSET_ICONS[shownType] || Package;
   const toneClass = ASSET_TONES[shownType] || ASSET_TONES.stock;
@@ -99,7 +84,7 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-lg font-bold tabular-nums text-gray-900 dark:text-white">
-                {fmtPrice(holding.current_price)} ₺
+                {fmtPrice(holding.current_price)} {sym}
               </span>
               {holding.manual_price && (
                 <Lock size={11} className="text-brand-600" />
@@ -109,7 +94,7 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
 
           <div className={`pill ${isPositive ? 'pill-positive' : 'pill-negative'} flex-shrink-0`}>
             {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {formatPercentage(pnlData.pnlPercent)}
+            {formatPercentage(native.pnlPercent)}
           </div>
         </div>
 
@@ -129,13 +114,13 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
           <div>
             <p className="t-eyebrow !text-[9px]">Alış</p>
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 tabular-nums">
-              {fmtPrice(holding.purchase_price)} ₺
+              {fmtPrice(holding.purchase_price)} {sym}
             </p>
           </div>
           <div>
             <p className="t-eyebrow !text-[9px]">Değer</p>
             <p className="text-xs font-bold text-gray-900 dark:text-white tabular-nums">
-              {formatCurrency(pnlData.currentValue, 0)} ₺
+              {formatCurrency(native.value, 0)} {sym}
             </p>
           </div>
         </div>
@@ -144,7 +129,7 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
           <div>
             <p className="t-eyebrow !text-[9px]">K/Z</p>
             <p className={`text-sm font-bold tabular-nums ${isPositive ? 'text-accent-600 dark:text-accent-400' : 'text-red-600 dark:text-red-400'}`}>
-              {isPositive ? '+' : ''}{formatCurrency(pnlData.pnl, 0)} ₺
+              {isPositive ? '+' : ''}{formatCurrency(native.pnl, 0)} {sym}
             </p>
           </div>
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

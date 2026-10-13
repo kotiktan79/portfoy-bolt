@@ -3,14 +3,16 @@ import { Wallet, Gauge, AlertCircle } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
-import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR, withdrawalEUR } from '../lib/eurPnl';
+import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR, withdrawalEUR, remainingEntitlementEUR, makeRateSeries, normalizeInflation, INFLATION_EUR, RELIABLE_FROM, type RateSeries } from '../lib/eurPnl';
 import { currentYM } from '../services/salaryService';
+import { fetchAll, invalidateEurPnlCache } from '../services/eurPnlService';
 import { getKasaFx, type KasaFx } from '../services/kasaFxService';
 import { planSalary, kasaOutstandingEUR, type SalaryPlanInput } from '../lib/salaryPlan';
+import { ledgerFromTransactions, balanceGap, type LedgerRow } from '../lib/cashLedger';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
 //   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
-//   çekilebilir   = devreden açık + (euro servet artışı − dış akış − %2/yıl enflasyon payı), ≥0
+//   çekilebilir   = devreden açık + (euro servet artışı − dış akış − enflasyon payı), ≥0. Kur hareketi kârdır.
 // Çekim: EURO pozisyonundan düşülür. Yeni kayıt amount_eur yazar (USD kolonları yalnız eski satırlar için).
 // Taban €700: havuzdan gelen (%85, tavan €1.000) yetmezse fark kasadan önerilir; kasa €15.000 altına inecekse önerilmez.
 
@@ -35,6 +37,11 @@ export default function KarCuzdani({ holdings }: Props) {
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
   const [amountInput, setAmountInput] = useState<string>('');
+  const [inflationAnnual, setInflationAnnual] = useState(INFLATION_EUR);
+  const [inflationInput, setInflationInput] = useState('3');
+  const [inflationMsg, setInflationMsg] = useState<string | null>(null);
+  const [histFx, setHistFx] = useState<{ eur: RateSeries; usd: RateSeries } | null>(null);
+  const [cashGaps, setCashGaps] = useState<Array<{ currency: string; stored: number; derived: number; gap: number | null; depGap: number | null }>>([]);
 
   // KASA (ölçüm dışı) — kur etkisi görünür olsun; maaş/havuz rakamlarına DOKUNMAZ (2026-09-27)
   useEffect(() => {
@@ -42,6 +49,40 @@ export default function KarCuzdani({ holdings }: Props) {
     getKasaFx()
       .then(k => { if (!c) { setKasa(k); setKasaErr(k ? null : 'veri yok'); } })
       .catch(e => { if (!c) setKasaErr(e?.message || 'okunamadı'); });   // sessizce kaybolmasın: panelde satır duruyor
+    return () => { c = true; };
+  }, []);
+
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      const [txs, bals] = await Promise.all([
+        fetchAll<any>('cashGapTx', () => supabase.from('cash_transactions').select('currency,transaction_type,type,amount')),
+        fetchAll<any>('cashGapBal', () => supabase.from('cash_balances').select('currency,balance,total_deposits')),
+      ]);
+      if (c) return;
+      const ledger: LedgerRow[] = ledgerFromTransactions(txs);
+      const seen = new Set<string>();
+      const gaps: Array<{ currency: string; stored: number; derived: number; gap: number | null; depGap: number | null }> = [];
+      for (const b of bals) {
+        const ccy = String(b.currency || 'TRY').toUpperCase();
+        seen.add(ccy);
+        const d = ledger.find(l => l.currency === ccy);
+        const derived = d?.balance ?? 0;
+        const deposits = d?.deposits ?? 0;
+        gaps.push({
+          currency: ccy,
+          stored: Number(b.balance) || 0,
+          derived,
+          gap: balanceGap(Number(b.balance) || 0, derived),
+          depGap: balanceGap(Number(b.total_deposits) || 0, deposits),
+        });
+      }
+      for (const l of ledger) {
+        if (seen.has(l.currency)) continue;
+        gaps.push({ currency: l.currency, stored: 0, derived: l.balance, gap: balanceGap(0, l.balance), depGap: balanceGap(0, l.deposits) });
+      }
+      setCashGaps(gaps.filter(g => g.gap != null || g.depGap != null));
+    })().catch(() => { if (!c) setCashGaps([]); });
     return () => { c = true; };
   }, []);
 
@@ -53,6 +94,9 @@ export default function KarCuzdani({ holdings }: Props) {
     ]);
     if (!pol.error && pol.data) {
       const n = (v: unknown) => (v == null || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
+      const inf = normalizeInflation(pol.data.inflation_annual);
+      setInflationAnnual(inf);
+      setInflationInput(String(Math.round(inf * 1000) / 10));
       setPolicy({
         floorEUR: n(pol.data.floor_eur),
         capEUR: n(pol.data.cap_eur),
@@ -74,6 +118,12 @@ export default function KarCuzdani({ holdings }: Props) {
         getMonthToDate(),
       ]);
       if (w.error) throw new Error(`salary_withdrawals: ${w.error.message}`);   // 'çekilen €0' sahte olgusu yasak
+      const [er, ur] = await Promise.all([
+        supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
+        supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
+      ]);
+      const pts = (rows: Array<{ day: string; rate: number }> | null) => (rows || []).map(r => ({ date: String(r.day), rate: Number(r.rate) }));
+      setHistFx({ eur: makeRateSeries(pts(er.data), Number.NaN), usd: makeRateSeries(pts(ur.data), Number.NaN) });
       setSalary(s); setAccrual(a); setMtd(m); setWithdrawals(w.data || []);
     } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : 'veri yüklenemedi');   // motor hatası: rakam gösterme
@@ -83,12 +133,18 @@ export default function KarCuzdani({ holdings }: Props) {
   }
 
   const fx = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
-  const eurRate = fx.eur > 0 ? fx.eur : fx.usd * 1.15;
+  const eurRate = fx.eur > 0 ? fx.eur : 0;
   const portfolioEur = useMemo(() => holdings.length && eurRate > 0 ? holdings.reduce((s, h) => s + holdingValueTRY(h, fx), 0) / eurRate : 0, [holdings, fx, eurRate]);
 
   // Ay sınırı kullanıcının saat diliminde (salaryService ile aynı kural)
   const monthKey = currentYM();
-  const withdrawnThisMonthEur = withdrawals.filter(w => dayInTZ(String(w.withdrawn_at)).slice(0, 7) === monthKey).reduce((s, w) => s + withdrawalEUR(w, eurRate, fx.usd), 0);
+  const withdrawnThisMonthEur = withdrawals.filter(w => dayInTZ(String(w.withdrawn_at)).slice(0, 7) === monthKey).reduce((s, w) => {
+    const direct = Number(w.amount_eur);
+    if (Number.isFinite(direct) && direct > 0) return s + direct;
+    if (!histFx) return s;
+    const d = dayInTZ(String(w.withdrawn_at));
+    return s + withdrawalEUR(w, histFx.eur.rateAt(d), histFx.usd.rateAt(d));
+  }, 0);
   // TEK TABAN: çekim hakkı KAPANMIŞ son ayın havuzundan (motor hesaplıyor; bitmemiş ayın kârı geri dönebilir).
   // Havuz zaten çekilenler düşülmüş bakiyedir → burada SADECE bu ay çekilenler düşülür (çift sayım yok).
   const poolEur = salary?.poolOutEUR ?? 0;
@@ -99,7 +155,7 @@ export default function KarCuzdani({ holdings }: Props) {
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
   const entitlementEur = salary?.entitlementEUR ?? 0;
   const mtdPoolEur = mtd?.poolOutEUR ?? 0;               // bu ay şimdiye kadar biriken (ay kapanınca hak olur)
-  const remainingEur = Math.max(0, entitlementEur - withdrawnThisMonthEur);
+  const remainingEur = remainingEntitlementEUR(poolEur, withdrawnThisMonthEur);
   const amountEur = Math.min(remainingEur, Math.max(0, parseFloat(amountInput) || remainingEur));
   const salaryView = kasa ? planSalary({
     poolEUR: poolEur,
@@ -109,6 +165,24 @@ export default function KarCuzdani({ holdings }: Props) {
     asOfMonth: monthKey,
     ...policy,
   }) : null;
+
+  async function saveInflation() {
+    const annual = Number(String(inflationInput).replace(',', '.')) / 100;
+    if (!Number.isFinite(annual) || annual < 0 || annual > 0.25) {
+      setInflationMsg('Enflasyon 0 ile %25 arasında olmalı.');
+      return;
+    }
+    const { error } = await supabase.from('portfoy_bolt_salary_policy').update({
+      inflation_annual: annual, updated_at: new Date().toISOString(),
+    }).eq('id', 1);
+    if (error) {
+      setInflationMsg('Kaydedilemedi. Enflasyon sütunu için SQL dosyasını çalıştırdıktan sonra tekrar dene.');
+      return;
+    }
+    setInflationAnnual(annual);
+    setInflationMsg('Kaydedildi. Sayfa yenilenince kâr ve maaş bu oranı kullanır.');
+    invalidateEurPnlCache();
+  }
 
   async function recordKasaMove(kind: 'topup' | 'refill', amount: number) {
     if (!(amount > 0)) return;
@@ -186,7 +260,7 @@ export default function KarCuzdani({ holdings }: Props) {
             <p className={`text-3xl font-bold ${entitlementEur > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>€{fmt(entitlementEur)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span></p>
             <div className="text-xs text-slate-600 dark:text-gray-300 mt-2 space-y-0.5">
               <p>{salary.monthLabel}: servet €{fmt(salary.startWealthEUR)} → €{fmt(salary.endWealthEUR)}, dış para hariç kâr <strong>{sgn(salary.profitEUR)}€{fmt(salary.profitEUR)}</strong></p>
-              <p>− enflasyon payı (%2/yıl) €{fmt(salary.inflationEUR)} = reel <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
+              <p>− enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) €{fmt(salary.inflationEUR)} = reel <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
               {poolEur < 0
                 ? <p>→ havuz <strong>−€{fmt(poolEur)} açık</strong> → maaş €0 — bu ay maaş yok, fark yastıktan</p>
                 : <p>→ havuz €{fmt(poolEur)} × 0,85{0.85 * poolEur > MONTHLY_CAP_EUR ? `, aylık tavan €${fmt(MONTHLY_CAP_EUR)}` : ''} = <strong>€{fmt(entitlementEur)}</strong>{entitlementEur === 0 && ' — bu ay maaş yok'}</p>}
@@ -271,6 +345,18 @@ export default function KarCuzdani({ holdings }: Props) {
               <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
                 Aynı bakiyenin geçmiş kurlarla karşılaştırması — para yatırma/çekme karışmaz. Atıl döviz beklerken euro değeri oynar.
               </p>
+              {cashGaps.length > 0 && (
+                <div className="mt-2 text-[11px] text-amber-800 dark:text-amber-200">
+                  <p className="font-semibold">Kasa defteri ile kayıtlı bakiye aynı değil. Fark gizlenmedi; kayıtlı bakiye değiştirilmedi.</p>
+                  {cashGaps.map(g => (
+                    <p key={g.currency}>
+                      {g.currency}: kayıt {g.stored.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}, hareketlerden {g.derived.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                      {g.gap != null && <> · bakiye farkı {g.gap.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</>}
+                      {g.depGap != null && <> · yatırma farkı {g.depGap.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</>}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {mtd && (
@@ -289,8 +375,17 @@ export default function KarCuzdani({ holdings }: Props) {
           )}
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
             <AlertCircle size={14} className="text-slate-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Kur hareketi kâr değildir. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Sıfır ayda yastıktan geçin.</p>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Sıfır ayda yastıktan geçin.</p>
           </div>
+          <div className="mt-2 flex items-center gap-2 text-[11px]">
+            <label className="text-slate-500 dark:text-gray-400">Enflasyon %/yıl</label>
+            <input value={inflationInput} onChange={(e) => setInflationInput(e.target.value)} className="w-16 px-1 py-0.5 bg-slate-50 dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded" />
+            <button type="button" onClick={saveInflation} className="px-2 py-0.5 rounded bg-slate-200 dark:bg-gray-700 font-semibold">Kaydet</button>
+            {inflationMsg && <span className="text-slate-500 dark:text-gray-400">{inflationMsg}</span>}
+          </div>
+          {!(eurRate > 0) && (
+            <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">Euro kuru yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.</p>
+          )}
         </div>
 
         <div className="bg-white dark:bg-gray-900/50 rounded-xl p-4 border border-emerald-200 dark:border-emerald-900 flex flex-col">
