@@ -6,6 +6,7 @@ import {
   Clock, Sparkles
 } from 'lucide-react';
 import { Holding } from '../lib/supabase';
+import { authorizedHeaders } from '../lib/apiAuth';
 import { formatCurrency } from '../services/priceService';
 
 interface DailyActionPlanProps {
@@ -106,7 +107,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
       // Sunucu bağlamı kendisi kurar (EUR motoru + tek plan); istemci payload'u kullanılmaz
       const res = await fetch('/api/daily-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authorizedHeaders({ 'Content-Type': 'application/json' }),
         body: '{}',
       });
 

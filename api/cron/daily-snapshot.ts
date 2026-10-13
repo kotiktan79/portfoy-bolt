@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { sendTelegram } from '../lib/telegram.js';
+import { getServiceSupabase } from '../lib/serviceSupabase.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
 import { fetchTefasFundPrice } from '../lib/fundPrice.js';
@@ -26,12 +26,8 @@ interface SplitDetection {
   quantity: number;
 }
 
-// Server-side Supabase client
 function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase credentials missing');
-  return createClient(url, key);
+  return getServiceSupabase();
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

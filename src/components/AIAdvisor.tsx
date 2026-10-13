@@ -116,7 +116,7 @@ export default function AIAdvisor() {
           content: m.content,
         }));
 
-      const claudeResult = await askClaude(chatInput, holdings, conversationHistory, riskProfile?.score || 50);
+      const claudeResult = await askClaude(chatInput, holdings, conversationHistory);
       const content = claudeResult.isAI && claudeResult.response ? claudeResult.response : OFFLINE_MSG;
       setChatHistory(prev => [...prev, { role: 'ai', content, suggestions: CHAT_SUGGESTIONS, timestamp: new Date() }]);
     } catch {

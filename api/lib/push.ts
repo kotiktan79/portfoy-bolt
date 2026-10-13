@@ -3,14 +3,7 @@
 // Ölü abonelikler (404/410) gönderim sırasında tablodan silinir.
 
 import webpush from 'web-push';
-import { createClient } from '@supabase/supabase-js';
-
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase env eksik');
-  return createClient(url, key);
-}
+import { getServiceSupabase } from './serviceSupabase.js';
 
 export interface PushPayload {
   title: string;
@@ -32,7 +25,7 @@ export async function sendPushToAll(payload: PushPayload): Promise<{ sent: numbe
     privateKey
   );
 
-  const supabase = getSupabase();
+  const supabase = getServiceSupabase();
   const { data: subs, error } = await supabase
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth');

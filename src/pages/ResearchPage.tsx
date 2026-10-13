@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Brain, RefreshCw, AlertTriangle, Sparkles, Globe, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { authorizedHeaders } from '../lib/apiAuth';
 import { PageHeader } from '../components/ui/PageHeader';
 
 // 2026-09-22: AI işlem ÖNERMEZ — öneri kartları (TRİM/SAT/AL) ve ai_recommendations okuması kaldırıldı.
@@ -75,7 +76,7 @@ export default function ResearchPage() {
     setRunning(true);
     setError(null);
     try {
-      const res = await fetch('/api/cron/ai-research');
+      const res = await fetch('/api/cron/ai-research', { headers: await authorizedHeaders() });
       const j = await res.json();
       if (!j.success) throw new Error(j.error || 'Cron failed');
       await loadLatest();
