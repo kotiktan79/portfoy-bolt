@@ -34,7 +34,7 @@ describe('X-Ray — EUR ölçü ve tek plan kuralları', () => {
     expect(f).toBeDefined();
     expect(f.symbols).toEqual(expect.arrayContaining(['USD', 'EURO']));
     expect(f.symbols).not.toContain('IB01');
-    expect(f.title).toMatch(/Getirisiz nakit/);
+    expect(f.title).toMatch(/Getirisi olmayan nakit/);
     expect(f.detail).toContain("%3'ünü");
     expect(f.detail).not.toContain("%2'sini");
     // hedef %5: atıl = nakit − %5 × toplam

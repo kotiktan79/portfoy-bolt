@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Activity, AlertTriangle, ChevronDown, ChevronUp, Layers, Globe2, Target, TrendingDown as LossIcon, Award } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
-import { analyzeXRay, XRayFinding } from '../services/xrayService';
+import { analyzeXRay, letterGrade, XRayFinding } from '../services/xrayService';
 import { formatCurrency } from '../services/priceService';
 // Tek ölçü EUR (2026-09-22): X-Ray tutarları TL'den €'ya çevrilerek gösterilir
 const eur = (tl: number, rate: number) => `${tl < 0 ? '−' : ''}€${formatCurrency(rate > 0 ? Math.abs(tl) / rate : 0, 0)}`;
@@ -101,24 +101,21 @@ export default function PortfolioXRay() {
 
   if (xray.totalValue === 0) return null;
 
-  const grade =
-    xray.healthScore >= 85 ? 'A+' :
-    xray.healthScore >= 75 ? 'A' :
-    xray.healthScore >= 65 ? 'B+' :
-    xray.healthScore >= 55 ? 'B' :
-    xray.healthScore >= 40 ? 'C' : 'D';
+  const graded = letterGrade(xray.healthScore, xray.findings);
+  const grade = graded.grade;
 
   const gradeColor =
-    xray.healthScore >= 75 ? 'text-accent-600 dark:text-accent-400' :
-    xray.healthScore >= 55 ? 'text-amber-600 dark:text-amber-400' :
+    grade === 'A+' || grade === 'A' ? 'text-accent-600 dark:text-accent-400' :
+    grade === 'B+' || grade === 'B' ? 'text-amber-600 dark:text-amber-400' :
     'text-red-600 dark:text-red-400';
 
   const gradeMsg =
-    xray.healthScore >= 85 ? 'Mükemmel' :
-    xray.healthScore >= 75 ? 'İyi' :
-    xray.healthScore >= 65 ? 'İyi+' :
-    xray.healthScore >= 55 ? 'Vasat' :
-    xray.healthScore >= 40 ? 'Zayıf' : 'Kritik';
+    graded.capped ? 'Yüksek uyarı var' :
+    grade === 'A+' ? 'Mükemmel' :
+    grade === 'A' ? 'İyi' :
+    grade === 'B+' ? 'İyi+' :
+    grade === 'B' ? 'Vasat' :
+    grade === 'C' ? 'Zayıf' : 'Kritik';
 
   const highCount = xray.findings.filter(f => f.severity === 'high').length;
   const mediumCount = xray.findings.filter(f => f.severity === 'medium').length;
@@ -140,7 +137,7 @@ export default function PortfolioXRay() {
         <div className="flex-1 min-w-0">
           <h3 className="t-h3 flex items-center gap-2">
             <Activity size={14} className="text-brand-500" />
-            Portföy X-Ray
+            Portföy incelemesi
             <span className={`pill ${highCount > 0 ? 'pill-negative' : mediumCount > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'pill-positive'} !text-[10px] !px-2 !py-0.5`}>
               {gradeMsg}
             </span>

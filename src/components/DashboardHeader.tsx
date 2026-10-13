@@ -332,9 +332,9 @@ export function DashboardHeader({
               <p className="t-eyebrow mb-2 px-1">İşlemler</p>
               <div className="grid grid-cols-2 gap-2">
                 <DrawerItem icon={Bell} label="Alarmlar" tone="amber" onClick={() => { onShowAlerts(); setMobileMenuOpen(false); }} />
-                <DrawerItem icon={Target} label="Hızlı Rebalance" tone="brand" onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Target} label="Hızlı dengeleme" tone="brand" onClick={() => { onShowRebalanceModal(); setMobileMenuOpen(false); }} />
                 <DrawerItem icon={Download} label="Yedekle / Aktar" tone="accent" onClick={() => { onShowExport(); setMobileMenuOpen(false); }} />
-                <DrawerItem icon={Database} label="Backup / Restore" tone="brand" onClick={() => { onShowBackup(); setMobileMenuOpen(false); }} />
+                <DrawerItem icon={Database} label="Yedekle / geri yükle" tone="brand" onClick={() => { onShowBackup(); setMobileMenuOpen(false); }} />
                 <DrawerItem icon={Shield} label="2FA Güvenlik" tone="amber" onClick={() => { onShow2FA(); setMobileMenuOpen(false); }} />
                 <DrawerItem icon={Palette} label="Tema Değiştir" tone="brand" onClick={() => { onThemeCycle(); setMobileMenuOpen(false); }} />
               </div>

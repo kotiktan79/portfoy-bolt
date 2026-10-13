@@ -246,7 +246,7 @@ export default function HeroDashboard({
               className="mt-5"
             >
               <div className="flex items-center justify-between gap-3 mb-1">
-                <span className="font-serif italic text-xs text-ink-500 dark:text-gold-200/50">Son 30 gün</span>
+                <span className="font-serif italic text-xs text-ink-500 dark:text-gold-200/50">Son 30 gün · portföy TL, kasa hariç</span>
                 <div className="flex-1 h-px bg-gradient-to-r from-gold-400/40 via-gold-400/20 to-transparent" />
                 <span className="text-[11px] tabular-nums text-ink-500 dark:text-gold-200/50">
                   ₺{fmtTRY(Math.min(...sparkValues))} – ₺{fmtTRY(Math.max(...sparkValues))}

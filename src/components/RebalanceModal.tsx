@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
-import { X, Target, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Zap, Shield, DollarSign } from 'lucide-react';
+import { X, Target, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Shield } from 'lucide-react';
 import { AssetAllocation, getDefaultTargetAllocations } from '../services/analyticsService';
 import { formatCurrency, formatPercentage } from '../services/priceService';
+import { CLASS_LABELS, type AllocationClass } from '../config/portfolioPolicy';
+import { TRADE_DRIFT_POINTS } from '../lib/rebalance';
 
 interface RebalanceModalProps {
   allocations: AssetAllocation[];
@@ -9,17 +11,14 @@ interface RebalanceModalProps {
   onUpdateTargets: (targets: Record<string, number>) => void;
 }
 
-type RebalanceStrategy = 'custom' | 'conservative' | 'balanced' | 'aggressive' | 'equal-weight';
-
 export function RebalanceModal({ allocations, onClose, onUpdateTargets }: RebalanceModalProps) {
-  const [strategy, setStrategy] = useState<RebalanceStrategy>('custom');
-  const [rebalanceThreshold, setRebalanceThreshold] = useState(5);
+  const [rebalanceThreshold, setRebalanceThreshold] = useState(TRADE_DRIFT_POINTS);
   // Seed targets from the canonical default (all asset classes) so a class the
   // user TARGETS but doesn't currently hold still appears and is rebalanced —
   // calculateRebalance only emits rows for held holdings, so seeding purely from
   // `allocations` would truncate targets to held types (totals then wouldn't
   // sum to 100 / wouldn't balance). Held types override with their actual target.
-  const [targets, setTargets] = useState<Record<string, number>>(() => {
+  const [targets] = useState<Record<string, number>>(() => {
     const seeded: Record<string, number> = { ...getDefaultTargetAllocations() };
     allocations.forEach((a) => { seeded[a.asset_type] = a.target_percentage; });
     return seeded;
@@ -27,53 +26,6 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
 
   const totalTarget = Object.values(targets).reduce((sum, val) => sum + val, 0);
   const totalPortfolioValue = allocations.reduce((sum, a) => sum + a.value, 0);
-
-  const strategyPresets: Record<RebalanceStrategy, Record<string, number>> = {
-    'custom': targets,
-    'conservative': {
-      stock: 30,
-      crypto: 10,
-      currency: 40,
-      fund: 15,
-      safe: 5,
-      eurobond: 5,
-      commodity: 0,
-    },
-    'balanced': {
-      stock: 40,
-      crypto: 20,
-      currency: 20,
-      fund: 10,
-      safe: 5,
-      eurobond: 5,
-      commodity: 5,
-    },
-    'aggressive': {
-      stock: 30,
-      crypto: 50,
-      currency: 5,
-      fund: 10,
-      safe: 0,
-      eurobond: 0,
-      commodity: 5,
-    },
-    'equal-weight': Object.keys(targets).reduce((acc, key) => {
-      acc[key] = 100 / Object.keys(targets).length;
-      return acc;
-    }, {} as Record<string, number>),
-  };
-
-  const applyStrategy = (strategyType: RebalanceStrategy) => {
-    setStrategy(strategyType);
-    if (strategyType !== 'custom') {
-      const preset = strategyPresets[strategyType];
-      const filtered = Object.keys(targets).reduce((acc, key) => {
-        acc[key] = preset[key] || 0;
-        return acc;
-      }, {} as Record<string, number>);
-      setTargets(filtered);
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,20 +35,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
     }
   };
 
-  const getAssetTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      stock: 'Hisse',
-      crypto: 'Kripto',
-      currency: 'Döviz',
-      fund: 'Fon',
-      eurobond: 'Eurobond',
-      safe: 'Güvenli taraf',
-      money_market: 'Para Piyasası',
-      treasury_etf: 'Hazine Bonosu ETF',
-      commodity: 'Emtia',
-    };
-    return labels[type] || type;
-  };
+  const getAssetTypeLabel = (type: string) => CLASS_LABELS[type as AllocationClass] || type;
 
   const assetTypeGroups = useMemo(() => {
     return allocations.reduce((acc, allocation) => {
@@ -165,7 +104,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <Target className="text-slate-700" size={24} />
-            <h2 className="text-2xl font-bold text-gray-900">Portföy Yeniden Dengeleme</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Portföy dengeleme</h2>
           </div>
           <button
             onClick={onClose}
@@ -213,57 +152,13 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Rebalans Stratejisi
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <button
-                type="button"
-                onClick={() => applyStrategy('conservative')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'conservative' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <Shield className="mx-auto mb-1 text-brand-600" size={20} />
-                <div className="text-xs font-semibold text-gray-900">Muhafazakar</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => applyStrategy('balanced')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'balanced' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <Target className="mx-auto mb-1 text-green-600" size={20} />
-                <div className="text-xs font-semibold text-gray-900">Dengeli</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => applyStrategy('aggressive')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'aggressive' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <Zap className="mx-auto mb-1 text-brand-600" size={20} />
-                <div className="text-xs font-semibold text-gray-900">Agresif</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => applyStrategy('equal-weight')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'equal-weight' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <DollarSign className="mx-auto mb-1 text-accent-600" size={20} />
-                <div className="text-xs font-semibold text-gray-900">Eşit Ağırlık</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStrategy('custom')}
-                className={`p-3 rounded-lg border-2 transition-all ${strategy === 'custom' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <BarChart3 className="mx-auto mb-1 text-gray-600" size={20} />
-                <div className="text-xs font-semibold text-gray-900">Özel</div>
-              </button>
-            </div>
-          </div>
+          <p className="text-sm text-gray-600">
+            Hedef kilitli: hisse 62, güvenli taraf 14, altın 10, kripto 5, fon 4, nakit 5. Kasa bu hesaba girmez. Fiziki altın satılmaz; fazla ise yeni alım yok.
+          </p>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Rebalans Eşiği: {rebalanceThreshold}%
+              Dengeleme eşiği: {rebalanceThreshold} puan
             </label>
             <input
               type="range"
@@ -279,7 +174,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
               <span>Esnek (20%)</span>
             </div>
             <p className="text-xs text-gray-600 mt-2">
-              Varlık dağılımı hedeften {rebalanceThreshold}% fazla saptığında rebalans önerilir
+              Sapma {rebalanceThreshold} puanı geçince tutar önerilir. Plan sekmesiyle aynı eşik.
             </p>
           </div>
           <div className="mb-6">
@@ -308,10 +203,8 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                     min="0"
                     max="100"
                     value={targets[type] || 0}
-                    onChange={(e) =>
-                      setTargets({ ...targets, [type]: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-slate-50 text-gray-700"
                   />
                 </div>
               ))}
@@ -319,8 +212,9 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900">Detaylı Rebalans Analizi</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Sınıf analizi</h3>
             {rebalanceAnalysis.actions.map((action) => {
+              const physical = action.type === 'commodity' && action.difference < 0;
               const shouldBuy = action.difference > 0;
               const isBalanced = !action.needsAction;
 
@@ -373,21 +267,23 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
                     {action.needsAction && (
                       <div className="flex flex-col items-end gap-1">
                         <div className="flex items-center gap-2">
-                          {shouldBuy ? (
+                          {physical ? (
+                            <Shield className="text-slate-600" size={24} />
+                          ) : shouldBuy ? (
                             <TrendingUp className="text-green-600" size={24} />
                           ) : (
                             <TrendingDown className="text-red-600" size={24} />
                           )}
                           <span className={`font-bold text-lg ${
-                            shouldBuy ? 'text-green-600' : 'text-red-600'
+                            physical ? 'text-slate-700' : shouldBuy ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            {shouldBuy ? 'AL' : 'SAT'}
+                            {physical ? 'SEYRELT' : shouldBuy ? 'AL' : 'SAT'}
                           </span>
                         </div>
                         <div className={`text-xl font-bold ${
-                          shouldBuy ? 'text-green-600' : 'text-red-600'
+                          physical ? 'text-slate-700' : shouldBuy ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {shouldBuy ? '+' : '-'}{formatCurrency(Math.abs(action.difference))} ₺
+                          {physical ? 'satılmaz' : `${shouldBuy ? '+' : '-'}${formatCurrency(Math.abs(action.difference))} ₺`}
                         </div>
                       </div>
                     )}

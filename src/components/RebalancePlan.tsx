@@ -1,28 +1,17 @@
 import { useMemo } from 'react';
 import { Target, ArrowUpCircle, ArrowDownCircle, Lock, CalendarClock } from 'lucide-react';
 import { Holding } from '../lib/supabase';
-import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
-import { allocationClassOf, type AllocationClass } from '../config/portfolioPolicy';
-import { planRebalance, type RebalanceAction } from '../lib/rebalance';
+import { getFxRatesFromHoldings } from '../lib/fx';
+import { policySnapshot } from '../lib/policyAllocation';
+import { type RebalanceAction } from '../lib/rebalance';
 
 const fmtEUR = (n: number) => `€${Math.round(n).toLocaleString('de-DE')}`;
 
 export function RebalancePlan({ holdings, totalCashValue }: { holdings: Holding[]; totalCashValue: number }) {
   const model = useMemo(() => {
-    const fx = getFxRatesFromHoldings(holdings);
-    const eur = fx.eur > 0 ? fx.eur : 0;
-    const values: Partial<Record<AllocationClass, number>> = {};
-    let xeonEUR = 0;
-    for (const h of holdings) {
-      if (!(eur > 0)) continue;
-      const cls = allocationClassOf(h.asset_type, h.symbol);
-      if (!cls) continue;
-      const v = holdingValueTRY(h, fx) / eur;
-      values[cls] = (values[cls] || 0) + v;
-      if (h.symbol.toUpperCase() === 'XEON') xeonEUR += v;
-    }
-    const kasaEUR = eur > 0 ? (totalCashValue || 0) / eur : 0;
-    return { ...planRebalance({ valuesEUR: values, xeonEUR, asOf: new Date() }), kasaEUR };
+    const snap = policySnapshot(holdings);
+    const kasaEUR = snap.eurRate > 0 ? (totalCashValue || 0) / snap.eurRate : 0;
+    return { ...snap, kasaEUR };
   }, [holdings, totalCashValue]);
 
   return (

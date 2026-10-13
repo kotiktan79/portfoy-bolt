@@ -6,6 +6,8 @@ import { formatCurrency, formatPercentage } from '../services/priceService';
 import { BuySellModal } from './BuySellModal';
 import { getCurrencySymbol } from '../services/currencyService';
 import { displayCurrency, nativeUnrealized } from '../lib/holdingPnl';
+import { assetName } from '../lib/assetNames';
+import { StaleBadge } from './StaleBadge';
 import { ASSET_TYPE_LABELS } from '../constants/assetTypes';
 import { effectiveAssetType } from '../config/portfolioPolicy';
 import { Sparkline } from './ui/Sparkline';
@@ -17,6 +19,7 @@ interface Props {
   onEdit: (holding: Holding) => void;
   onDelete: (id: string) => void;
   onTransactionComplete: () => void;
+  stalePrice?: boolean;
 }
 
 const RANK_STYLES: Record<number, { bg: string; text: string; label: string }> = {
@@ -49,7 +52,7 @@ const ASSET_TONES: Record<string, string> = {
   cash: 'bg-slate-100 text-slate-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
-export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, onTransactionComplete }: Props) {
+export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, onTransactionComplete, stalePrice }: Props) {
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
   const ccy = displayCurrency(holding);
@@ -81,7 +84,9 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
               <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${toneClass}`}>
                 {typeLabel}
               </span>
+              {stalePrice && <StaleBadge kind="price" />}
             </div>
+            <p className="text-[11px] text-slate-500 dark:text-gray-400 truncate">{assetName(holding.symbol, holding.price_notes)}</p>
             <div className="flex items-baseline gap-1.5">
               <span className="text-lg font-bold tabular-nums text-gray-900 dark:text-white">
                 {fmtPrice(holding.current_price)} {sym}

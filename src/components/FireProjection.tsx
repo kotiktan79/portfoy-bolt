@@ -10,7 +10,6 @@ import {
   Tooltip,
   Legend,
   CartesianGrid,
-  ReferenceLine,
 } from 'recharts';
 import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, FireInputs } from '../services/fireProjectionService';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -97,6 +96,7 @@ export default function FireProjection() {
         principal: currentValueEUR + y.contributionsYTD,
         monthlyAtSWR: y.monthlyIncomeAtSWR,
         growthYTD: y.growthYTD,
+        inflationTarget: y.inflationTarget,
       })),
     [projection, baseYear, currentValueEUR]
   );
@@ -218,16 +218,14 @@ export default function FireProjection() {
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             {projection.targetPortfolio > 0 && (
-              <ReferenceLine
-                y={projection.targetPortfolio}
+              <Line
+                type="monotone"
+                dataKey="inflationTarget"
+                name="Enflasyona göre hedef"
                 stroke={chrome.neutralLine}
+                strokeWidth={1.5}
                 strokeDasharray="6 4"
-                label={{
-                  value: `Hedef ${fmtAxisEUR(projection.targetPortfolio)}`,
-                  position: 'insideTopRight',
-                  fill: chrome.axis,
-                  fontSize: 11,
-                }}
+                dot={false}
               />
             )}
             <Area

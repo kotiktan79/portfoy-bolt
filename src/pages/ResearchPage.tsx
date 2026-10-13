@@ -3,6 +3,9 @@ import { Brain, RefreshCw, AlertTriangle, Sparkles, Globe, ChevronDown, ChevronU
 import { supabase } from '../lib/supabase';
 import { authorizedHeaders } from '../lib/apiAuth';
 import { PageHeader } from '../components/ui/PageHeader';
+import { StaleBadge } from '../components/StaleBadge';
+import { isResearchStale } from '../lib/freshness';
+import { dayInTZ } from '../lib/eurPnl';
 
 // 2026-09-22: AI işlem ÖNERMEZ — öneri kartları (TRİM/SAT/AL) ve ai_recommendations okuması kaldırıldı.
 // Rapor = haber/makro özeti + pozisyon başına bilgi notu + riskler/notlar.
@@ -145,6 +148,7 @@ export default function ResearchPage() {
                 <Sparkles size={16} className="text-brand-600 dark:text-brand-400" />
                 <span className="text-xs font-bold uppercase tracking-wider text-brand-700 dark:text-brand-300">
                   Bugünkü Tema · {new Date(report.report_date).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {isResearchStale(report.report_date, dayInTZ(new Date())) && <StaleBadge kind="research" />}
                 </span>
               </div>
               <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white leading-relaxed">

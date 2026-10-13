@@ -3,10 +3,14 @@ import { TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { Transaction, getAllTransactions } from '../services/transactionService';
 import { formatCurrency } from '../services/priceService';
 import { format } from 'date-fns';
+import { usePortfolio } from '../contexts/PortfolioContext';
+import { transactionAssetLabel } from '../lib/assetNames';
 
 export function TransactionHistory() {
+  const { holdings } = usePortfolio();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const byId = new Map(holdings.map(h => [h.id, h]));
 
   useEffect(() => {
     loadTransactions();
@@ -69,7 +73,11 @@ export function TransactionHistory() {
               </div>
               <div>
                 <p className="font-medium text-slate-900">
-                  {transaction.transaction_type === 'buy' ? 'ALIŞ' : 'SATIŞ'}
+                  {(() => {
+                    const label = transactionAssetLabel(byId.get(transaction.holding_id));
+                    const side = transaction.transaction_type === 'buy' ? 'Alış' : 'Satış';
+                    return `${side} · ${label.name}`;
+                  })()}
                 </p>
                 <p className="text-sm text-slate-600">
                   {format(new Date(transaction.transaction_date), 'dd MMM yyyy, HH:mm')}

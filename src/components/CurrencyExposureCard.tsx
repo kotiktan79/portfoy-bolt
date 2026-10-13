@@ -4,6 +4,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recha
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { exposureCurrency } from '../lib/exposureCurrency';
 import { formatCurrency } from '../services/priceService';
 import { Card, CardHeader, CardBody } from './ui/Card';
 
@@ -53,32 +54,8 @@ const FUND_CURRENCY: Record<string, string> = {
 // Holding'in alt para birimini doğru tespit et — currency field + symbol.
 function classifyHolding(h: Holding): string {
   const sym = h.symbol.toUpperCase();
-  const cur = (h.currency || 'TRY').toUpperCase();
-
-  if (h.asset_type === 'currency') {
-    if (sym === 'USDC' || sym === 'USDT' || sym === 'USD') return 'USD';
-    if (sym === 'EURO' || sym === 'EUR') return 'EUR';
-    if (sym === 'GBP') return 'GBP';
-    if (sym === 'CHF') return 'CHF';
-    return sym;
-  }
-  if (h.asset_type === 'crypto') return 'BTC';
-  if (h.asset_type === 'commodity') {
-    if (sym.includes('GOLD') || sym.includes('ALTIN') || sym === 'XAU' || sym === 'GA') return 'GOLD';
-    return 'GOLD';
-  }
-  if (h.asset_type === 'fund') {
-    return FUND_CURRENCY[sym] || cur || 'TRY';
-  }
-  if (h.asset_type === 'eurobond') {
-    // currency field doğru kaynak (IB01 EUR, US Treasury USD)
-    return cur === 'TRY' ? 'USD' : cur;
-  }
-  if (h.asset_type === 'stock') {
-    // ASML→EUR, JNJ→USD, V3YL→EUR, BIST→TRY
-    return cur || 'TRY';
-  }
-  return 'Diğer';
+  if (h.asset_type === 'fund' && FUND_CURRENCY[sym]) return FUND_CURRENCY[sym];
+  return exposureCurrency(h);
 }
 
 const KIND_LABEL: Record<CurrencyBucket['kind'], string> = {

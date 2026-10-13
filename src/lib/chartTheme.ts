@@ -10,7 +10,7 @@
 // renk değişmez. 8.+ seri asla yeni renk almaz → "Diğer"e katlanır.
 
 export type AssetTypeKey =
-  | 'stock' | 'commodity' | 'currency' | 'crypto'
+  | 'stock' | 'commodity' | 'currency' | 'crypto' | 'safe'
   | 'eurobond' | 'money_market' | 'treasury_etf' | 'cash' | 'fund';
 
 // Slot sırası CVD-güvenliği için seçildi (blue→yellow→aqua→orange→violet→green→magenta)
@@ -19,6 +19,7 @@ const ASSET_COLORS: Record<AssetTypeKey, { light: string; dark: string; name: st
   commodity: { light: '#eda100', dark: '#c98500', name: 'Emtia (Altın)' },
   currency:  { light: '#1baf7a', dark: '#199e70', name: 'Döviz' },
   crypto:    { light: '#eb6834', dark: '#d95926', name: 'Kripto Para' },
+  safe:      { light: '#4a3aa7', dark: '#9085e9', name: 'Güvenli taraf' },
   eurobond:  { light: '#4a3aa7', dark: '#9085e9', name: 'Eurobond' },
   money_market: { light: '#0e7490', dark: '#22d3ee', name: 'Para Piyasası' },
   treasury_etf: { light: '#4338ca', dark: '#a5b4fc', name: 'Hazine Bonosu ETF' },

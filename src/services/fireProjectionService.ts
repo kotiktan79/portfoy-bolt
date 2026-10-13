@@ -19,6 +19,8 @@ export interface YearProjection {
   growthYTD: number;
   endOfYearValue: number;
   monthlyIncomeAtSWR: number;
+  /** O yıl sonundaki hedef: bugünkü alım gücünün (1+enflasyon)^yıl katı. */
+  inflationTarget: number;
   reachedTarget: boolean;
 }
 
@@ -93,6 +95,7 @@ export function projectFire(inputs: FireInputs): FireProjection {
       growthYTD: yearGrowth,
       endOfYearValue: value,
       monthlyIncomeAtSWR: (value * swr) / 12,
+      inflationTarget: realTarget,
       reachedTarget,
     });
 
