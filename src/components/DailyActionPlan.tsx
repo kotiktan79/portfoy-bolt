@@ -68,7 +68,7 @@ interface AIPlan {
 const AI_CACHE_KEY = 'tandor_ai_daily_plan';
 // Politika/prompt değişince BUMP et → eski cache'lenmiş planlar otomatik geçersiz,
 // kullanıcı yeniden çekmek zorunda kalmadan güncel politikayla yeni plan üretilir.
-const AI_PLAN_VERSION = '2026-09-22-single-plan-v2';   // tek plan (deterministik, AI yok) — eski cache geçersiz
+const AI_PLAN_VERSION = '2026-10-13-flex-buy';   // esnek alım planı — eski haftalık cache geçersiz
 
 function getCachedAIPlan(): AIPlan | null {
   try {
@@ -149,7 +149,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">{getGreeting()}! Bugünkü Planınız</h3>
             </div>
-            <p className="text-[10px] text-gray-400 mt-0.5">Tek plan (sabit) · haftalık dilim V3YL + XEON · işlem önerisi yok</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">Esnek alım · VWCE %76 / V3YL %16 / XEON %8 · ayrıntı Plan sekmesinde</p>
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded-full ${market.isOpen ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             <Clock size={10} className="inline mr-1" />
@@ -183,7 +183,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <h4 className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  Haftalık Plan (sabit)
+                  Notlar
                 </h4>
                 <button onClick={fetchAIPlan} disabled={aiLoading} className="text-[10px] text-brand-500 hover:text-brand-700 font-medium">
                   {aiLoading ? 'Yükleniyor...' : 'Yenile'}

@@ -9,7 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type AssetType = 'stock' | 'crypto' | 'currency' | 'fund' | 'eurobond' | 'commodity' | 'cash';
+export type AssetType = 'stock' | 'crypto' | 'currency' | 'fund' | 'eurobond' | 'money_market' | 'treasury_etf' | 'commodity' | 'cash';
 export type TransactionType = 'deposit' | 'withdrawal' | 'buy' | 'sell' | 'dividend';
 
 export interface Holding {

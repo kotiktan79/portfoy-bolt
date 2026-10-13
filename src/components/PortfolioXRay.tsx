@@ -10,11 +10,14 @@ import { Card } from './ui/Card';
 // Varlık tipi → Türkçe etiket (HEDEF vs GERÇEK ALLOKASYON bar'ları için).
 const ASSET_TYPE_TR: Record<string, string> = {
   stock: 'Hisse',
+  safe: 'Güvenli taraf',
   eurobond: 'Eurobond',
+  money_market: 'Para Piyasası',
+  treasury_etf: 'Hazine Bonosu ETF',
   fund: 'Fon',
   commodity: 'Altın',
   crypto: 'Kripto',
-  currency: 'Döviz',
+  currency: 'Nakit',
   cash: 'Nakit',
 };
 

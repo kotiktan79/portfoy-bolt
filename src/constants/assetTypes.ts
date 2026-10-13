@@ -5,6 +5,8 @@ export const ASSET_TYPE_LABELS: Record<string, string> = {
   currency: 'Döviz',
   fund: 'Fon',
   eurobond: 'Eurobond',
+  money_market: 'Para Piyasası',
+  treasury_etf: 'Hazine Bonosu ETF',
   bond: 'Tahvil',
 };
 
@@ -15,5 +17,7 @@ export const ASSET_TYPE_COLORS: Record<string, string> = {
   currency: '#10b981',
   fund: '#8b5cf6',
   eurobond: '#06b6d4',
+  money_market: '#0ea5e9',
+  treasury_etf: '#6366f1',
   bond: '#6b7280',
 };

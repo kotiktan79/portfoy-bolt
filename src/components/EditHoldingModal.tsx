@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Holding, AssetType } from '../lib/supabase';
+import { effectiveAssetType } from '../config/portfolioPolicy';
 
 interface EditHoldingModalProps {
   holding: Holding;
@@ -15,7 +16,7 @@ interface EditHoldingModalProps {
 
 export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModalProps) {
   const [symbol, setSymbol] = useState(holding.symbol);
-  const [assetType, setAssetType] = useState<AssetType>(holding.asset_type);
+  const [assetType, setAssetType] = useState<AssetType>(effectiveAssetType(holding.asset_type, holding.symbol) as AssetType);
   const [purchasePrice, setPurchasePrice] = useState(holding.purchase_price.toString());
   const [quantity, setQuantity] = useState(holding.quantity.toString());
   const [error, setError] = useState('');
@@ -106,6 +107,8 @@ export function EditHoldingModal({ holding, onClose, onUpdate }: EditHoldingModa
               <option value="currency">Döviz</option>
               <option value="fund">Fon</option>
               <option value="eurobond">Eurobond</option>
+              <option value="money_market">Para Piyasası</option>
+              <option value="treasury_etf">Hazine Bonosu ETF</option>
               <option value="commodity">Emtia</option>
             </select>
           </div>

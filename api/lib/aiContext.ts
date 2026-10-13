@@ -4,15 +4,16 @@
 // fonksiyon); AI rakam ÜRETMEZ, açıklar. Prompt'ta elle yazılmış rakam YOK — hepsi motordan/politikadan türetilir.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadEurModel, fetchAll, fmtEUR, fmtSignedEUR, monthLabelTR, type EurSummary } from './eurEngine.js';
-import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES } from '../../src/config/portfolioPolicy.js';
+import { TARGET_ALLOCATION, allocationClassOf, CLASS_LABELS, type AllocationClass } from '../../src/config/portfolioPolicy.js';
 import { POOL_CAP_EUR, MONTHLY_CAP_EUR, SALARY_SAFETY, INFLATION_EUR, summarizeEur } from '../../src/lib/eurPnl.js';
+import { BUY_TARGET_EUR, BUY_TARGET_DATE, BUY_PLAN_START, BUY_WEIGHTS, splitBuy, pacePerMonth, sumInvestedEUR, type BuySymbol } from '../../src/lib/buyPlan.js';
 
 export const AI_RULES = `ROLÜN: portföy AÇIKLAYICISI ve bilgi kaynağısın — portföy YÖNETİCİSİ değilsin.
 YAPACAKLARIN: rakamları açıkla (neden bu ay eksi/artı, hangi varlık ne yaptı), piyasa/haber özetini Türkçe ver,
 aşağıdaki ANOMALİLER listesini aynen bildir (kendin anomali üretme), kullanıcının sorusunu somut rakamla yanıtla.
 YAPMAYACAKLARIN (KESİN):
-- Alım/satım/trim/rebalans/"şunu artır, bunu azalt" ÖNERME. Tek plan sabittir ve aşağıda yazar; sen onu tekrar edersin, değiştirmezsin.
-  Kullanıcı "ne alayım?" derse cevap: tek planın bu haftaki dilimi (aşağıda). Başka araç/sembol önerme (IB01 dahil).
+- Alım/satım/trim/rebalans/"şunu artır, bunu azalt" ÖNERME. Esnek alım planı sabittir ve aşağıda yazar; sen onu tekrar edersin, değiştirmezsin.
+  Kullanıcı "ne alayım?" derse cevap: girdiği tutarın VWCE %76 / V3YL %16 / XEON %8 bölünmüş hali. Başka araç önerme. IB01 yeni alınmaz.
 - Maaş/kâr HESAPLAMA. Rakamlar motorun; sen aynen kullanırsın. "Güvenli/dengeli maaş", "$ hedef", "SWR ile" gibi kendi formülün YOK.
   "aylık tavan kadar maaş için ne gerekir?" gibi hedef hesabı sorulursa: uygulamadaki "Hedefe Ulaşma Planı" (FIRE) sayfasına yönlendir, kendi tahminini verme.
 - TL/USD nominal kârı kâr gibi sunma; kur artışı kâr DEĞİL. Tek ölçü EUR.
@@ -24,8 +25,7 @@ export interface AiContext { text: string; eur: EurSummary; weekPlan: WeekPlanRo
 
 type H = { id: string | number; symbol: string; asset_type: string; currency: string | null; quantity: number; current_price: number; purchase_price: number; maturity_date?: string | null };
 
-// Haftalık dilim: kullanıcının fiili pratiği ruble → ~$2.000 → Revolut (panel RUB_WEEKLY_USD ile aynı sabit)
-export const WEEKLY_TRANCHE_USD = 2000;
+// Eski sabit haftalık $2.000 dilimi kalktı (2026-10-13). Plan: esnek, VWCE/V3YL/XEON.
 // USD üzerinden çapraz kurlar (src/lib/fx.ts USD_CROSS ile aynı) — RUB/RON/CHF'nin TRY kur satırı yok
 const USD_CROSS: Record<string, number> = { RUB: 86, RON: 4.52, CHF: 0.81, GBP: 1 / 1.27 };
 // Günlük snapshot cron'u 18:00 UTC'de UTC tarihiyle yazar (vercel.json: daily-snapshot '0 18 * * *' — değişirse burayı da değiştir)
@@ -67,13 +67,14 @@ export function stalePrices(rows: PriceRow[], now: Date, staleDays = STALE_DAYS)
 export async function buildAiContext(supabase: SupabaseClient, todayStr: string, now: Date = new Date()): Promise<AiContext> {
   const since = new Date(now.getTime() - PRICE_WINDOW_DAYS * 86400000).toISOString();
   const buySince = new Date(now.getTime() - NO_BUY_DAYS * 86400000).toISOString().slice(0, 10);
-  const [model, holdRes, cashRes, phRows, buyRes] = await Promise.all([
+  const [model, holdRes, cashRes, phRows, buyRes, planBuyRes] = await Promise.all([
     loadEurModel(supabase),
     supabase.from('holdings').select('id,symbol,asset_type,currency,quantity,current_price,purchase_price,maturity_date').gt('quantity', 0),
     supabase.from('cash_balances').select('currency,balance').gt('balance', 0),
     // fetchAll: PostgREST max_rows=1000 tavanı (45 gün × 26 sembol > 1000 satır) — tek .range() kesiyordu
     fetchAll<{ symbol: string; price: number; recorded_at: string }>('price_history', () => supabase.from('price_history').select('symbol,price,recorded_at').gte('recorded_at', since).order('recorded_at', { ascending: true }).order('id', { ascending: true })),
     supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('transaction_type', 'buy').gte('transaction_date', buySince),
+    supabase.from('transactions').select('holding_id,transaction_type,total_amount,transaction_date').eq('transaction_type', 'buy').gte('transaction_date', BUY_PLAN_START),
   ]);
   if (holdRes.error) throw new Error(`aiContext holdings: ${holdRes.error.message}`);
   const eur = summarizeEur(model, todayStr.slice(0, 7));
@@ -87,20 +88,34 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
   const inv = holdings.filter(h => h.asset_type !== 'cash');
   const total = inv.reduce((s, h) => s + valEUR(h), 0);
   if (!(total > 0)) throw new Error('aiContext: portföyde değerlenmiş pozisyon yok');
-  const byType: Record<string, number> = {};
-  for (const h of inv) byType[h.asset_type] = (byType[h.asset_type] || 0) + valEUR(h);
+  const byClass: Partial<Record<AllocationClass, number>> = {};
+  for (const h of inv) {
+    const c = allocationClassOf(h.asset_type, h.symbol);
+    if (!c) continue;
+    byClass[c] = (byClass[c] || 0) + valEUR(h);
+  }
 
-  // TEK PLAN: açıklar → dilim bölünmesi (uygulama RebalancePlan ve panel rubLane ile aynı formül)
-  const gap = (t: string) => Math.max(0, total * (TARGET_ALLOCATION[t]?.target ?? 0) / 100 - (byType[t] || 0));
-  const stGap = gap('stock'), ebGap = gap('eurobond');
-  const v3 = stGap + ebGap > 0 ? Math.round(100 * stGap / (stGap + ebGap)) : 50;
-  const trancheEUR = Math.round(WEEKLY_TRANCHE_USD * U / E);   // ~$2.000'in bugünkü euro karşılığı (sabit 1650 değil)
-  const v3EUR = Math.round(trancheEUR * v3 / 100);
-  const weekPlan: WeekPlanRow[] = [
-    { symbol: 'V3YL', label: 'Kuzey Amerika hisse ETF', sharePct: v3, amountEUR: v3EUR, instruction: `Bu haftaki dilimin %${v3}'i → V3YL (Revolut)` },
-    { symbol: 'XEON', label: 'Euro kısa vade (güvenli bacak)', sharePct: 100 - v3, amountEUR: trancheEUR - v3EUR, instruction: `Bu haftaki dilimin %${100 - v3}'i → XEON (Revolut)` },
-  ];
-  const cashEUR = byType['currency'] || 0;
+  // ESNEK PLAN: sabit haftalık dilim yok. Örnek €1.000'in 76/16/8 bölünmesi; trancheEUR = hedefe yetişmek için aylık hız.
+  const byId = new Map(holdings.map(h => [String(h.id), h]));
+  const invested = planBuyRes.error ? 0 : sumInvestedEUR(((planBuyRes.data || []) as Array<{ holding_id: string | number; total_amount: number | string | null; transaction_date: string }>).map(t => {
+    const h = byId.get(String(t.holding_id));
+    if (!h) return { symbol: '', amountEUR: 0, date: '' };
+    const native = Number(t.total_amount) || 0;
+    return { symbol: h.symbol, amountEUR: native * fx(h.currency) / E, date: String(t.transaction_date || '') };
+  }));
+  const remaining = Math.max(0, BUY_TARGET_EUR - invested);
+  const pace = pacePerMonth(remaining, now);
+  const example = splitBuy(1000);
+  const labels: Record<BuySymbol, string> = { VWCE: 'Küresel hisse ETF', V3YL: 'Kuzey Amerika hisse ETF', XEON: 'Para piyasası' };
+  const weekPlan: WeekPlanRow[] = (Object.keys(BUY_WEIGHTS) as BuySymbol[]).map(sym => ({
+    symbol: sym,
+    label: labels[sym],
+    sharePct: Math.round(BUY_WEIGHTS[sym] * 100),
+    amountEUR: Math.round(example[sym]),
+    instruction: `Her €1.000 yatırımın %${Math.round(BUY_WEIGHTS[sym] * 100)}'i → ${sym}`,
+  }));
+  const trancheEUR = Math.round(pace.perMonthEUR);
+  const cashEUR = byClass.currency || 0;
   const kasa = (cashRes.data || []).map((c: { currency: string; balance: number }) => `${c.currency} ${Math.round(Number(c.balance)).toLocaleString('tr-TR')}`).join(', ');
 
   // Anomaliler (AI'nın bildireceği, kendi üretmeyeceği) — hepsi deterministik
@@ -124,9 +139,9 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
     if (days < 0) anomalies.push(`${h.symbol} vadesi ${m} (${-days} gün önce) GEÇMİŞ ama pozisyon açık (€${Math.round(valEUR(h)).toLocaleString('de-DE')}) — itfa oldu mu, ekstre kontrolü.`);
     else if (days <= 30) anomalies.push(`${h.symbol} vadesi ${m} — ${days} gün kaldı (€${Math.round(valEUR(h)).toLocaleString('de-DE')}). İtfa gününde ana parayı ve kapanışı işle.`);
   }
-  if (!buyRes.error && (buyRes.count ?? 0) === 0) anomalies.push(`Son ${NO_BUY_DAYS} günde kayıtlı ALIM yok — haftalık dilim (V3YL + XEON) ya atlandı ya da işlenmedi.`);
+  if (!buyRes.error && (buyRes.count ?? 0) === 0) anomalies.push(`Son ${NO_BUY_DAYS} günde kayıtlı ALIM yok — esnek plan (VWCE / V3YL / XEON) için alım girilmemiş olabilir.`);
 
-  const alloc = Object.keys(TARGET_ALLOCATION).map(t => `${t}: %${(100 * (byType[t] || 0) / total).toFixed(0)} → hedef %${TARGET_ALLOCATION[t].target}${PHYSICAL_FIXED_TYPES.has(t) ? ' (fiziki, satılmaz)' : ''}`).join(' · ');
+  const alloc = (Object.keys(TARGET_ALLOCATION) as AllocationClass[]).map(t => `${CLASS_LABELS[t]}: %${(100 * (byClass[t] || 0) / total).toFixed(0)} → hedef %${TARGET_ALLOCATION[t].target}${t === 'commodity' ? ' (fiziki, satılmaz)' : ''}`).join(' · ');
   const top = [...inv].sort((a, b) => valEUR(b) - valEUR(a)).slice(0, 15)
     .map(h => `${h.symbol} (${h.asset_type}): €${Math.round(valEUR(h)).toLocaleString('de-DE')}, ağırlık %${(100 * valEUR(h) / total).toFixed(1)}`).join('\n');
   const m = eur.mtd, lf = eur.lastFull;
@@ -160,7 +175,7 @@ DAĞILIM vs HEDEF: ${alloc}
 Getirisiz nakit: ${fmtEUR(cashEUR)} (%${(100 * cashEUR / total).toFixed(0)}) — asıl "ölü sermaye" budur.
 KASA (portföy DIŞI, yastık): ${kasa || 'yok'}
 
-TEK PLAN (SABİT — kullanıcı onayı 2026-09-20): her dilim %${v3} V3YL + %${100 - v3} XEON (hisse/tahvil açıklarına oranlı; bu hafta ≈ ${fmtEUR(weekPlan[0].amountEUR)} V3YL + ${fmtEUR(weekPlan[1].amountEUR)} XEON, dilim ≈ $${WEEKLY_TRANCHE_USD.toLocaleString('tr-TR')} ≈ ${fmtEUR(trancheEUR)}). Kaynak sırası: EURO nakit → ruble (haftalık ~$${WEEKLY_TRANCHE_USD.toLocaleString('tr-TR')} → Revolut) → USD nakit. Dokunulmaz: altın, mevcut IB01/eurobondlar, BTC, mevcut TEFAS fonları. IB01 yeni ALINMAZ (dolar; euro ölçüsünde XEON ile aynı beklenen getiri, çok daha yüksek kur oynaklığı). Satış rotasyonu durduruldu (21.08).
+ESNEK ALIM PLANI (sabit haftalık takvim yok): yatırılacak ${fmtEUR(BUY_TARGET_EUR)}, yatırılan ${fmtEUR(invested)}, kalan ${fmtEUR(remaining)}. Oran VWCE %76 / V3YL %16 / XEON %8. Örnek €1.000 → ${fmtEUR(weekPlan[0].amountEUR)} VWCE + ${fmtEUR(weekPlan[1].amountEUR)} V3YL + ${fmtEUR(weekPlan[2].amountEUR)} XEON. ${pace.pastDue ? `Hedef tarihi geçti. Kalan ${fmtEUR(remaining)} — acele yok.` : `Ayda yaklaşık ${fmtEUR(trancheEUR)} yatırırsan ${BUY_TARGET_DATE} tarihine yetişir. Yetişmezse de sorun değil.`} Kaynak sırası: önce EURO nakit, sonra USD → EUR. VWCE son 7 günde %10'dan fazla düşerse XEON diliminin yarısı VWCE'ye eklenebilir. IB01 yeni alınmaz. Altın satılmaz. Kasa dengelemeye girmez.
 
 POZİSYONLAR (EUR, ilk 15):
 ${top}

@@ -12,7 +12,7 @@ interface ChatMessage { role: 'user' | 'ai'; content: string; suggestions?: stri
 // Sohbet geçmişi anahtarı sürümlendi: eski öneri/sinyal mesajları /api/chat'e geçmiş olarak gitmesin.
 const CHAT_KEY = 'ai_chat_history_v2';
 const CHAT_SUGGESTIONS = ['Bu hafta ne alıyorum?', 'Bu ay neden eksi/artı?', 'Maaşım neden bu kadar?'];
-const OFFLINE_MSG = 'AI şu an ulaşılamıyor. Plan sabittir: bu haftaki dilim hisse/tahvil açıklarına oranlı V3YL + XEON — ayrıntı ve tutarlar "Hedefe Ulaşma Planı" sayfasında, maaş rakamı "Kâr Cüzdanı"nda. Biraz sonra tekrar deneyin.';
+const OFFLINE_MSG = 'AI şu an ulaşılamıyor. Esnek alım planı: VWCE %76 / V3YL %16 / XEON %8, hedef €52.000 (31 Mart 2027). Ayrıntı Plan sekmesinde, maaş rakamı Kâr Cüzdanı\'nda. Biraz sonra tekrar deneyin.';
 
 export default function AIAdvisor() {
   const [holdings, setHoldings] = useState<any[]>([]);

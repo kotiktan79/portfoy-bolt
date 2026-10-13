@@ -35,6 +35,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
       crypto: 10,
       currency: 40,
       fund: 15,
+      safe: 5,
       eurobond: 5,
       commodity: 0,
     },
@@ -43,6 +44,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
       crypto: 20,
       currency: 20,
       fund: 10,
+      safe: 5,
       eurobond: 5,
       commodity: 5,
     },
@@ -51,6 +53,7 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
       crypto: 50,
       currency: 5,
       fund: 10,
+      safe: 0,
       eurobond: 0,
       commodity: 5,
     },
@@ -87,6 +90,9 @@ export function RebalanceModal({ allocations, onClose, onUpdateTargets }: Rebala
       currency: 'Döviz',
       fund: 'Fon',
       eurobond: 'Eurobond',
+      safe: 'Güvenli taraf',
+      money_market: 'Para Piyasası',
+      treasury_etf: 'Hazine Bonosu ETF',
       commodity: 'Emtia',
     };
     return labels[type] || type;

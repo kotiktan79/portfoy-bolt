@@ -1,28 +1,12 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { effectiveAssetType } from '../config/portfolioPolicy';
+import { ASSET_TYPE_LABELS, ASSET_TYPE_COLORS } from '../constants/assetTypes';
 
 interface AllocationChartProps {
   holdings: Holding[];
 }
-
-const COLORS = {
-  stock: '#3b82f6',
-  crypto: '#f59e0b',
-  currency: '#10b981',
-  fund: '#8b5cf6',
-  eurobond: '#ec4899',
-  commodity: '#06b6d4',
-};
-
-const ASSET_LABELS: Record<string, string> = {
-  stock: 'Hisse',
-  crypto: 'Kripto',
-  currency: 'Döviz',
-  fund: 'Fon',
-  eurobond: 'Eurobond',
-  commodity: 'Emtia',
-};
 
 export function AllocationChart({ holdings }: AllocationChartProps) {
   const fxRates = getFxRatesFromHoldings(holdings);
@@ -31,14 +15,15 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
 
   const allocationData = investmentHoldings.reduce((acc, holding) => {
     const value = holdingValueTRY(holding, fxRates);
-    const existing = acc.find((item) => item.type === holding.asset_type);
+    const type = effectiveAssetType(holding.asset_type, holding.symbol);
+    const existing = acc.find((item) => item.type === type);
 
     if (existing) {
       existing.value += value;
     } else {
       acc.push({
-        type: holding.asset_type,
-        name: ASSET_LABELS[holding.asset_type] || holding.asset_type,
+        type,
+        name: ASSET_TYPE_LABELS[type] || type,
         value: value,
       });
     }
@@ -101,7 +86,7 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
           dataKey="value"
         >
           {chartData.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[entry.type as keyof typeof COLORS] || '#64748b'} />
+            <Cell key={`cell-${index}`} fill={ASSET_TYPE_COLORS[entry.type] || '#64748b'} />
           ))}
         </Pie>
         <Tooltip content={<CustomTooltip />} />

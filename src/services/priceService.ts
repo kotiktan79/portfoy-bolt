@@ -131,6 +131,7 @@ const EURONEXT_STOCKS: { [key: string]: string } = {
   'ADYEN': 'ADYEN.AS',
   'PROSUS': 'PRX.AS',
   'V3YL': 'V3YL.DE',   // Vanguard ESG North America All Cap, EUR-quoted Xetra
+  'VWCE': 'VWCE.DE',   // Vanguard FTSE All-World (Acc), ISIN IE00BK5BQT80, EUR Xetra
 };
 
 const US_STOCKS: Record<string, string> = {

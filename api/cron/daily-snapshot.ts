@@ -482,6 +482,7 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
         SAP: 'SAP.DE', BMW: 'BMW.DE', SIE: 'SIE.DE',
         NOKIA: 'NOKIA.HE',
         V3YL: 'V3YL.DE',  // Vanguard ESG North America All Cap (EUR-quoted, Xetra)
+        VWCE: 'VWCE.DE',  // Vanguard FTSE All-World Acc, ISIN IE00BK5BQT80, EUR Xetra
       };
       // Her hisse için doğru ticker'ı topla
       const tickerMap: Record<string, string> = {};

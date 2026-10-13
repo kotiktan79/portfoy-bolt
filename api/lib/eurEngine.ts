@@ -3,7 +3,7 @@
 // Satır limiti: PostgREST max_rows=1000 tavanı .range()'i EZER → kur serisi exchange_rates_daily görünümünden okunur,
 // diğer tablolar fetchAll() ile sayfalanır.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildEurModel, summarizeEur, withdrawnMap, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
+import { buildEurModel, summarizeEur, withdrawnMap, fetchSalaryWithdrawalRows, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
 
 export { RELIABLE_FROM, INFLATION_EUR };
 export type { EurModel, EurSummary, MonthRow };
@@ -38,7 +38,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     fetchAll<any>('tx', () => supabase.from('transactions').select('transaction_date,transaction_type,quantity,price,total_amount,realized_profit,holding_id').order('transaction_date', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('cashSells', () => supabase.from('cash_transactions').select('created_at,currency,notes').eq('transaction_type', 'sell').order('created_at', { ascending: true }).order('id', { ascending: true })),
     fetchAll<any>('holdings', () => supabase.from('holdings').select('id,symbol,currency,quantity,purchase_price,cost_basis,created_at').order('id', { ascending: true })),
-    fetchAll<any>('withdrawals', () => supabase.from('salary_withdrawals').select('withdrawn_at,amount_usd').order('withdrawn_at', { ascending: true })),
+    fetchSalaryWithdrawalRows<any>(cols => fetchAll('withdrawals', () => supabase.from('salary_withdrawals').select(cols).order('withdrawn_at', { ascending: true }))),
     // PORTFÖYDEN ÇIKAN temettü/kupon (2026-09-27): ödeme günü fiyat düşüşü ZARAR sayılmasın, akış olarak düşülsün.
     // Yalnız gerçekleşmiş (is_projected=false), hedefi 'kasa' olan ve realize zinciriyle çakışmayan türler.
     fetchAll<any>('payouts', () => supabase.from('income_records')

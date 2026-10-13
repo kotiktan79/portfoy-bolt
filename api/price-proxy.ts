@@ -55,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           OR: 'OR.PA', SAN: 'SAN.PA', AIR: 'AIR.PA', SU: 'SU.PA',
           NOKIA: 'NOKIA.HE', BMW: 'BMW.DE', SIE: 'SIE.DE', ADYEN: 'ADYEN.AS', PROSUS: 'PRX.AS',
           V3YL: 'V3YL.DE',
+          VWCE: 'VWCE.DE',   // Vanguard FTSE All-World Acc, ISIN IE00BK5BQT80, EUR Xetra
         };
         const tickers = symbols.map(s => euroTickers[s] || s).join(',');
         const data = await fetchYahoo(tickers);
