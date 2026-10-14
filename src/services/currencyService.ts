@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { API_URLS } from '../config';
+import { resolveTryRate } from '../../api/lib/fxQuote';
 
 export interface ExchangeRate {
   from: string;
@@ -57,10 +58,12 @@ export async function getExchangeRate(from: string, to: string): Promise<number>
     }
 
     const fetchedRate = await fetchExchangeRateFromAPI(from, to);
-    if (fetchedRate) {
-      await saveExchangeRate(from, to, fetchedRate);
-      rateCache.set(cacheKey, { rate: fetchedRate, timestamp: Date.now() });
-      return fetchedRate;
+    const tryPair = to.toUpperCase() === 'TRY' && from.toUpperCase() !== 'TRY';
+    const rate = tryPair ? await fetchCrossCheckedTry(from, fetchedRate) : fetchedRate;
+    if (rate) {
+      await saveExchangeRate(from, to, rate);
+      rateCache.set(cacheKey, { rate, timestamp: Date.now() });
+      return rate;
     }
 
     const fb = fallbackRate(from, to);
@@ -116,6 +119,48 @@ async function fetchExchangeRateFromAPI(from: string, to: string): Promise<numbe
   }
 }
 
+async function loadRecentTry(from: string): Promise<{ rate: number; recordedAt: string }[]> {
+  try {
+    const { data, error } = await supabase
+      .from('exchange_rates')
+      .select('rate, recorded_at')
+      .eq('from_currency', from.toUpperCase())
+      .eq('to_currency', 'TRY')
+      .order('recorded_at', { ascending: false })
+      .limit(12);
+    if (error || !data) return [];
+    return data.map(r => ({ rate: Number(r.rate), recordedAt: String(r.recorded_at) }));
+  } catch {
+    return [];
+  }
+}
+
+// Saatlik yazıcı da aynı takılı birincil kaynağı basıyordu (13 Ekim: 36 satır 55.11).
+// Önce sunucu çapraz kontrolü (Yahoo); o yoksa Frankfurter. source yine 'api'.
+async function fetchCrossCheckedTry(from: string, primary: number | null): Promise<number | null> {
+  try {
+    const res = await fetch(`/api/price-proxy?type=fx&from=${encodeURIComponent(from.toUpperCase())}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const body = await res.json();
+      const rate = Number(body?.data?.rate);
+      if (body?.success && Number.isFinite(rate) && rate > 0) {
+        if (body.data.note) console.warn(`[FX] ${body.data.note}`);
+        return rate;
+      }
+    }
+  } catch { /* proxy yoksa tarayıcıdan yedek */ }
+
+  const decision = await resolveTryRate(from, await loadRecentTry(from), {
+    allowYahoo: false,
+    allowEcb: false,
+    primary,
+  });
+  if (decision.log) console.warn(`[FX] ${decision.log}`);
+  return decision.rate;
+}
+
 async function saveExchangeRate(from: string, to: string, rate: number): Promise<void> {
   try {
     await supabase.from('exchange_rates').insert([
@@ -151,7 +196,10 @@ export async function updateExchangeRates(): Promise<void> {
     for (const to of currencies) {
       if (from === to) continue;
 
-      const rate = await fetchExchangeRateFromAPI(from, to);
+      let rate = await fetchExchangeRateFromAPI(from, to);
+      if (to.toUpperCase() === 'TRY' && from.toUpperCase() !== 'TRY') {
+        rate = await fetchCrossCheckedTry(from, rate);
+      }
       if (rate) {
         rates.push({ from, to, rate });
       }

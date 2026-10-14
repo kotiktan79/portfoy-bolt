@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { fetchTefasFundPrice } from './lib/fundPrice.js';
 import { fetchTRGramGold } from './lib/gramGold.js';
+import { resolveTryRate, type FxDecision } from './lib/fxQuote.js';
+import { getServiceSupabase } from './lib/serviceSupabase.js';
 
 /**
  * Fiyat proxy — tarayıcının CORS nedeniyle doğrudan çağıramadığı API'leri proxy'ler.
@@ -81,6 +83,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json({ success: true, data: { rate } });
       }
 
+      case 'fx': {
+        // GET /api/price-proxy?type=fx&from=EUR — istemci exchange_rates yazmadan önce çapraz kontrol.
+        const from = ((req.query.from as string) || '').toUpperCase().trim();
+        if (!/^[A-Z]{3}$/.test(from) || from === 'TRY') {
+          return res.status(400).json({ success: false, error: 'from 3 harfli para birimi olmalı' });
+        }
+        const decision = await guardedFx(from);
+        if (decision.log) console.warn(`[FX] ${decision.log}`);
+        const rate = decision.rate;
+        if (rate == null || !(rate > 0)) return res.status(503).json({ success: false, error: 'FX kaynağı yanıt vermedi' });
+        return res.json({ success: true, data: { rate, note: decision.log } });
+      }
+
       case 'gold': {
         // Önce Türkiye gram altın (yerel prim). Cron ile aynı kaynak; ons spot yedek.
         const trGram = await fetchTRGramGold();
@@ -155,7 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       default:
-        return res.status(400).json({ error: 'Invalid type. Use: bist, us, european, usd, eur, gold, silver, crypto, tefas, benchmark-history' });
+        return res.status(400).json({ error: 'Invalid type. Use: bist, us, european, usd, eur, fx, gold, silver, crypto, tefas, benchmark-history' });
     }
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
@@ -196,15 +211,33 @@ async function fetchYahoo(symbols: string): Promise<any[]> {
 // 2026-09-24 (hakem bulgusu): kaynak bozulunca UYDURMA SABİT (USD 44 / EUR 51) dönüyordu ve bu rakam
 // istemci tarafından holdings.current_price'a YAZILABİLİYORDU → tek günde on binlerce euro sahte kâr,
 // üstelik maaş havuzuna giriyor. Artık sabit yok: kaynak vermezse null döner, çağıran ESKİ fiyatı korur.
-async function fetchFXRate(currency: string): Promise<number | null> {
+// 2026-10-13: birincil kur gün boyu takılı kalabiliyor. guardedFx yedek kaynakla çapraz kontrol eder.
+async function recentTry(currency: string): Promise<{ rate: number; recordedAt: string }[]> {
   try {
-    const r = await fetch(`https://open.er-api.com/v6/latest/${currency}`, { signal: AbortSignal.timeout(5000) });
-    if (r.ok) {
-      const d = await r.json();
-      const rate = Number(d.rates?.TRY);
-      if (isFinite(rate) && rate > 1) return rate;
-    }
-  } catch { /* kaynak yok */ }
+    const supabase = getServiceSupabase();
+    const { data, error } = await supabase
+      .from('exchange_rates')
+      .select('rate, recorded_at')
+      .eq('from_currency', currency)
+      .eq('to_currency', 'TRY')
+      .order('recorded_at', { ascending: false })
+      .limit(12);
+    if (error || !data) return [];
+    return data.map(r => ({ rate: Number(r.rate), recordedAt: String(r.recorded_at) }));
+  } catch {
+    return [];
+  }
+}
+
+async function guardedFx(currency: string): Promise<FxDecision> {
+  return resolveTryRate(currency, await recentTry(currency));
+}
+
+async function fetchFXRate(currency: string): Promise<number | null> {
+  const decision = await guardedFx(currency);
+  if (decision.log) console.warn(`[FX] ${decision.log}`);
+  const rate = decision.rate;
+  if (rate != null && Number.isFinite(rate) && rate > 1) return rate;
   return null;
 }
 
