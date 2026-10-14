@@ -6,6 +6,8 @@ import { syncBinanceHoldings } from '../lib/binanceSync.js';
 import { fetchTefasFundPrice } from '../lib/fundPrice.js';
 import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert.js';
 import { fetchTRGramGold } from '../lib/gramGold.js';
+import { resolveTryRate, type FxDecision } from '../lib/fxQuote.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -45,6 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const supabase = getSupabase();
+    beginFxGuard(supabase);
 
     // 1. Tüm holding'leri çek
     const { data: holdings, error: holdingsError } = await supabase
@@ -85,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const usdRateForTotal = usdFromHolding > 1 ? usdFromHolding : await fetchUsdTry();
     const eurRateForTotal = eurFromHolding > 1 ? eurFromHolding : await fetchEurTry();
     if (usdRateForTotal == null || eurRateForTotal == null || !(usdRateForTotal > 1) || !(eurRateForTotal > 1)) {
+      flushFxNotes(log);
       log.push(`KUR YOK (USD=${usdRateForTotal ?? '—'}, EUR=${eurRateForTotal ?? '—'}) — snapshot YAZILMADI (sahte rakam üretmektense gün atlanır)`);
       return res.status(200).json({ success: false, error: 'FX kaynağı yok — snapshot atlandı', log });
     }
@@ -158,12 +162,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // okur; tazelenmezse nakit bakiyeler aylar önceki elle girilmiş kurla
     // değerlenir (2026-07: USD 38.4 Nisan kaydı, gerçek 46.7).
     try {
-      const fxRows = ['USD', 'EUR', 'GBP', 'CHF', 'RON', 'RUB']
-        .map(c => ({ from_currency: c, to_currency: 'TRY', rate: ccyRate(c), recorded_at: new Date().toISOString(), source: 'api' }))
-        .filter(r => isFinite(r.rate) && r.rate > 0);
-      await supabase.from('exchange_rates').insert(fxRows);
+      // Kur serisi holding fiyatından değil, çapraz kontrollü kaynaktan yazılır.
+      // source 'api' kalır: euro motoru exchange_rates'te yalnız api/ecb okur.
+      const fxCcys = ['USD', 'EUR', 'GBP', 'CHF', 'RON', 'RUB'];
+      const fxRows: Array<{ from_currency: string; to_currency: string; rate: number; recorded_at: string; source: string }> = [];
+      for (const c of fxCcys) {
+        const guarded = await guardedTry(c);
+        const rate = guarded != null ? guarded : ccyRate(c);
+        if (Number.isFinite(rate) && rate > 0) {
+          fxRows.push({
+            from_currency: c,
+            to_currency: 'TRY',
+            rate,
+            recorded_at: new Date().toISOString(),
+            source: 'api',
+          });
+        }
+      }
+      if (fxRows.length > 0) await supabase.from('exchange_rates').insert(fxRows);
+      flushFxNotes(log);
       log.push(`FX tablosu tazelendi: ${fxRows.map(r => `${r.from_currency}=${r.rate.toFixed(3)}`).join(' ')}`);
-    } catch { /* kritik değil */ }
+    } catch (e: unknown) {
+      flushFxNotes(log);
+      log.push(`FX tablosu yazılamadı: ${e instanceof Error ? e.message : String(e)}`);
+    }
 
     const snapshotData = {
       snapshot_date: today,
@@ -740,36 +762,69 @@ async function updateEurobondPrices(supabase: any, holdings: any[], result: Pric
 // Yardımcı fonksiyonlar
 // ================================================
 
-let _usdTryCache: { value: number; ts: number } | null = null;
-let _eurTryCache: { value: number; ts: number } | null = null;
-
 // 2026-09-24 (hakem bulgusu): sabit yedek kur (USD 46,7 / EUR 53,3) KALDIRILDI. Kaynak düştüğü gece
 // bu rakam snapshot'a ve exchange_rates'e 'api' olarak yazılıyor, serveti %4-5 kaydırıp maaş havuzuna
 // sahte kâr sokuyordu. Artık kur bilinmiyorsa null döner; çağıran ya holding'deki kuru kullanır ya işlemi atlar.
-async function fetchUsdTry(): Promise<number | null> {
-  if (_usdTryCache && Date.now() - _usdTryCache.ts < 60000) return _usdTryCache.value;
+// 2026-10-13: open.er-api gün boyu 55.11'de takılı kaldı, Yahoo kapanışı 55.31'di. guardedTry
+// aynı kuru saatlerce görürse ya da yedekten %0.2 saparsa Yahoo/Frankfurter/ECB kullanır.
+let fxDb: SupabaseClient | null = null;
+const fxRecent = new Map<string, { rate: number; recordedAt: string }[]>();
+const fxResolved = new Map<string, { at: number; decision: FxDecision }>();
+const fxNotes: string[] = [];
+
+function beginFxGuard(supabase: SupabaseClient) {
+  fxDb = supabase;
+  fxRecent.clear();
+  fxResolved.clear();
+  fxNotes.length = 0;
+}
+
+function flushFxNotes(log: string[]) {
+  if (fxNotes.length === 0) return;
+  log.push(...fxNotes.splice(0, fxNotes.length));
+}
+
+async function loadRecentTry(currency: string): Promise<{ rate: number; recordedAt: string }[]> {
+  const hit = fxRecent.get(currency);
+  if (hit) return hit;
+  if (!fxDb) return [];
   try {
-    const res = await fetch('https://open.er-api.com/v6/latest/USD');
-    if (res.ok) {
-      const data = await res.json();
-      const rate = Number(data.rates?.TRY);
-      if (isFinite(rate) && rate > 1) { _usdTryCache = { value: rate, ts: Date.now() }; return rate; }
-    }
-  } catch { /* kaynak yok */ }
-  return _usdTryCache?.value ?? null;
+    const { data, error } = await fxDb
+      .from('exchange_rates')
+      .select('rate, recorded_at')
+      .eq('from_currency', currency)
+      .eq('to_currency', 'TRY')
+      .order('recorded_at', { ascending: false })
+      .limit(12);
+    if (error || !data) return [];
+    const samples = data.map(r => ({ rate: Number(r.rate), recordedAt: String(r.recorded_at) }));
+    fxRecent.set(currency, samples);
+    return samples;
+  } catch {
+    return [];
+  }
+}
+
+async function guardedTry(currency: string): Promise<number | null> {
+  const hit = fxResolved.get(currency);
+  if (hit && Date.now() - hit.at < 60_000) return hit.decision.rate;
+  const decision = await resolveTryRate(currency, await loadRecentTry(currency));
+  const rate = decision.rate;
+  if (rate != null && Number.isFinite(rate) && rate > 0) {
+    fxResolved.set(currency, { at: Date.now(), decision });
+  }
+  if (decision.log && !fxNotes.includes(decision.log)) fxNotes.push(decision.log);
+  return rate != null && Number.isFinite(rate) && rate > 0 ? rate : null;
+}
+
+async function fetchUsdTry(): Promise<number | null> {
+  const rate = await guardedTry('USD');
+  return rate != null && rate > 1 ? rate : null;
 }
 
 async function fetchEurTry(): Promise<number | null> {
-  if (_eurTryCache && Date.now() - _eurTryCache.ts < 60000) return _eurTryCache.value;
-  try {
-    const res = await fetch('https://open.er-api.com/v6/latest/EUR');
-    if (res.ok) {
-      const data = await res.json();
-      const rate = Number(data.rates?.TRY);
-      if (isFinite(rate) && rate > 1) { _eurTryCache = { value: rate, ts: Date.now() }; return rate; }
-    }
-  } catch { /* kaynak yok */ }
-  return _eurTryCache?.value ?? null;
+  const rate = await guardedTry('EUR');
+  return rate != null && rate > 1 ? rate : null;
 }
 
 // Tüm para birimlerinin USD karşılıkları (1 USD = rates[CCY]). Tek istek,
