@@ -329,6 +329,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     if (isUpdatingRef.current) return;
     isUpdatingRef.current = true;
     try {
+      // TEFAS NAV günde bir kez cron'da yazılır (api/cron/daily-snapshot).
+      // Bu 5 dakikalık tur fon ve eurobond'a dokunmaz.
       const holdingsToAutoUpdate = holdingsToUpdate.filter(
         h => !h.manual_price && h.asset_type !== 'fund' && h.asset_type !== 'eurobond'
       );
@@ -343,6 +345,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       const prices = await fetchMultiplePrices(symbols);
 
       const updates = holdingsToUpdate.map(async (holding): Promise<Holding> => {
+        // Fon / eurobond NAV'ı bu turda yazılmaz (TEFAS: günlük cron).
         if (holding.manual_price || holding.asset_type === 'fund' || holding.asset_type === 'eurobond') {
           return holding;
         }
