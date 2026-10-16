@@ -3,7 +3,7 @@ import { sendTelegram } from '../lib/telegram.js';
 import { getServiceSupabase } from '../lib/serviceSupabase.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
-import { fetchTefasFundPrice } from '../lib/fundPrice.js';
+import { fetchTefasFundPrice, planFundAutoPrice, tefasCodeForSymbol } from '../lib/fundPrice.js';
 import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert.js';
 import { fetchTRGramGold } from '../lib/gramGold.js';
 import { resolveTryRate, type FxDecision } from '../lib/fxQuote.js';
@@ -315,9 +315,16 @@ interface PriceResult {
 async function updateAllPrices(supabase: any, holdings: any[], log: string[]): Promise<PriceResult> {
   const result: PriceResult = { updated: 0, failed: 0, details: {} };
 
+  // Eşlenmiş TEFAS fonları tipinden bağımsız (fund / money_market) buradan gider.
+  // Böylece GPY1PPF gibi sembolü fon kodu olmayan satır da günlük NAV alır
+  // ve başka bir fiyat kaynağıyla ikinci kez yazılmaz.
+  const tefasMapped = holdings.filter(h => tefasCodeForSymbol(h.symbol));
+  const mappedIds = new Set(tefasMapped.map(h => h.id));
+  const rest = holdings.filter(h => !mappedIds.has(h.id));
+
   // Holding'leri tipe göre grupla
   const byType: Record<string, any[]> = {};
-  for (const h of holdings) {
+  for (const h of rest) {
     const type = h.asset_type || 'unknown';
     if (!byType[type]) byType[type] = [];
     byType[type].push(h);
@@ -337,6 +344,9 @@ async function updateAllPrices(supabase: any, holdings: any[], log: string[]): P
   }
   if (byType.commodity) {
     promises.push(updateCommodityPrices(supabase, byType.commodity, result, log));
+  }
+  if (tefasMapped.length) {
+    promises.push(updateFundPrices(supabase, tefasMapped, result, log));
   }
   if (byType.fund) {
     promises.push(updateFundPrices(supabase, byType.fund, result, log));
@@ -659,36 +669,53 @@ async function updateCommodityPrices(supabase: any, holdings: any[], result: Pri
 }
 
 async function updateFundPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
-  // Önce TEFAS (hangikredi kaynağı) — TR fon kodları Yahoo'da yok. Bulunamazsa
-  // Yahoo denenir (yabancı fon ihtimali). manual_price=true olana dokunulmaz.
+  // TR fonları: sembol → TEFAS kodu, sonra fonFiyatBilgiGetir (yoksa fonBilgiGetir).
+  // Eşlenmemiş kod Yahoo'ya düşer (yabancı fon). Eşlenmemiş manual_price satırına
+  // dokunulmaz. Eşlenmiş fonda fiyat yazılırsa manual_price kapanır; fiyat
+  // alınamazsa veya bant dışındaysa satır (kilit dahil) olduğu gibi kalır.
   for (const h of holdings) {
-    if (h.manual_price) {
+    const mappedCode = tefasCodeForSymbol(h.symbol);
+    if (h.manual_price && !mappedCode) {
       result.details[h.symbol] = h.current_price;
       continue;
     }
     try {
-      let price: number | null = null;
-      const tefas = await fetchTefasFundPrice(h.symbol);
+      let next: number | null = null;
+      let label = '';
+      const tefas = await fetchTefasFundPrice(mappedCode ?? h.symbol);
       if (tefas) {
-        price = tefas.price;
-        log.push(`${h.symbol}: TEFAS ${price}`);
-      } else {
+        next = tefas.price;
+        const code = mappedCode ?? h.symbol;
+        label = `TEFAS ${code}${tefas.asOf ? ` ${tefas.asOf}` : ''}${tefas.name ? ` ${tefas.name}` : ''}`;
+      } else if (!mappedCode) {
         const prices = await fetchYahooPrices(h.symbol);
-        price = prices[h.symbol] || null;
+        next = prices[h.symbol] || null;
+        if (next) label = 'Yahoo';
       }
-      // Parse hatası / yanlış fon guard'ı: tek günde %25+ sapma yazılmaz
-      const old = Number(h.current_price) || 0;
-      if (price && old > 0 && Math.abs(price - old) / old > 0.25) {
-        log.push(`${h.symbol}: fon anomali reddedildi (${old} → ${price})`);
-        price = null;
-      }
-      if (price) {
-        await supabase.from('holdings').update({ current_price: price, updated_at: new Date().toISOString() }).eq('id', h.id);
-        result.updated++;
-        result.details[h.symbol] = price;
-      } else {
+      const plan = planFundAutoPrice({
+        symbol: h.symbol,
+        manualPrice: !!h.manual_price,
+        oldPrice: Number(h.current_price) || 0,
+        nextPrice: next,
+      });
+      if (!plan.write) {
+        if (plan.reason === 'daily-anomaly' || plan.reason === 'unlock-anomaly') {
+          log.push(`${h.symbol}: fon anomali reddedildi (${h.current_price} → ${next})`);
+        } else if (mappedCode) {
+          log.push(`${h.symbol}: TEFAS ${mappedCode} alınamadı — fiyat ve manuel kilit duruyor`);
+        }
         result.failed++;
+        continue;
       }
+      const patch: { current_price: number; updated_at: string; manual_price?: boolean } = {
+        current_price: plan.price,
+        updated_at: new Date().toISOString(),
+      };
+      if (plan.clearManual) patch.manual_price = false;
+      await supabase.from('holdings').update(patch).eq('id', h.id);
+      result.updated++;
+      result.details[h.symbol] = plan.price;
+      log.push(`${h.symbol}: ${label} ${plan.price}${plan.clearManual ? ' — manual_price kapatıldı' : ''}`);
     } catch {
       result.failed++;
     }

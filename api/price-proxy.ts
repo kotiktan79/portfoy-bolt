@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { fetchTefasFundPrice } from './lib/fundPrice.js';
+import { fetchTefasFundPrice, tefasCodeForSymbol } from './lib/fundPrice.js';
 import { fetchTRGramGold } from './lib/gramGold.js';
 import { resolveTryRate, type FxDecision } from './lib/fxQuote.js';
 import { getServiceSupabase } from './lib/serviceSupabase.js';
@@ -153,19 +153,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'tefas': {
         // GET /api/price-proxy?type=tefas&code=IPV
-        // Yeni (2025+) resmi TEFAS API'si üzerinden (bkz. api/lib/fundPrice.ts).
-        const code = ((req.query.code as string) || '').toUpperCase().trim();
-        if (!code) return res.status(400).json({ error: 'code parametresi gerekli' });
+        // GET /api/price-proxy?type=tefas&code=GPY1PPF  (portföy sembolü → GTL)
+        // Günlük seri: fonFiyatBilgiGetir; yedek: fonBilgiGetir (bkz. api/lib/fundPrice.ts).
+        const requested = ((req.query.code as string) || '').toUpperCase().trim();
+        if (!requested) return res.status(400).json({ error: 'code parametresi gerekli' });
 
-        const quote = await fetchTefasFundPrice(code);
+        const quote = await fetchTefasFundPrice(requested);
+        const tefasCode = tefasCodeForSymbol(requested) ?? requested;
         if (!quote) {
-          return res.json({ success: false, code, error: 'Fon fiyatı alınamadı (kod hatalı ya da TEFAS erişilemez)' });
+          return res.json({ success: false, code: requested, tefasCode, error: 'Fon fiyatı alınamadı (kod hatalı ya da TEFAS erişilemez)' });
         }
         return res.json({
           success: true,
-          code,
+          code: requested,
+          tefasCode,
           price: quote.price,
           name: quote.name,
+          asOf: quote.asOf,
         });
       }
 

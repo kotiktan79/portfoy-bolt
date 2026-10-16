@@ -658,7 +658,7 @@ export async function fetchRealTimePrice(symbol: string, assetType: AssetType): 
         break;
       case 'fund':
       case 'eurobond':
-        // No real-time API supports fund/eurobond prices.
+        // TEFAS fon NAV'ı istemciden yazılmaz; günlük cron fonFiyatBilgiGetir ile günceller.
         // Return cached price if available; otherwise leave price as null
         // so the fallback logic below can provide a default.
         if (cached) {
