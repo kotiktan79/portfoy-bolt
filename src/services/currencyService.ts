@@ -351,11 +351,10 @@ export async function normalizeToBaseCurrency(
 
   for (const holding of holdings) {
     const currency = holding.currency || detectCurrency(holding.symbol, holding.asset_type);
-    const purchaseCurrency = holding.purchase_currency || currency;
 
     const pnlData = await calculatePnLWithCurrency(
       holding.purchase_price,
-      purchaseCurrency,
+      currency,
       holding.current_price,
       currency,
       holding.quantity,
@@ -365,7 +364,6 @@ export async function normalizeToBaseCurrency(
     normalized.push({
       ...holding,
       currency,
-      purchase_currency: purchaseCurrency,
       normalized_invested: pnlData.investedAmount,
       normalized_current: pnlData.currentValue,
       normalized_pnl: pnlData.pnl,

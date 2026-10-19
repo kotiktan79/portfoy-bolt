@@ -115,7 +115,13 @@ describe('Ev Parası allocation dışıdır', () => {
     expect(isHouseMoney({ symbol: 'Ev Parasi', asset_type: 'cash', currency: 'TRY' })).toBe(true);
     expect(isHouseMoney({ symbol: 'EV PARASI', asset_type: 'cash', currency: 'TRY', price_notes: '' })).toBe(true);
     expect(isHouseMoney({ symbol: 'KASA', asset_type: 'cash', currency: 'TRY' })).toBe(false);
+    expect(isHouseMoney({ symbol: 'TRY', asset_type: 'currency', price_notes: 'Ev Parası nakit' })).toBe(true);
+    expect(isHouseMoney({ symbol: 'try', asset_type: 'currency', price_notes: '  ev parasi' })).toBe(true);
+    expect(isHouseMoney({ symbol: 'TRY', asset_type: 'currency', price_notes: 'günlük kur' })).toBe(false);
+    expect(isHouseMoney({ symbol: 'TRY', asset_type: 'currency' })).toBe(false);
     expect(isHouseMoney({ symbol: 'ALT', asset_type: 'stock', house_money: true })).toBe(true);
+    expect(allocationClassFor({ symbol: 'TRY', asset_type: 'currency', price_notes: 'Ev Parası' })).toBeNull();
+    expect(allocationClassFor({ symbol: 'TRY', asset_type: 'currency' })).toBe('currency');
     expect(allocationClassFor({ symbol: 'GPY1PPF', asset_type: 'fund', price_notes: 'Ev Parası' })).toBeNull();
     expect(allocationClassFor({ symbol: 'GPA', asset_type: 'fund' })).toBe('fund');
     expect(allocationClassFor({ symbol: 'KASA', asset_type: 'cash' })).toBeNull();
@@ -143,6 +149,15 @@ describe('Ev Parası allocation dışıdır', () => {
     expect(reb.map(r => r.symbol)).not.toContain('GPY1PPF');
     expect(reb.map(r => r.symbol)).not.toContain('Ev Parası');
     expect(reb.map(r => r.symbol)).toContain('GPA');
+
+    const tryCash = policySnapshot([
+      H({ symbol: 'EURO', asset_type: 'currency', quantity: 1, current_price: 50 }),
+      H({ symbol: 'TRY', asset_type: 'currency', quantity: 8000, current_price: 1, price_notes: 'Ev Parası nakit', currency: 'TRY' }),
+      H({ symbol: 'GPA', asset_type: 'fund', quantity: 1, current_price: 100 }),
+    ], new Date('2026-10-19T12:00:00Z'));
+    expect(tryCash.houseMoneyTRY).toBeCloseTo(8000, 4);
+    expect(tryCash.totalTRY).toBeCloseTo(150, 4);
+    expect(tryCash.rows.find(r => r.key === 'currency')!.valueEUR).toBeCloseTo(1, 4);
 
     const x = analyzeXRay(holdings.filter(h => h.symbol !== 'KASA'));
     const fund = x.allocationDrift.find(d => d.asset_type === 'fund');

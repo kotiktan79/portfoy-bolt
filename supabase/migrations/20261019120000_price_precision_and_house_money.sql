@@ -44,7 +44,7 @@ alter table public.holdings
 comment on column public.holdings.house_money is
   'Ev Parası. Hedef dağılım ve dengeleme dışında, kasadan ayrı gösterilir.';
 
--- GPY1PPF (fon, notu "Ev Parası" ile başlar) ve TRY nakit "Ev Parası".
+-- GPY1PPF (fon, notu "Ev Parası" ile başlar) ve sembolü "Ev Parası" olan nakit.
 update public.holdings
    set house_money = true,
        updated_at = now()
@@ -65,7 +65,17 @@ update public.holdings
      )
    );
 
+-- Ev Parası nakdi: sembol TRY, tipi currency, notu "Ev Parası" ile başlar.
+update public.holdings
+   set house_money = true,
+       updated_at = now()
+ where coalesce(house_money, false) = false
+   and upper(btrim(symbol)) = 'TRY'
+   and lower(asset_type) = 'currency'
+   and coalesce(price_notes, '') ~* '^[[:space:]]*Ev Paras[ıiİI]';
+
 -- REVOLUT-ROBO: manuel EUR değer €8.762. İkinci kez çalışırsa (currency zaten EUR) dokunmaz.
+-- purchase_currency kolonu prod'da yok; currency yeter.
 -- EURO kuru yoksa sessizce TRY'de bırakma.
 do $$
 declare
@@ -93,7 +103,6 @@ end $$;
 
 update public.holdings as h
    set currency = 'EUR',
-       purchase_currency = 'EUR',
        current_price = round((8762::numeric / h.quantity), 8),
        purchase_price = round((h.purchase_price / fx.rate), 8),
        manual_price = true,
