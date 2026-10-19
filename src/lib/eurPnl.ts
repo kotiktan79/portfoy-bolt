@@ -7,7 +7,8 @@
 // (cash_balances) portföy DIŞINDA. Enflasyon varsayılanı %3/yıl, sahip ayardan değiştirir.
 //
 //   g_t (EUR) = V_t/e_t − V_{t−1}/e_{t−1} − F_t/e_t
-//   V = snapshot total_value (TL), e = o günün EUR/TRY kuru
+//   V = snapshot total_value (TL). e = o günün snapshot anındaki EURO fiyatı
+//   (price_history, created_at + 10 dk). Yoksa exchange_rates_daily.
 //   F_t = o gün portföye giren/çıkan para (TL) = Δmaliyet − kurDrift − realize
 //     · Δmaliyet: total_investment farkı (alım maliyeti girer, satışta lot maliyeti çıkar)
 //     · kurDrift: döviz cinsi pozisyonların maliyeti her gün o günkü kurla TL'ye çevrildiği
@@ -45,6 +46,46 @@ export function dayInTZ(d: Date | string, tz: string = TZ): string {
 }
 
 export interface SnapPoint { date: string; totalValue: number; totalInvestment: number; createdAt?: string }
+
+/** closePricesOn ile aynı pencere: gün başı (UTC) … snapshot created_at + 10 dk. Son kayıt kazanır. */
+export const SNAPSHOT_FX_GRACE_MS = 10 * 60 * 1000;
+
+export function priceAtSnapshot(
+  rows: Array<{ symbol: string; price: number | string; recorded_at: string }>,
+  symbols: string[],
+  day: string,
+  createdAt?: string | null,
+): number | null {
+  const baseMs = createdAt ? new Date(createdAt).getTime() : new Date(`${day}T18:00:00Z`).getTime();
+  if (!Number.isFinite(baseMs)) return null;
+  const until = baseMs + SNAPSHOT_FX_GRACE_MS;
+  const start = new Date(`${day}T00:00:00.000Z`).getTime();
+  const want = new Set(symbols.map(s => s.toUpperCase()));
+  let bestT = -Infinity;
+  let best: number | null = null;
+  for (const r of rows) {
+    if (!want.has(String(r.symbol || '').toUpperCase())) continue;
+    const t = new Date(r.recorded_at).getTime();
+    if (!Number.isFinite(t) || t < start || t > until) continue;
+    const p = Number(r.price);
+    if (!Number.isFinite(p) || p <= 1) continue;
+    if (t >= bestT) { bestT = t; best = p; }
+  }
+  return best;
+}
+
+function snapshotFxOverrides(
+  snaps: SnapPoint[],
+  rows: Array<{ symbol: string; price: number | string; recorded_at: string }>,
+  symbols: string[],
+): Array<{ recorded_at: string; rate: number }> {
+  const out: Array<{ recorded_at: string; rate: number }> = [];
+  for (const s of snaps) {
+    const px = priceAtSnapshot(rows, symbols, s.date, s.createdAt);
+    if (px != null) out.push({ recorded_at: s.date, rate: px });
+  }
+  return out;
+}
 export interface RateSeries { rateAt(date: string): number }
 
 /** minRate: geçerli sayılan alt sınır. Varsayılan 1 — EUR/USD/TRY kurları için "bozuk 1.0 yer tutucusunu at" demek.
@@ -381,8 +422,10 @@ export async function fetchAll<T>(name: string, build: () => any): Promise<T[]> 
 export interface EurModelInput {
   /** snapshot_date ASC, created_at DESC sıralı (gün içi son kayıt önce) — sadece reliableFrom ve sonrası */
   snapshots: Array<{ snapshot_date: string; total_value: number | string | null; total_investment: number | string | null; created_at?: string | null }>;
-  eurRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
-  usdRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api'
+  eurRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api' — gün sonu yedeği
+  usdRates: Array<{ recorded_at: string; rate: number | string }>;   // source='api' — gün sonu yedeği
+  /** price_history EURO/USD. Varsa o günün kuru, snapshot anındaki fiyattır (exchange_rates_daily'nin ~22:35 baskısı değil). */
+  fxCloses?: Array<{ symbol: string; price: number | string; recorded_at: string }> | null;
   /** TRY/USD/EUR dışı birimlerin TL kurları (RUB/RON/GBP/CHF). Yoksa o birimdeki kayıt 0 sayılır ve health'te uyarı çıkar. */
   otherRates?: Record<string, Array<{ recorded_at: string; rate: number | string }>> | null;
   transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null; currency?: string | null }>;
@@ -415,7 +458,13 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     return { series: makeRateSeries(Array.from(m, ([date, rate]) => ({ date, rate })), fb, minRate), lastDay: Array.from(m.keys()).sort().pop() || '' };
   };
   // Boş EUR serisinde usd×1,15 YOK. Seri varsa makeRateSeries son gerçek kuru taşır.
-  const E = toSeries(inp.eurRates, Number.NaN), U = toSeries(inp.usdRates, inp.usdNow);
+  // Snapshot toplamı 18:00 UTC'de EURO/USD holding fiyatıyla kurulur. exchange_rates_daily
+  // UTC gününün son kurunu (~22:35) verdiği için servet o kurla geri çevrilince sahte günlük kâr doğar.
+  // price_history'de snapshot anı + 10 dk içindeki EURO/USD fiyatı o günün kurudur; yoksa günlük kur durur.
+  const closes = inp.fxCloses || [];
+  const eurRows = [...inp.eurRates, ...snapshotFxOverrides(snaps, closes, ['EURO', 'EUR'])];
+  const usdRows = [...inp.usdRates, ...snapshotFxOverrides(snaps, closes, ['USD'])];
+  const E = toSeries(eurRows, Number.NaN), U = toSeries(usdRows, inp.usdNow);
   const eur = E.series, usd = U.series;
   // TRY/USD/EUR dışı birimler (RUB/RON/GBP/CHF) — varsa kendi serisiyle, yoksa 'bilinmeyen' listesine
   const otherSeries = new Map<string, RateSeries>();
@@ -663,6 +712,7 @@ export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | nul
     V += q * cp * f; I += q * pp * f;
   }
   const lastDaily = model.daily[model.daily.length - 1];
+  // eurLast / usdLast = son snapshot'ın kendi kuru (price_history EURO/USD, yoksa günlük seri). Canlı EUR kuru değil.
   const eurLast = lastDaily?.eurRate || inp.eurNow, usdLast = lastDaily?.usdRate || inp.usdNow;
   // eurGainBetween ile aynı cebir, doğrudan (aynı gün içinde de çalışsın diye tarih yerine kurlar verilir):
   //   g = V/e_now − V0/e_0 − (ΔI − drift − realize)/e_now ;  drift = Σ maliyet_native × (kur_now − kur_0)

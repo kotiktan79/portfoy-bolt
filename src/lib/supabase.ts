@@ -26,6 +26,8 @@ export interface Holding {
   manual_price?: boolean;
   manual_price_updated_at?: string;
   price_notes?: string;
+  /** Ev Parası: hedef dağılım ve dengeleme dışında. */
+  house_money?: boolean;
   maturity_date?: string | null;
   cost_basis?: number;
   unrealized_pnl?: number;

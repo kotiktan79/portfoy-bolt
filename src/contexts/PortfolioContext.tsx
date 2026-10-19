@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useRef, useMemo, useCal
 import { supabase, Holding, AssetType } from '../lib/supabase';
 import { holdingValueTRY, holdingCostTRY, getFxRatesFromHoldings, FxRates } from '../lib/fx';
 import { priceWriteGuard } from '../lib/priceGuard';
+import { isEtfQuoteHolding } from '../lib/etfQuote';
+import { isManualEurValue } from '../lib/manualPrice';
 import {
   fetchMultiplePrices,
   isFallbackPrice,
@@ -331,8 +333,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     try {
       // TEFAS NAV günde bir kez cron'da yazılır (api/cron/daily-snapshot).
       // Bu 5 dakikalık tur fon ve eurobond'a dokunmaz.
+      // Fon, kotasyon ETF (XEON/IB01 dahil) ve manuel EUR değer (REVOLUT-ROBO) bu turda yazılmaz.
       const holdingsToAutoUpdate = holdingsToUpdate.filter(
-        h => !h.manual_price && h.asset_type !== 'fund' && h.asset_type !== 'eurobond'
+        h => !h.manual_price && !isManualEurValue(h.symbol) && h.asset_type !== 'fund' && !isEtfQuoteHolding(h.asset_type, h.symbol)
       );
 
       if (holdingsToAutoUpdate.length === 0) return;
@@ -346,7 +349,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
       const updates = holdingsToUpdate.map(async (holding): Promise<Holding> => {
         // Fon / eurobond NAV'ı bu turda yazılmaz (TEFAS: günlük cron).
-        if (holding.manual_price || holding.asset_type === 'fund' || holding.asset_type === 'eurobond') {
+        if (holding.manual_price || isManualEurValue(holding.symbol) || holding.asset_type === 'fund' || isEtfQuoteHolding(holding.asset_type, holding.symbol)) {
           return holding;
         }
         // KONTRAT: priceService artık holding.currency cinsinden ham fiyat döndürür

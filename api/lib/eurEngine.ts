@@ -29,7 +29,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
   const OTHER_CCY = ['RUB', 'RON', 'GBP', 'CHF'];   // TRY/USD/EUR dışı; exchange_rates_daily'de mevcut
   const rateQ = (ccy: string) => () => supabase.from('exchange_rates_daily').select('day,rate')
     .eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM).order('day', { ascending: true });
-  const [snaps, eurRates, usdRates, otherRates, txs, cashSells, holds, withdrawals, payouts] = await Promise.all([
+  const [snaps, eurRates, usdRates, otherRates, txs, cashSells, holds, withdrawals, payouts, fxCloses] = await Promise.all([
     fetchAll<any>('snapshots', () => supabase.from('portfolio_snapshots').select('snapshot_date,total_value,total_investment,created_at').gte('snapshot_date', RELIABLE_FROM)
       .order('snapshot_date', { ascending: true }).order('created_at', { ascending: false }).order('id', { ascending: true })),
     fetchAll<{ day: string; rate: number }>('eur', rateQ('EUR')),
@@ -49,6 +49,10 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
       .eq('is_projected', false).eq('destination', 'kasa')
       .in('income_type', ['dividend', 'coupon'])   // interest/staking DIŞARIDA: kasa faizi portföy değerini düşürmez → sahte kâr olurdu (hakem 2026-09-27)
       .order('income_date', { ascending: true })),
+    // Snapshot 18:00 UTC'de EURO/USD fiyatını kullanır. Gün sonu exchange_rates_daily (~22:35) değil.
+    fetchAll<{ symbol: string; price: number; recorded_at: string }>('fxClose', () => supabase.from('price_history')
+      .select('symbol,price,recorded_at').in('symbol', ['EURO', 'EUR', 'USD']).gte('recorded_at', RELIABLE_FROM)
+      .order('recorded_at', { ascending: true }).order('id', { ascending: true })),
   ]);
   const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : null;
   if (usdNow == null) throw new Error('eurEngine: USD/TRY kuru seriden bulunamadı — ölçüm yapılmadı (sabit yedek kur yasak)');
@@ -60,7 +64,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     annualInflation = INFLATION_EUR;
   }
   return buildEurModel({
-    snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates),
+    snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates), fxCloses,
     // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın
     otherRates: Object.fromEntries(OTHER_CCY.map((c, i) => [c, dailyRows(otherRates[i])])),
     transactions: txs, cashSells, holdings: holds,

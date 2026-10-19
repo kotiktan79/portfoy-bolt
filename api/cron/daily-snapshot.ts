@@ -5,6 +5,8 @@ import { requireCronAuth } from '../lib/auth.js';
 import { syncBinanceHoldings } from '../lib/binanceSync.js';
 import { fetchTefasFundPrice, planFundAutoPrice, tefasCodeForSymbol } from '../lib/fundPrice.js';
 import { convertQuote, guessQuoteCcy } from '../lib/quoteConvert.js';
+import { ETF_YAHOO, isEtfQuoteHolding } from '../../src/lib/etfQuote.js';
+import { isManualEurValue } from '../../src/lib/manualPrice.js';
 import { fetchTRGramGold } from '../lib/gramGold.js';
 import { resolveTryRate, type FxDecision } from '../lib/fxQuote.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -321,10 +323,15 @@ async function updateAllPrices(supabase: any, holdings: any[], log: string[]): P
   const tefasMapped = holdings.filter(h => tefasCodeForSymbol(h.symbol));
   const mappedIds = new Set(tefasMapped.map(h => h.id));
   const rest = holdings.filter(h => !mappedIds.has(h.id));
+  // XEON (money_market) ve IB01 (treasury_etf) 2026-10-13'ten beri eurobond değil.
+  // Yalnız eurobond kovasına bakmak fiyatı donduruyordu. Kotasyon haritasındakiler buradan gider.
+  const etfHoldings = rest.filter(h => isEtfQuoteHolding(h.asset_type, h.symbol));
+  const etfIds = new Set(etfHoldings.map(h => h.id));
 
   // Holding'leri tipe göre grupla
   const byType: Record<string, any[]> = {};
   for (const h of rest) {
+    if (etfIds.has(h.id)) continue;
     const type = h.asset_type || 'unknown';
     if (!byType[type]) byType[type] = [];
     byType[type].push(h);
@@ -351,8 +358,8 @@ async function updateAllPrices(supabase: any, holdings: any[], log: string[]): P
   if (byType.fund) {
     promises.push(updateFundPrices(supabase, byType.fund, result, log));
   }
-  if (byType.eurobond) {
-    promises.push(updateEurobondPrices(supabase, byType.eurobond, result, log));
+  if (etfHoldings.length) {
+    promises.push(updateEurobondPrices(supabase, etfHoldings, result, log));
   }
 
   await Promise.allSettled(promises);
@@ -459,7 +466,7 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
       const prices = await fetchYahooPrices(symbols);
       for (const h of bistHoldings) {
         // manual_price=true olan pozisyonları kullanıcı kilitlemiş, dokunma
-        if (h.manual_price) {
+        if (h.manual_price || isManualEurValue(h.symbol)) {
           result.details[h.symbol] = h.current_price;
           continue;
         }
@@ -526,7 +533,7 @@ async function updateStockPrices(supabase: any, holdings: any[], result: PriceRe
 
       for (const h of intlHoldings) {
         // manual_price=true ise dokunma
-        if (h.manual_price) {
+        if (h.manual_price || isManualEurValue(h.symbol)) {
           result.details[h.symbol] = h.current_price;
           continue;
         }
@@ -722,21 +729,6 @@ async function updateFundPrices(supabase: any, holdings: any[], result: PriceRes
   }
 }
 
-// Eurobond/Treasury ETF'leri için Yahoo ticker haritası (hepsi USD-quoted).
-// Holding'in currency'sine göre USD fiyatı çevrilir.
-const EUROBOND_ETF_YAHOO: Record<string, string> = {
-  IB01: 'IB01.L',  // iShares USD Treasury 0-1yr Acc. Xetra IB01.DE yok; Londra USD kote, convertQuote EUR'ya çevirir.
-  IBTA: 'IBTA.L',   // iShares USD Treasury 1-3yr
-  IBTL: 'IBTL.L',   // iShares USD Treasury 20+yr
-  CBU0: 'CBU0.L',   // iShares USD Treasury 1-3yr Dist
-  TLT: 'TLT',
-  GOVT: 'GOVT',
-  SGOV: 'SGOV',
-  IEF: 'IEF',
-  SHY: 'SHY',
-  XEON: 'XEON.DE',   // Xtrackers II EUR Overnight Rate Swap (Acc) — Xetra, EURO kote
-};
-
 async function updateEurobondPrices(supabase: any, holdings: any[], result: PriceResult, log: string[]) {
   let auto = 0;
   for (const h of holdings) {
@@ -746,7 +738,7 @@ async function updateEurobondPrices(supabase: any, holdings: any[], result: Pric
       continue;
     }
     const sym = h.symbol.toUpperCase();
-    const yahooTicker = EUROBOND_ETF_YAHOO[sym];
+    const yahooTicker = ETF_YAHOO[sym];
     if (!yahooTicker) {
       // Haritada yoksa manuel kabul et, dokunma
       result.details[h.symbol] = h.current_price;
@@ -782,7 +774,7 @@ async function updateEurobondPrices(supabase: any, holdings: any[], result: Pric
       result.failed++;
     }
   }
-  log.push(`Eurobond: ${holdings.length} pozisyon (${auto} otomatik güncellendi)`);
+  log.push(`Kotasyon ETF: ${holdings.length} pozisyon (${auto} otomatik güncellendi)`);
 }
 
 // ================================================

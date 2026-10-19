@@ -20,7 +20,7 @@ export function RebalancePlan({ holdings, totalCashValue }: { holdings: Holding[
         <Target size={13} /> Dengeleme
       </div>
       <p className="text-[11px] text-slate-500 dark:text-gray-400 mb-3">
-        Portföy {fmtEUR(model.totalEUR)} (kasa hariç). Bant dışına çıkınca uyarı; somut al/sat yalnız sapma ±10 puanı geçince.
+        Portföy {fmtEUR(model.totalEUR)} (kasa ve Ev Parası hariç). Bant dışına çıkınca uyarı; somut al/sat yalnız sapma ±10 puanı geçince.
       </p>
       {!(getFxRatesFromHoldings(holdings).eur > 0) && (
         <p className="text-[11px] text-amber-700 dark:text-amber-300 mb-2">Euro kuru yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.</p>
@@ -75,7 +75,7 @@ export function RebalancePlan({ holdings, totalCashValue }: { holdings: Holding[
       )}
 
       <p className="text-[10px] text-slate-400 dark:text-gray-500 mt-3 leading-relaxed">
-        Yeşil şerit bant, siyah çizgi hedef, nokta bugünkü pay. Kasa {fmtEUR(model.kasaEUR)} portföy dışıdır, bu hesaba girmez. Altın fiziki: fazla ise yeni alım yok, seyrelt.
+        Yeşil şerit bant, siyah çizgi hedef, nokta bugünkü pay. Kasa {fmtEUR(model.kasaEUR)} portföy dışıdır, bu hesaba girmez. Ev Parası {fmtEUR(model.houseMoneyEUR)} ayrıdır, hedefe girmez. Altın fiziki: fazla ise yeni alım yok, seyrelt.
       </p>
     </div>
   );

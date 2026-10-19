@@ -1,6 +1,6 @@
 import { Holding } from '../lib/supabase';
 import { INFLATION_EUR } from '../lib/eurPnl';
-import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassOf, effectiveAssetType, CLASS_LABELS, type AllocationClass } from '../config/portfolioPolicy';
+import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassFor, isHouseMoney, effectiveAssetType, CLASS_LABELS, type AllocationClass } from '../config/portfolioPolicy';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 
 export interface XRayFinding {
@@ -413,14 +413,17 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
 
   // ── 9. Asset Class Hedef Sapması (Drift) ─────────────────────
   const valueByClass: Record<string, number> = {};
+  let houseValue = 0;
   for (const p of positions) {
-    const cls = allocationClassOf(p.asset_type, p.symbol);
+    if (isHouseMoney(p)) { houseValue += p.value; continue; }
+    const cls = allocationClassFor(p);
     if (!cls) continue;
     valueByClass[cls] = (valueByClass[cls] || 0) + p.value;
   }
+  const allocBase = totalValue - houseValue;
   const allocationDrift: AllocationDrift[] = (Object.keys(DEFAULT_TARGETS) as AllocationClass[]).map(at => {
     const value = valueByClass[at] || 0;
-    const currentPct = (value / totalValue) * 100;
+    const currentPct = allocBase > 0 ? (value / allocBase) * 100 : 0;
     const targetPct = DEFAULT_TARGETS[at];
     return { asset_type: at, value, currentPct, targetPct, drift: currentPct - targetPct };
   }).filter(d => d.currentPct > 0.5 || d.targetPct > 0);
