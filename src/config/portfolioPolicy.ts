@@ -83,7 +83,8 @@ function isEvLabel(s: string, prefix: boolean): boolean {
 
 /**
  * Ev Parası: hedef ve dengeleme dışı (kasa gibi), ekranda ayrı satır.
- * Kalıcı işaret holdings.house_money. İşaret yokken de GPY1PPF notu ve "Ev Parası" nakdi tanınır.
+ * Kalıcı işaret holdings.house_money. İşaret yokken de GPY1PPF notu,
+ * sembolü "Ev Parası" olan nakit ve notu "Ev Parası" ile başlayan TRY currency satırı tanınır.
  */
 export function isHouseMoney(h: {
   symbol?: string | null;
@@ -100,6 +101,7 @@ export function isHouseMoney(h: {
   if (sym.trim().toUpperCase() === 'GPY1PPF' && isEvLabel(notes, true)) return true;
   if (isEvLabel(sym, false)) return true;
   if (type === 'cash' && cur === 'TRY' && (isEvLabel(sym, true) || isEvLabel(notes, true))) return true;
+  if (sym.trim().toUpperCase() === 'TRY' && type === 'currency' && isEvLabel(notes, true)) return true;
   return false;
 }
 
