@@ -4,7 +4,7 @@
 // fonksiyon); AI rakam ÜRETMEZ, açıklar. Prompt'ta elle yazılmış rakam YOK — hepsi motordan/politikadan türetilir.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadEurModel, fetchAll, fmtEUR, fmtSignedEUR, monthLabelTR, type EurSummary } from './eurEngine.js';
-import { TARGET_ALLOCATION, allocationClassOf, CLASS_LABELS, type AllocationClass } from '../../src/config/portfolioPolicy.js';
+import { TARGET_ALLOCATION, allocationClassFor, isHouseMoney, CLASS_LABELS, type AllocationClass } from '../../src/config/portfolioPolicy.js';
 import { POOL_CAP_EUR, MONTHLY_CAP_EUR, SALARY_SAFETY, INFLATION_EUR, summarizeEur } from '../../src/lib/eurPnl.js';
 import { BUY_TARGET_EUR, BUY_TARGET_DATE, BUY_PLAN_START, BUY_WEIGHTS, splitBuy, pacePerMonth, sumInvestedEUR, type BuySymbol } from '../../src/lib/buyPlan.js';
 
@@ -23,7 +23,21 @@ YAPMAYACAKLARIN (KESİN):
 export interface WeekPlanRow { symbol: string; label: string; sharePct: number; amountEUR: number; instruction: string }
 export interface AiContext { text: string; eur: EurSummary; weekPlan: WeekPlanRow[]; anomalies: string[]; trancheEUR: number }
 
-type H = { id: string | number; symbol: string; asset_type: string; currency: string | null; quantity: number; current_price: number; purchase_price: number; maturity_date?: string | null };
+type H = {
+  id: string | number; symbol: string; asset_type: string; currency: string | null;
+  quantity: number; current_price: number; purchase_price: number; maturity_date?: string | null;
+  price_notes?: string | null; house_money?: boolean | null;
+};
+
+async function loadOpenHoldings(supabase: SupabaseClient): Promise<H[]> {
+  const withFlag = 'id,symbol,asset_type,currency,quantity,current_price,purchase_price,maturity_date,price_notes,house_money';
+  const first = await supabase.from('holdings').select(withFlag).gt('quantity', 0);
+  if (!first.error) return (first.data || []) as H[];
+  if (!/house_money|column|schema cache/i.test(first.error.message)) throw new Error(`aiContext holdings: ${first.error.message}`);
+  const second = await supabase.from('holdings').select('id,symbol,asset_type,currency,quantity,current_price,purchase_price,maturity_date,price_notes').gt('quantity', 0);
+  if (second.error) throw new Error(`aiContext holdings: ${second.error.message}`);
+  return (second.data || []) as H[];
+}
 
 // Eski sabit haftalık $2.000 dilimi kalktı (2026-10-13). Plan: esnek, VWCE/V3YL/XEON.
 // USD üzerinden çapraz kurlar (src/lib/fx.ts USD_CROSS ile aynı) — RUB/RON/CHF'nin TRY kur satırı yok
@@ -69,28 +83,28 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
   const buySince = new Date(now.getTime() - NO_BUY_DAYS * 86400000).toISOString().slice(0, 10);
   const [model, holdRes, cashRes, phRows, buyRes, planBuyRes] = await Promise.all([
     loadEurModel(supabase),
-    supabase.from('holdings').select('id,symbol,asset_type,currency,quantity,current_price,purchase_price,maturity_date').gt('quantity', 0),
+    loadOpenHoldings(supabase),
     supabase.from('cash_balances').select('currency,balance').gt('balance', 0),
     // fetchAll: PostgREST max_rows=1000 tavanı (45 gün × 26 sembol > 1000 satır) — tek .range() kesiyordu
     fetchAll<{ symbol: string; price: number; recorded_at: string }>('price_history', () => supabase.from('price_history').select('symbol,price,recorded_at').gte('recorded_at', since).order('recorded_at', { ascending: true }).order('id', { ascending: true })),
     supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('transaction_type', 'buy').gte('transaction_date', buySince),
     supabase.from('transactions').select('holding_id,transaction_type,total_amount,transaction_date').eq('transaction_type', 'buy').gte('transaction_date', BUY_PLAN_START),
   ]);
-  if (holdRes.error) throw new Error(`aiContext holdings: ${holdRes.error.message}`);
   const eur = summarizeEur(model, todayStr.slice(0, 7));
   // Motor boşsa (snapshot/kur yok) uydurma rakam üretme — chat/daily-plan/daily-report bu hatayı yakalayıp "veri yok" der
   if (!eur.asOf || !(eur.eurRate > 0) || !(eur.usdRate > 0)) throw new Error(`EUR motoru: snapshot/kur serisi yok (asOf=${eur.asOf || '—'})`);
-  const holdings = (holdRes.data || []) as H[];
+  const holdings = holdRes;
   const E = eur.eurRate, U = eur.usdRate;
   const fx = (c: string | null) => { const cur = String(c || 'TRY').toUpperCase(); return cur === 'USD' ? U : cur === 'EUR' ? E : USD_CROSS[cur] ? U / USD_CROSS[cur] : 1; };
   const valEUR = (h: H) => (Number(h.quantity) || 0) * (Number(h.current_price) || 0) * fx(h.currency) / E;
-  // 'cash' tipi portföy dışı (uygulama RebalancePlan ile aynı) — dağılım ve dilim bölünmesi buna göre
-  const inv = holdings.filter(h => h.asset_type !== 'cash');
+  // Kasa ve Ev Parası payda dışı (uygulama RebalancePlan ile aynı).
+  const houseEUR = holdings.filter(isHouseMoney).reduce((s, h) => s + valEUR(h), 0);
+  const inv = holdings.filter(h => h.asset_type !== 'cash' && !isHouseMoney(h));
   const total = inv.reduce((s, h) => s + valEUR(h), 0);
   if (!(total > 0)) throw new Error('aiContext: portföyde değerlenmiş pozisyon yok');
   const byClass: Partial<Record<AllocationClass, number>> = {};
   for (const h of inv) {
-    const c = allocationClassOf(h.asset_type, h.symbol);
+    const c = allocationClassFor(h);
     if (!c) continue;
     byClass[c] = (byClass[c] || 0) + valEUR(h);
   }
@@ -173,9 +187,10 @@ Kâr tanımı: euro servet artışı − para giriş/çıkışı. Tan Romanya'da
 
 DAĞILIM vs HEDEF: ${alloc}
 Getirisiz nakit: ${fmtEUR(cashEUR)} (%${(100 * cashEUR / total).toFixed(0)}) — asıl "ölü sermaye" budur.
+EV PARASI (hedef ve dengeleme dışı, kasadan ayrı): ${fmtEUR(houseEUR)}
 KASA (portföy DIŞI, yastık): ${kasa || 'yok'}
 
-ESNEK ALIM PLANI (sabit haftalık takvim yok): yatırılacak ${fmtEUR(BUY_TARGET_EUR)}, yatırılan ${fmtEUR(invested)}, kalan ${fmtEUR(remaining)}. Oran VWCE %76 / V3YL %16 / XEON %8. Örnek €1.000 → ${fmtEUR(weekPlan[0].amountEUR)} VWCE + ${fmtEUR(weekPlan[1].amountEUR)} V3YL + ${fmtEUR(weekPlan[2].amountEUR)} XEON. ${pace.pastDue ? `Hedef tarihi geçti. Kalan ${fmtEUR(remaining)} — acele yok.` : `Ayda yaklaşık ${fmtEUR(trancheEUR)} yatırırsan ${BUY_TARGET_DATE} tarihine yetişir. Yetişmezse de sorun değil.`} Kaynak sırası: önce EURO nakit, sonra USD → EUR. VWCE son 7 günde %10'dan fazla düşerse XEON diliminin yarısı VWCE'ye eklenebilir. IB01 yeni alınmaz. Altın satılmaz. Kasa dengelemeye girmez.
+ESNEK ALIM PLANI (sabit haftalık takvim yok): yatırılacak ${fmtEUR(BUY_TARGET_EUR)}, yatırılan ${fmtEUR(invested)}, kalan ${fmtEUR(remaining)}. Oran VWCE %76 / V3YL %16 / XEON %8. Örnek €1.000 → ${fmtEUR(weekPlan[0].amountEUR)} VWCE + ${fmtEUR(weekPlan[1].amountEUR)} V3YL + ${fmtEUR(weekPlan[2].amountEUR)} XEON. ${pace.pastDue ? `Hedef tarihi geçti. Kalan ${fmtEUR(remaining)} — acele yok.` : `Ayda yaklaşık ${fmtEUR(trancheEUR)} yatırırsan ${BUY_TARGET_DATE} tarihine yetişir. Yetişmezse de sorun değil.`} Kaynak sırası: önce EURO nakit, sonra USD → EUR. VWCE son 7 günde %10'dan fazla düşerse XEON diliminin yarısı VWCE'ye eklenebilir. IB01 yeni alınmaz. Altın satılmaz. Kasa ve Ev Parası dengelemeye girmez.
 
 POZİSYONLAR (EUR, ilk 15):
 ${top}

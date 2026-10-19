@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { TARGET_PCT, allocationClassOf } from '../config/portfolioPolicy';
+import { TARGET_PCT, allocationClassFor } from '../config/portfolioPolicy';
 import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
@@ -231,13 +231,15 @@ export function calculateRebalance(
     purchase_price?: number;
     quantity: number;
     currency?: string;
+    price_notes?: string | null;
+    house_money?: boolean | null;
   }>,
   targetAllocations: Record<string, number>
 ): AssetAllocation[] {
   // FX-aware: USD/EUR pozisyonları TRY'ye çevirip topluyoruz.
   // Eski sürüm raw price×qty topluyordu → multicurrency portföyde yanlış yüzdeler.
   const fxRates = getFxRatesFromHoldings(holdings as never);
-  const valued = holdings.filter(h => (Number(h.quantity) || 0) > 0 && allocationClassOf(h.asset_type, h.symbol)).map((h) => ({
+  const valued = holdings.filter(h => (Number(h.quantity) || 0) > 0 && allocationClassFor(h)).map((h) => ({
     h,
     value: holdingValueTRY(h as never, fxRates),
   }));
@@ -245,7 +247,7 @@ export function calculateRebalance(
 
   const allocations: AssetAllocation[] = valued.map(({ h, value }) => {
     const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
-    const cls = allocationClassOf(h.asset_type, h.symbol);
+    const cls = allocationClassFor(h);
     const targetPercentage = (cls ? targetAllocations[cls] : undefined) ?? targetAllocations[h.asset_type] ?? 0;
     const targetValue = (totalValue * targetPercentage) / 100;
     const rebalanceAmount = targetValue - value;

@@ -27,6 +27,7 @@ import { IncomePanel } from '../components/IncomePanel';
 import { ClosedPositions } from '../components/ClosedPositions';
 import PortfolioXRay from '../components/PortfolioXRay';
 import { RebalancePlan } from '../components/RebalancePlan';
+import { policySnapshot } from '../lib/policyAllocation';
 import { BuyPlanCard } from '../components/BuyPlanCard';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
@@ -78,6 +79,7 @@ export default function HomePage() {
 
   const { theme, setTheme } = useTheme();
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
+  const houseMoneyEUR = useMemo(() => policySnapshot(holdings).houseMoneyEUR, [holdings]);
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -431,6 +433,11 @@ export default function HomePage() {
                   <div className="h-72">
                     <AllocationChart holdings={holdings} />
                   </div>
+                  {houseMoneyEUR > 0.5 && (
+                    <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
+                      Ev Parası €{Math.round(houseMoneyEUR).toLocaleString('de-DE')} bu grafiğin dışındadır. Hedef ve dengelemeye girmez.
+                    </p>
+                  )}
                 </div>
                 <TransactionHistory />
               </Suspense>

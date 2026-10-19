@@ -3,7 +3,7 @@ import { requireCronAuth } from '../lib/auth.js';
 import { getServiceSupabase } from '../lib/serviceSupabase.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, fmtEUR, fmtSignedEUR, fmtSignedPct } from '../lib/eurEngine.js';
-import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassOf, CLASS_LABELS } from '../../src/config/portfolioPolicy.js';
+import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassFor, isHouseMoney, CLASS_LABELS } from '../../src/config/portfolioPolicy.js';
 
 const PLAN_NOTE = 'Esnek plan: VWCE %76 / V3YL %16 / XEON %8. Sabit haftalık takvim yok. Bilgi amaçlı.';
 
@@ -127,10 +127,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Konsantrasyon — tek varlık, sınıfının politika ÜST BANDINI (TARGET_ALLOCATION.max) aşıyorsa bilgi ver
     //    (tek plan zaten hisse bacağını tek ETF'te — V3YL — topluyor; sabit %25 eşiği plana aykırı uyarı üretiyordu)
-    const invHoldings = holdings.filter((h: any) => h.asset_type !== 'cash');
+    const invHoldings = holdings.filter((h: any) => h.asset_type !== 'cash' && !isHouseMoney(h));
     const invTotal = invHoldings.reduce((s: number, h: any) => s + valTRY(h), 0);
     for (const h of invHoldings) {
-      const cls = allocationClassOf(h.asset_type, h.symbol); if (!cls) continue;
+      const cls = allocationClassFor(h); if (!cls) continue;
       const band = TARGET_ALLOCATION[cls];
       const weight = invTotal > 0 ? (valTRY(h) / invTotal) * 100 : 0;
       if (weight > band.max) {
@@ -146,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 5. Sınıf dağılımı — politika bandı dışına çıkan sınıf (bilgi; dilim bölünmesi bunu zaten hedefler)
     const byClass: Record<string, number> = {};
     for (const h of invHoldings) {
-      const cls = allocationClassOf(h.asset_type, h.symbol);
+      const cls = allocationClassFor(h);
       if (!cls) continue;
       byClass[cls] = (byClass[cls] || 0) + valTRY(h);
     }

@@ -71,6 +71,50 @@ export function allocationClassOf(assetType: string, symbol?: string | null): Al
   return null;
 }
 
+function evKey(s: string): string {
+  return s.trim().toLocaleLowerCase('tr-TR');
+}
+
+function isEvLabel(s: string, prefix: boolean): boolean {
+  const k = evKey(s);
+  const names = ['ev parası', 'ev parasi'];
+  return prefix ? names.some(n => k.startsWith(n)) : names.some(n => k === n);
+}
+
+/**
+ * Ev Parası: hedef ve dengeleme dışı (kasa gibi), ekranda ayrı satır.
+ * Kalıcı işaret holdings.house_money. İşaret yokken de GPY1PPF notu ve "Ev Parası" nakdi tanınır.
+ */
+export function isHouseMoney(h: {
+  symbol?: string | null;
+  asset_type?: string | null;
+  currency?: string | null;
+  price_notes?: string | null;
+  house_money?: boolean | null;
+}): boolean {
+  if (h.house_money === true) return true;
+  const sym = String(h.symbol || '');
+  const notes = String(h.price_notes || '');
+  const type = String(h.asset_type || '').toLowerCase();
+  const cur = String(h.currency || 'TRY').toUpperCase();
+  if (sym.trim().toUpperCase() === 'GPY1PPF' && isEvLabel(notes, true)) return true;
+  if (isEvLabel(sym, false)) return true;
+  if (type === 'cash' && cur === 'TRY' && (isEvLabel(sym, true) || isEvLabel(notes, true))) return true;
+  return false;
+}
+
+/** Dağılım sınıfı. Ev Parası ve kasa null — paydada yok. */
+export function allocationClassFor(h: {
+  asset_type?: string | null;
+  symbol?: string | null;
+  currency?: string | null;
+  price_notes?: string | null;
+  house_money?: boolean | null;
+}): AllocationClass | null {
+  if (isHouseMoney(h)) return null;
+  return allocationClassOf(String(h.asset_type || ''), h.symbol);
+}
+
 // Fiziki/satılamaz varlık tipleri — rebalans ASLA "sat" önermez; fazlaysa
 // "ekleme yapma, gerisini büyüt → seyrelt" mantığı uygulanır.
 export const PHYSICAL_FIXED_TYPES = new Set(['commodity']);

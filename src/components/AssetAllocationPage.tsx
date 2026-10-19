@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown, PieChart as PieIcon } from 'lucide-react';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { assetColor, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
-import { CLASS_LABELS, TARGET_ALLOCATION, allocationClassOf, type AllocationClass } from '../config/portfolioPolicy';
+import { CLASS_LABELS, TARGET_ALLOCATION, allocationClassFor, isHouseMoney, type AllocationClass } from '../config/portfolioPolicy';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -28,16 +28,22 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
   const assetTypeMap = new Map<string, AssetTypeData>();
   const fxRates = getFxRatesFromHoldings(holdings);
 
-  const activeCount = holdings.filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash' && allocationClassOf(h.asset_type, h.symbol)).length;
+  const activeCount = holdings.filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash' && allocationClassFor(h)).length;
+  let houseMoneyTRY = 0;
+  for (const h of holdings) {
+    if ((Number(h.quantity) || 0) <= 0 || !isHouseMoney(h)) continue;
+    houseMoneyTRY += holdingValueTRY(h, fxRates);
+  }
+  const houseMoneyEUR = fxRates.eur > 0 ? houseMoneyTRY / fxRates.eur : 0;
 
   holdings
-    .filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash')
+    .filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash' && !isHouseMoney(h))
     .forEach((holding) => {
     const currentValue = holdingValueTRY(holding, fxRates);
     const investmentValue = holdingCostTRY(holding, fxRates);
     const profit = currentValue - investmentValue;
 
-    const type = allocationClassOf(holding.asset_type, holding.symbol);
+    const type = allocationClassFor(holding);
     if (!type) return;
     if (!assetTypeMap.has(type)) {
       assetTypeMap.set(type, {
@@ -124,7 +130,7 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
         {/* Total Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Toplam değer (TL, kasa hariç)', value: fmtTRY0(totalValue), tone: '' },
+            { label: 'Toplam değer (TL, kasa ve Ev Parası hariç)', value: fmtTRY0(totalValue), tone: '' },
             { label: 'TL maliyet', value: fmtTRY0(totalInvestment), tone: '' },
             {
               label: 'TL maliyet kârı',
@@ -156,7 +162,12 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
           {/* Pie Chart */}
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-slate-200 dark:border-gray-700 shadow-sm">
             <h2 className="text-lg sm:text-xl font-bold mb-1 text-gray-900 dark:text-white">Politika dağılımı</h2>
-            <p className="text-xs text-slate-500 dark:text-gray-400 mb-4">Hisse 62 · güvenli taraf 14 · altın 10 · kripto 5 · fon 4 · nakit 5. Kasa yok. Kapalı pozisyon yok.</p>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mb-4">Hisse 62 · güvenli taraf 14 · altın 10 · kripto 5 · fon 4 · nakit 5. Kasa ve Ev Parası yok. Kapalı pozisyon yok.</p>
+            {houseMoneyTRY > 0 && (
+              <p className="text-xs text-slate-600 dark:text-gray-300 mb-4">
+                Ev Parası {fmtTRY0(houseMoneyTRY)}{houseMoneyEUR > 0 ? ` · €${Math.round(houseMoneyEUR).toLocaleString('de-DE')}` : ''} — hedef ve dengeleme dışı.
+              </p>
+            )}
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
