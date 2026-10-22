@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { TARGET_PCT, allocationClassFor } from '../config/portfolioPolicy';
-import { computePeriodChange, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
+import { computePeriodChange, sumRealizedTryBetween, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
+import { getRealizedTryByDay } from './eurPnlService';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 
 // Egress quota koruması: getDynamicWithdrawal price_history + portfolio_snapshots
@@ -140,6 +141,15 @@ export async function getPnLData(): Promise<{
     const current = uniqueDays[0];
     const currentValue = Number(current.total_value) || 0;
 
+    // Realize, euro cetveliyle AYNI haritadan (kur, mükerrer eleme, snapshot hizası).
+    // Bugünkü satış henüz snapshot'a düşmediyse haritada yoktur — gece yazılınca girer.
+    let realizedByDay = new Map<string, number>();
+    try {
+      realizedByDay = await getRealizedTryByDay();
+    } catch (err) {
+      console.error('getPnLData: realize okunamadı, dönem kârı yalnız unrealized kaldı', err);
+    }
+
     const findByDaysAgo = (days: number) => {
       const target = new Date();
       target.setDate(target.getDate() - days);
@@ -161,11 +171,16 @@ export async function getPnLData(): Promise<{
       return best;
     };
 
-    // computePeriodChange: total_deposits/total_withdrawals'tan cash flow düşer,
-    // sanity check ile büyük sapmalarda 0 döner (eski calculateChange ile uyumlu)
+    // Dönem kârı = Δunrealized + bu iki snapshot arasında işlenmiş realize.
+    // Yatırma/çekme unrealized'ı oynatmaz. |pct| > 50 ise 0 (bozuk snapshot).
     const calculateChange = (previous: typeof snapshots[0] | null) => {
       if (!previous) return { value: currentValue, percentage: 0, change: 0 };
-      const period = computePeriodChange(current, previous, 50);
+      const realizedTRY = sumRealizedTryBetween(
+        realizedByDay,
+        String(previous.snapshot_date),
+        String(current.snapshot_date),
+      );
+      const period = computePeriodChange(current, previous, 50, realizedTRY);
       return {
         value: currentValue,
         percentage: period.changePct,
@@ -187,7 +202,7 @@ export async function getPnLData(): Promise<{
     // so the key never matched) and wrong (a raw value delta counts intraday
     // deposits as gain). Intraday change is handled correctly by
     // computeIntradayChange in PortfolioContext; here we always use the
-    // deposit-aware computePeriodChange result.
+    // economic computePeriodChange result (Δunrealized + realize).
     return {
       daily: { period: 'Günlük', ...dailyResult },
       weekly: { period: 'Haftalık', ...weeklyResult },

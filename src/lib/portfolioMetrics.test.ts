@@ -4,6 +4,7 @@ import {
   computePortfolioMetrics,
   computeClassMetrics,
   computePeriodChange,
+  sumRealizedTryBetween,
   computeIntradayChange,
   computeDynamicWithdrawal,
   computeSafeSalaryFromProfit,
@@ -170,6 +171,68 @@ describe('computePeriodChange (kâr-bazlı)', () => {
   it('15. eksik snapshot — null güvenli', () => {
     expect(computePeriodChange(null, null).changeTRY).toBe(0);
     expect(computePeriodChange({ total_value: 100 }, null).changeTRY).toBe(0);
+  });
+
+  it('16. satış: unrealized düşünce realize geri eklenir, kâr kaybolmaz', () => {
+    // Açılışta bu pozisyonun 20.000 kârı total_pnl içindeydi. Satışta hasılat
+    // kasaya çıktı, total_pnl 20.000 düştü. Dönem kârı 0 (kâr zaten açılıştaydı).
+    const prev = { total_value: 100_000, total_pnl: 20_000 };
+    const curr = { total_value: 80_000, total_pnl: 0 };
+    expect(computePeriodChange(curr, prev, 50).changeTRY).toBe(-20_000);
+    expect(computePeriodChange(curr, prev, 50, 20_000).changeTRY).toBe(0);
+  });
+
+  it('17. dönem içi yükseliş sonra satış: kâr = fiyat artışı, satışın kendisi değil', () => {
+    // Açılış değer 100 / maliyet 80. 130'a çıkıp satıldı, realize 50, hasılat çıktı.
+    const prev = { total_value: 100, total_investment: 80 };
+    const curr = { total_value: 0, total_investment: 0 };
+    expect(computePeriodChange(curr, prev, 80, 50).changeTRY).toBe(30);
+  });
+
+  it('18. zarardaki satış sahte kâr üretmez', () => {
+    // Zarar zaten açılış unrealized'ındaydı (−30). Satınca total_pnl 30 artar
+    // (eksi kâr düşer). Realize −30 eklenince dönem kârı 0.
+    const prev = { total_value: 270, total_pnl: 20 };
+    const curr = { total_value: 200, total_pnl: 50 };
+    expect(computePeriodChange(curr, prev, 50).changeTRY).toBe(30);
+    expect(computePeriodChange(curr, prev, 50, -30).changeTRY).toBe(0);
+  });
+
+  it('19. büyük satış sanity eşiğini unrealized ile değil ekonomik kârla ölçer', () => {
+    // Satış tek başına −%35 görünür ve eski kod 0'lardı. Kalan kitap +5.000.
+    const prev = { total_value: 100_000, total_pnl: 40_000 };
+    const curr = { total_value: 55_000, total_pnl: 5_000 };
+    expect(computePeriodChange(curr, prev, 30).changeTRY).toBe(0);
+    const fixed = computePeriodChange(curr, prev, 30, 40_000);
+    expect(fixed.changeTRY).toBe(5_000);
+    expect(fixed.changePct).toBeCloseTo(5);
+  });
+
+  it('20. Ekim 2026 ve 30 gün: snapshot farkına penceredeki realize eklenir', () => {
+    // Üretimde görülen unrealized farkları. 9 ve 14 Ekim satışları snapshot'a
+    // girmiş. 22 Ekim EURO satışı (7.757) henüz snapshot günü değil, dışarıda.
+    // 30 günlük −201.000'in −62.000'e inmesi, pencerede Ekim satışlarına ek
+    // ~19.245 TL realize daha olduğunu söyler (Eylül sonu). Bu satır ihracattan
+    // okunmadı; pencere sınırını kilitler.
+    const booked = new Map<string, number>([
+      ['2026-09-28', 19_245],
+      ['2026-10-09', 5_668],
+      ['2026-10-14', 114_087],
+      ['2026-10-22', 7_757],
+    ]);
+    const octoberRealized = sumRealizedTryBetween(booked, '2026-09-30', '2026-10-21');
+    expect(octoberRealized).toBe(5_668 + 114_087);
+    const octPrev = { total_value: 8_000_000, total_pnl: 1_000_000 };
+    const octCurr = { total_value: 8_000_000 - 83_419, total_pnl: 1_000_000 - 83_419 };
+    expect(computePeriodChange(octCurr, octPrev, 50).changeTRY).toBe(-83_419);
+    expect(computePeriodChange(octCurr, octPrev, 50, octoberRealized).changeTRY).toBe(36_336);
+
+    const rollRealized = sumRealizedTryBetween(booked, '2026-09-21', '2026-10-21');
+    expect(rollRealized).toBe(5_668 + 114_087 + 19_245);
+    const rollPrev = { total_value: 8_000_000, total_pnl: 1_200_000 };
+    const rollCurr = { total_value: 8_000_000 - 201_000, total_pnl: 1_200_000 - 201_000 };
+    expect(computePeriodChange(rollCurr, rollPrev, 50).changeTRY).toBe(-201_000);
+    expect(computePeriodChange(rollCurr, rollPrev, 50, rollRealized).changeTRY).toBe(-62_000);
   });
 });
 

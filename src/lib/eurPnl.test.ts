@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeRateSeries, eurGainBetween, fxDriftTRY, monthlyRows, CARRY_RESET_MONTH, POOL_CAP_EUR } from './eurPnl';
+import { sumRealizedTryBetween } from './portfolioMetrics';
 
 const eur = makeRateSeries([{ date: '2026-08-01', rate: 54.7 }, { date: '2026-08-31', rate: 55.94 }], 55);
 const usd = makeRateSeries([{ date: '2026-08-01', rate: 47.5 }, { date: '2026-08-31', rate: 48.25 }], 48);
@@ -206,6 +207,47 @@ describe('eurPnl', () => {
 import { buildEurModel, summarizeEur, entitlementEUR } from './eurPnl';
 
 describe('buildEurModel + summarizeEur (ham satır → model, uygulama = cron)', () => {
+  it('satış realize\'ı snapshot gününe yazılır; sonraki satış haritaya girmez', () => {
+    // TL paneli bu haritayı ekler. 22 Ekim satışı henüz snapshot olmadığı için
+    // pending kalır — geceki snapshot unrealized'ı düşürünce aynı anda girer.
+    const model = buildEurModel({
+      snapshots: [
+        { snapshot_date: '2026-10-09', total_value: 100_000, total_investment: 80_000, created_at: '2026-10-09T18:00:00Z' },
+        { snapshot_date: '2026-10-14', total_value: 90_000, total_investment: 70_000, created_at: '2026-10-14T18:00:00Z' },
+        { snapshot_date: '2026-10-21', total_value: 88_000, total_investment: 70_000, created_at: '2026-10-21T18:00:00Z' },
+      ],
+      eurRates: [
+        { recorded_at: '2026-10-09', rate: 50 },
+        { recorded_at: '2026-10-14', rate: 50 },
+        { recorded_at: '2026-10-21', rate: 50 },
+      ],
+      usdRates: [
+        { recorded_at: '2026-10-09', rate: 40 },
+        { recorded_at: '2026-10-14', rate: 40 },
+        { recorded_at: '2026-10-21', rate: 40 },
+      ],
+      transactions: [
+        { transaction_date: '2026-10-09T10:00:00Z', transaction_type: 'sell', quantity: 1, total_amount: 1, realized_profit: 5668, holding_id: 'a', currency: 'TRY' },
+        { transaction_date: '2026-10-14T10:00:00Z', transaction_type: 'sell', quantity: 1, total_amount: 1, realized_profit: 114087, holding_id: 'b', currency: 'TRY' },
+        { transaction_date: '2026-10-22T08:00:00Z', transaction_type: 'sell', quantity: 1, total_amount: 1, realized_profit: 7757, holding_id: 'c', currency: 'TRY' },
+      ],
+      cashSells: [],
+      holdings: [],
+      usdNow: 40,
+      reliableFrom: '2026-04-06',
+      annualInflation: 0,
+    });
+    expect(model.realizedTRYByDay.get('2026-10-09')).toBe(5668);
+    expect(model.realizedTRYByDay.get('2026-10-14')).toBe(114087);
+    expect(model.realizedTRYByDay.has('2026-10-22')).toBe(false);
+    expect(model.health.pendingAdjustments).toBe(1);
+    expect(sumRealizedTryBetween(model.realizedTRYByDay, '2026-09-30', '2026-10-21')).toBe(5668 + 114087);
+    // Euro kâr formülü aynı realize'ı akıştan düşmeye devam eder (maaş cetveli değişmedi).
+    const oct9 = model.daily.find(d => d.date === '2026-10-09');
+    expect(oct9).toBeTruthy();
+    expect(Number.isFinite(oct9!.gainEUR)).toBe(true);
+  });
+
   const snaps = [
     // €100 EUR pozisyon (q=100, pp=1): snapshot total_investment her gün O GÜNÜN kuruyla TL'ye çevrilir (daily-snapshot.ts) → drift
     { snapshot_date: '2026-08-30', total_value: 100 * 55, total_investment: 100 * 55 },

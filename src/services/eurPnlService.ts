@@ -87,6 +87,10 @@ async function load(): Promise<EurModel> {
 }
 
 export async function getEurDaily(): Promise<EurDaily[]> { return (await load()).daily; }
+/** Euro motorunun TL realize haritası. TL dönem kârı bunu ekler; ikinci bir satış formülü yok. */
+export async function getRealizedTryByDay(): Promise<Map<string, number>> {
+  return (await load()).realizedTRYByDay;
+}
 export async function getEurMonths(): Promise<MonthRow[]> { return (await load()).months; }
 export async function getEurPnlHealth() { return (await load()).health; }
 export function invalidateEurPnlCache() { _cache = null; _rzCache = null; _cpCache.clear(); }
