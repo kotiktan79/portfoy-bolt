@@ -355,6 +355,10 @@ export interface EurModel {
   foreignCostsAtLast: ForeignCost[];       // son snapshot günündeki döviz maliyetleri (drift için)
   /** son snapshot GÜNÜNDEKİ TL kurları, birim başına (anlık drift birim bazında hesaplansın diye) */
   ratesAtLast: Record<string, number>;
+  /** Snapshot gününe hizalanmış realize (TL). Euro kâr formülü bunu zaten akıştan düşer;
+   *  TL dönem panelleri aynı haritayı Δunrealized'a ekler. Gün anahtarı satış günü değil,
+   *  kârın düştüğü snapshot günüdür. Henüz snapshot'ı olmayan satış burada yoktur. */
+  realizedTRYByDay: Map<string, number>;
 }
 
 /** Çekim tutarı EUR. amount_eur doluysa o esas alınır (yeni kayıtlar).
@@ -619,7 +623,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     ratesAtLast.EUR = eur.rateAt(lastSnapshot.date);
     for (const [c, ser] of otherSeries) { const r = ser.rateAt(lastSnapshot.date); if (Number.isFinite(r) && r > 0) ratesAtLast[c] = r; }
   }
-  return { daily, months, health, lastSnapshot, foreignCostsAtLast: lastSnapshot ? costsOn(lastSnapshot.date) : [], ratesAtLast };
+  return { daily, months, health, lastSnapshot, foreignCostsAtLast: lastSnapshot ? costsOn(lastSnapshot.date) : [], ratesAtLast, realizedTRYByDay: realizedByDay };
 }
 
 /** Rapor/cron özeti: son gün, son 7 gün, bu ay (MTD), geçen tam ay (= bu ayın maaşı). Saf; tarih dışarıdan verilir. */

@@ -165,34 +165,61 @@ export function computeClassMetrics(holdings: Holding[]): ClassMetric[] {
 // ============================================================
 
 /**
- * İki snapshot arasındaki gerçek piyasa hareketi — KÂR (unrealized PnL) deltası.
+ * İki snapshot arasındaki ekonomik kâr (TL).
  *
- * change = current_pnl - previous_pnl   (pnl = değer - maliyet)
+ * change = Δunrealized + realizedTRY
+ *   unrealized = snapshot total_pnl (yoksa değer − maliyet)
+ *   realizedTRY = bu aralıkta snapshot'a işlenmiş satış kârı (TL), çağıran verir
  *
- * NEDEN deposit'e bakmıyoruz:
- *   Yeni para eklenince değer +X, maliyet +X → kâr +0. Yani yeni para/çekim
- *   kârı YAPISAL olarak etkilemez. Deposit takibine, cash flow çıkarmaya,
- *   kur düzeltmesine GEREK YOK. Bu yüzden bozulması imkansız.
- *   Sadece fiyat hareketi kârı değiştirir → günlük PnL = saf piyasa hareketi.
+ * Satışta açık kâr total_pnl'den düşer, hasılat kasaya (snapshot dışı) geçer.
+ * Realize geri eklenmezse satış, dönem panelinde zarar gibi görünür.
+ * Yeni para: değer +X ve maliyet +X → unrealized 0, realize yok. Çekim aynı
+ * şekilde kâr sayılmaz. Euro maaş cetveli (eurPnl) ayrıdır; buraya karışmaz.
  *
- * Sanity check: |pct| > maxPct ise 0 döner (bozuk snapshot koruması).
+ * Sanity check ekonomik rakamın üstündedir: |pct| > maxPct ise 0.
  */
 export function computePeriodChange(
   current: SnapshotLite | null | undefined,
   previous: SnapshotLite | null | undefined,
   maxPct: number = 30,
+  realizedTRY: number = 0,
 ): PeriodChange {
   if (!current || !previous) {
     return { changeTRY: 0, changePct: 0, prevValueTRY: 0, currentValueTRY: 0, cashFlowTRY: 0 };
   }
   const currentValueTRY = Number(current.total_value) || 0;
   const prevValueTRY = Number(previous.total_value) || 0;
-  const changeTRY = snapshotPnL(current) - snapshotPnL(previous);
+  const booked = Number.isFinite(realizedTRY) ? realizedTRY : 0;
+  const changeTRY = snapshotPnL(current) - snapshotPnL(previous) + booked;
   const changePct = prevValueTRY > 0 ? (changeTRY / prevValueTRY) * 100 : 0;
   if (Math.abs(changePct) > maxPct) {
     return { changeTRY: 0, changePct: 0, prevValueTRY, currentValueTRY, cashFlowTRY: 0 };
   }
   return { changeTRY, changePct, prevValueTRY, currentValueTRY, cashFlowTRY: 0 };
+}
+
+/** Snapshot gününe hizalanmış realize TL. Aralık (afterDate, throughDate].
+ *  Başlangıç günü önceki snapshot'tadır (o kâr zaten oradaki unrealized'dan düşmüştür).
+ *  throughDate'ten sonraki satış henüz snapshot'a girmediği için dışarıda kalır. */
+export function sumRealizedTryBetween(
+  realizedByDay: ReadonlyMap<string, number> | Record<string, number>,
+  afterDate: string,
+  throughDate: string,
+): number {
+  const after = String(afterDate || '').slice(0, 10);
+  const through = String(throughDate || '').slice(0, 10);
+  if (!after || !through || through <= after) return 0;
+  let sum = 0;
+  const entries: Iterable<[string, number]> = realizedByDay instanceof Map
+    ? realizedByDay.entries()
+    : Object.entries(realizedByDay);
+  for (const [day, amt] of entries) {
+    const key = String(day).slice(0, 10);
+    const n = Number(amt);
+    if (!Number.isFinite(n)) continue;
+    if (key > after && key <= through) sum += n;
+  }
+  return sum;
 }
 
 // ============================================================
