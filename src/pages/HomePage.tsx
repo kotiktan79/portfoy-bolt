@@ -28,6 +28,7 @@ import { ClosedPositions } from '../components/ClosedPositions';
 import PortfolioXRay from '../components/PortfolioXRay';
 import { RebalancePlan } from '../components/RebalancePlan';
 import { policySnapshot } from '../lib/policyAllocation';
+import { isClosedHolding } from '../lib/openPosition';
 import { BuyPlanCard } from '../components/BuyPlanCard';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
@@ -80,6 +81,8 @@ export default function HomePage() {
   const { theme, setTheme } = useTheme();
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const houseMoneyEUR = useMemo(() => policySnapshot(holdings).houseMoneyEUR, [holdings]);
+  const closedCount = useMemo(() => holdings.filter(isClosedHolding).length, [holdings]);
+  const openCount = holdings.length - closedCount;
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -91,6 +94,7 @@ export default function HomePage() {
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [showAutoRebalanceModal, setShowAutoRebalanceModal] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() => {
     return (localStorage.getItem('tandor_holdings_view') as 'table' | 'grid') || 'table';
   });
@@ -270,13 +274,27 @@ export default function HomePage() {
 
           {/* Holdings Table / Grid */}
           <div className="mt-2 mx-2 md:mx-6 rounded-xl border border-slate-200 dark:border-gray-800 overflow-hidden">
-            <div className="px-4 md:px-5 py-3 bg-slate-50/80 dark:bg-gray-800/50 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+            <div className="px-4 md:px-5 py-3 bg-slate-50/80 dark:bg-gray-800/50 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-300 tracking-wide">Varlıklar</h2>
-                {holdings.length > 0 && (
+                {openCount > 0 && (
                   <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md border border-slate-200 dark:border-gray-600">
-                    {holdings.filter(h => (Number(h.quantity) || 0) > 0).length}
+                    {openCount}
                   </span>
+                )}
+                {closedCount > 0 && (
+                  <button
+                    type="button"
+                    aria-pressed={showClosed}
+                    onClick={() => setShowClosed(v => !v)}
+                    className={`text-[11px] font-medium px-2 py-0.5 rounded-md border transition-colors ${
+                      showClosed
+                        ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-800'
+                        : 'bg-white dark:bg-gray-700 text-slate-500 dark:text-gray-400 border-slate-200 dark:border-gray-600 hover:text-slate-700 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    Kapanan pozisyonları göster ({closedCount})
+                  </button>
                 )}
               </div>
               {holdings.length > 0 && (
@@ -350,7 +368,7 @@ export default function HomePage() {
                     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {(() => {
                         const topByPnl = [...holdings]
-                          .filter(h => h.purchase_price > 0)
+                          .filter(h => !isClosedHolding(h) && h.purchase_price > 0)
                           .map(h => ({
                             id: h.id,
                             pnlPct: ((h.current_price - h.purchase_price) / h.purchase_price) * 100,
@@ -402,7 +420,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {holdings.some(h => (Number(h.quantity) || 0) <= 0) && (
+          {showClosed && closedCount > 0 && (
             <div className="mx-2 md:mx-6 mt-3">
               <ClosedPositions holdings={holdings} />
             </div>

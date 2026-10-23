@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { assetName, transactionAssetLabel } from './assetNames';
 import { isClosedHolding, salesForHolding, sumRealizedEUR } from './closedPositions';
+import { openCostNative } from './openPosition';
 import { holdingPriceDay, isPriceStale, isResearchStale, previousWeekday, RESEARCH_STALE_DAYS } from './freshness';
 import { incomeViews } from './incomeDisplay';
 import { letterGrade } from '../services/xrayService';
+import { checkAlerts } from '../services/smartAlertService';
 import { analyzeXRay } from '../services/xrayService';
 import type { Holding } from './supabase';
 import { translations } from './i18n';
@@ -17,6 +19,22 @@ describe('kapalı pozisyon', () => {
     ];
     expect(rows.filter(r => !isClosedHolding(r)).map(r => r.id)).toEqual(['a']);
     expect(rows.filter(isClosedHolding).map(r => r.id)).toEqual(['b', 'c']);
+    expect(isClosedHolding({ quantity: 1e-12 })).toBe(true);
+    expect(isClosedHolding({ quantity: 0.081 })).toBe(false);
+  });
+
+  it('kapanmış hisse fiyat alarmı üretmez', () => {
+    const alerts = checkAlerts([
+      { symbol: 'THYAO', asset_type: 'stock', quantity: 0, purchase_price: 100, current_price: 50, cost_basis: 10_000 },
+      { symbol: 'TUPRS', asset_type: 'stock', quantity: 10, purchase_price: 100, current_price: 110 },
+    ] as never, {});
+    expect(alerts.map(a => a.symbol)).not.toContain('THYAO');
+  });
+
+  it('adet 0 iken cost_basis maliyete eklenmez', () => {
+    expect(openCostNative({ quantity: 0, purchase_price: 37500, cost_basis: 75_000 })).toBe(0);
+    expect(openCostNative({ quantity: '0', purchase_price: 14.38, cost_basis: 60_000 })).toBe(0);
+    expect(openCostNative({ quantity: 10, purchase_price: 100, cost_basis: 999_999 })).toBe(1000);
   });
 
   it('itfa etmiş tahvilin realize kârı satış günü kuruyla eurodur', () => {

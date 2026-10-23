@@ -38,6 +38,7 @@ import { startPriceAlertMonitor, stopPriceAlertMonitor } from '../services/price
 import { stopCacheCleanup } from '../services/cacheService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
 import { computePortfolioMetrics, computeIntradayChange } from '../lib/portfolioMetrics';
+import { isClosedHolding } from '../lib/openPosition';
 import { useToast } from '../hooks/useToast';
 import { TIMING } from '../config';
 
@@ -717,7 +718,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     };
     return holdings
       .filter((holding) => {
-        if ((Number(holding.quantity) || 0) <= 0) return false;
+        if (isClosedHolding(holding)) return false;
         const matchesSearch = searchQuery === '' || holding.symbol.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesType = selectedAssetType === 'all' || holding.asset_type === selectedAssetType;
         return matchesSearch && matchesType;

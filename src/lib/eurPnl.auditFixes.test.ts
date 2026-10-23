@@ -27,11 +27,33 @@ describe('denetim düzeltmeleri', () => {
       }],
     });
     expect(kept.daily.find(d => d.date === '2026-09-02')?.gainEUR).toBeCloseTo(800, 4);
+    const withStaleBasis = buildEurModel({
+      ...base, snapshots, eurRates, usdRates, cashSells: [],
+      holdings: [{ id: 'b1', currency: 'USD', quantity: 0, purchase_price: 1, cost_basis: 75_000, created_at: '2026-08-01T00:00:00Z' }],
+      transactions: [{
+        transaction_date: '2026-09-03T10:00:00Z', transaction_type: 'sell', quantity: 10000,
+        total_amount: 10000, realized_profit: 0, holding_id: 'b1', currency: 'USD',
+      }],
+    });
+    expect(withStaleBasis.daily.find(d => d.date === '2026-09-02')?.gainEUR).toBeCloseTo(800, 4);
 
     const gone = buildEurModel({
       ...base, snapshots, eurRates, usdRates, transactions: [], cashSells: [], holdings: [],
     });
     expect(gone.daily.find(d => d.date === '2026-09-02')?.gainEUR).toBeCloseTo(0, 4);
+  });
+
+  it('1 — adet 0 ve cost_basis 75000 kur kayması üretmez', () => {
+    const m = buildEurModel({
+      ...base,
+      snapshots: [snap('2026-09-01', 100_000, 100_000), snap('2026-09-02', 100_000, 100_000)],
+      eurRates: [{ recorded_at: '2026-09-01', rate: 50 }, { recorded_at: '2026-09-02', rate: 50 }],
+      usdRates: [{ recorded_at: '2026-09-01', rate: 40 }, { recorded_at: '2026-09-02', rate: 44 }],
+      transactions: [], cashSells: [],
+      holdings: [{ id: 'cj', currency: 'USD', quantity: 0, purchase_price: 37_500, cost_basis: 75_000, created_at: '2026-08-01T00:00:00Z' }],
+    });
+    expect(m.foreignCostsAtLast.reduce((s, c) => s + c.costNative, 0)).toBe(0);
+    expect(m.daily.find(d => d.date === '2026-09-02')?.gainEUR).toBeCloseTo(0, 4);
   });
 
   it('1 — pozisyon yoksa işlemdeki USD, TL sanılmaz', () => {

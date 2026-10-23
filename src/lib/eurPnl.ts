@@ -434,7 +434,8 @@ export interface EurModelInput {
   otherRates?: Record<string, Array<{ recorded_at: string; rate: number | string }>> | null;
   transactions: Array<{ transaction_date: string; transaction_type: string; quantity: number | string | null; total_amount: number | string | null; realized_profit?: number | string | null; holding_id: string | number | null; currency?: string | null }>;
   cashSells: Array<{ created_at: string; currency: string | null; notes: string | null; related_holding_id?: string | number | null }>;
-  holdings: Array<{ id: string | number; currency: string | null; quantity: number | string | null; purchase_price: number | string | null; created_at: string | null }>;
+  // cost_basis seçilebilir ama kullanılmaz: adet 0 iken bayat toplam maliyetdir. Taban adet × alış fiyatıdır.
+  holdings: Array<{ id: string | number; currency: string | null; quantity: number | string | null; purchase_price: number | string | null; created_at: string | null; cost_basis?: number | string | null }>;
   usdNow: number;            // seri boşsa yedek
   reliableFrom: string;
   annualInflation: number;

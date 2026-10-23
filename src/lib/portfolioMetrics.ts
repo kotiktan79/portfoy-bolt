@@ -11,6 +11,7 @@
 
 import { Holding } from './supabase';
 import { FxRates, getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from './fx';
+import { isClosedHolding } from './openPosition';
 
 // ============================================================
 // TYPES
@@ -74,11 +75,11 @@ function snapshotPnL(s: SnapshotLite): number {
 // ============================================================
 
 /**
- * Sadece yatırım pozisyonları (cash hariç).
- * Tüm metric fonksiyonları bunu kullanır.
+ * Sadece açık yatırım pozisyonları (nakit kasası ve adet 0 hariç).
+ * Kapalı satırın cost_basis alanı burada toplanmaz. Realize kâr ayrı kanaldadır.
  */
 function investmentOnly(holdings: Holding[]): Holding[] {
-  return holdings.filter(h => h.asset_type !== 'cash');
+  return holdings.filter(h => h.asset_type !== 'cash' && !isClosedHolding(h));
 }
 
 /**
@@ -429,7 +430,7 @@ export function computePassiveYearlyUSD(holdings: Holding[]): number {
   const m = computePortfolioMetrics(holdings);
   const fx = m.fxRates;
   let yearlyTRY = 0;
-  for (const h of holdings.filter(x => x.asset_type !== 'cash')) {
+  for (const h of holdings.filter(x => x.asset_type !== 'cash' && !isClosedHolding(x))) {
     const vTRY = holdingValueTRY(h, fx);
     yearlyTRY += vTRY * symbolYield(h);
   }

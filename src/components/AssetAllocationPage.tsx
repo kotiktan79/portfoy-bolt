@@ -5,6 +5,7 @@ import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/
 import { useDarkMode } from '../hooks/useDarkMode';
 import { assetColor, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
 import { CLASS_LABELS, TARGET_ALLOCATION, allocationClassFor, isHouseMoney, type AllocationClass } from '../config/portfolioPolicy';
+import { isClosedHolding } from '../lib/openPosition';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -28,16 +29,16 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
   const assetTypeMap = new Map<string, AssetTypeData>();
   const fxRates = getFxRatesFromHoldings(holdings);
 
-  const activeCount = holdings.filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash' && allocationClassFor(h)).length;
+  const activeCount = holdings.filter(h => !isClosedHolding(h) && h.asset_type !== 'cash' && allocationClassFor(h)).length;
   let houseMoneyTRY = 0;
   for (const h of holdings) {
-    if ((Number(h.quantity) || 0) <= 0 || !isHouseMoney(h)) continue;
+    if (isClosedHolding(h) || !isHouseMoney(h)) continue;
     houseMoneyTRY += holdingValueTRY(h, fxRates);
   }
   const houseMoneyEUR = fxRates.eur > 0 ? houseMoneyTRY / fxRates.eur : 0;
 
   holdings
-    .filter(h => (Number(h.quantity) || 0) > 0 && h.asset_type !== 'cash' && !isHouseMoney(h))
+    .filter(h => !isClosedHolding(h) && h.asset_type !== 'cash' && !isHouseMoney(h))
     .forEach((holding) => {
     const currentValue = holdingValueTRY(holding, fxRates);
     const investmentValue = holdingCostTRY(holding, fxRates);
