@@ -1,5 +1,6 @@
 // FIRE (finansal bağımsızlık) projeksiyonu — para biriminden bağımsız saf hesap.
-// Girdiler hangi para birimindeyse çıktılar da o birimdedir (UI USD kullanıyor).
+// Girdiler hangi para birimindeyse çıktılar da o birimdedir (UI euro kullanıyor).
+import { requiredRealCapital, scenarioProgressPct } from '../lib/externalIncome';
 
 export interface FireInputs {
   currentValue: number;
@@ -10,6 +11,13 @@ export interface FireInputs {
   // Hedefin bugünkü alım gücünü koruması için yıllık enflasyon varsayımı.
   // USD bazlı projeksiyonda ~%3 makul; 0 = düzeltme yok.
   annualInflationPct?: number;
+  /** Kira, çiftlik vb. yıllık dış gelir, bugünkü euro. Hedef sermayeden düşülür. */
+  annualExternalIncome?: number;
+  /**
+   * İlerleme payı. Verilmezse currentValue.
+   * Kasa tamponu buraya eklenir; getiri projeksiyonunun başlangıcı değildir.
+   */
+  progressValue?: number;
 }
 
 export interface YearProjection {
@@ -32,12 +40,12 @@ export interface YearProjection {
 }
 
 export interface FireProjection {
-  /** €hedef aylık reel gelir için bugünkü sermaye (SWR). */
+  /** Dış gelir düşüldükten sonra kalan reel sermaye (bugünkü €). */
   targetPortfolio: number;
   currentGap: number;
   /** Bugünkü portföyün SWR ile üretebildiği aylık gelir, bugünkü euro. */
   currentMonthlyAtSWR: number;
-  /** Bugünkü reel gelir / hedef reel gelir, yüzde. Enflasyon hedefi şişirmez. */
+  /** Eldeki kaynak / senaryonun reel sermayesi, yüzde. Enflasyon hedefi şişirmez. */
   realProgressPct: number;
   yearsToTarget: number | null;
   /** Hedefe varılan yıldaki nominal (enflasyonlu) sermaye. Ulaşılamazsa bugünkü reel sermaye. */
@@ -68,20 +76,28 @@ export function projectFire(inputs: FireInputs): FireProjection {
     targetMonthlyIncome,
     safeWithdrawalRatePct,
     annualInflationPct = 0,
+    annualExternalIncome = 0,
+    progressValue,
   } = inputs;
 
   const swr = safeWithdrawalRatePct / 100;
   const inflation = annualInflationPct / 100;
-  const targetPortfolio = swr > 0 ? (targetMonthlyIncome * 12) / swr : 0;
-  const currentGap = Math.max(0, targetPortfolio - currentValue);
+  const external = Math.max(0, Number(annualExternalIncome) || 0);
+  const targetPortfolio = requiredRealCapital(targetMonthlyIncome, external, safeWithdrawalRatePct);
+  const resources = progressValue != null && Number.isFinite(progressValue) ? Math.max(0, progressValue) : currentValue;
+  const currentGap = Math.max(0, targetPortfolio - resources);
   const currentMonthlyAtSWR = (currentValue * swr) / 12;
-  const realProgressPct = targetMonthlyIncome > 0 ? (currentMonthlyAtSWR / targetMonthlyIncome) * 100 : 0;
+  const realProgressPct = scenarioProgressPct(resources, targetMonthlyIncome, external, safeWithdrawalRatePct);
 
   const monthlyRate = annualReturnPct / 100 / 12;
   const yearByYear: YearProjection[] = [];
   let value = currentValue;
   let cumulativeContributions = 0;
   let yearsToTarget: number | null = null;
+  // Kaynak (portföy + kasa tamponu) bugünkü reel hedefi zaten karşılıyorsa süre 0.
+  // Projeksiyon hâlâ yalnız yatırılmış portföyden büyür; kasa nakit olarak şişmez.
+  if (targetPortfolio > 0 && resources >= targetPortfolio) yearsToTarget = 0;
+  else if (targetMonthlyIncome > 0 && swr > 0 && targetPortfolio === 0) yearsToTarget = 0;
 
   for (let y = 1; y <= PROJECTION_YEARS; y++) {
     const startOfYearValue = value;
