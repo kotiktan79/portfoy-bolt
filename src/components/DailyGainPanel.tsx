@@ -8,6 +8,7 @@ import { Holding } from '../lib/supabase';
 import { formatCurrency, formatCurrencyUSD, formatPercentage, getCachedUSDRate } from '../services/priceService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { isClosedHolding } from '../lib/openPosition';
 
 interface AssetDailyGain {
   id: string;
@@ -212,17 +213,17 @@ export function DailyGainPanel({ holdings, totalDailyChange, totalDailyPct }: Da
   useEffect(() => {
     if (holdings.length === 0) return;
     const totalVal = holdings
-      .filter(h => h.asset_type !== 'cash')
+      .filter(h => h.asset_type !== 'cash' && !isClosedHolding(h))
       .reduce((s, h) => s + holdingValueTRY(h, fxRates), 0);
     recordHourlyPoint(totalVal, totalDailyChange);
   }, [totalDailyChange, holdings.length]);
 
   const totalCurrentValue = holdings
-    .filter(h => h.asset_type !== 'cash')
+    .filter(h => h.asset_type !== 'cash' && !isClosedHolding(h))
     .reduce((s, h) => s + holdingValueTRY(h, fxRates), 0);
 
   const rawGains: AssetDailyGain[] = holdings
-    .filter(h => h.asset_type !== 'cash')
+    .filter(h => h.asset_type !== 'cash' && !isClosedHolding(h))
     .map(h => {
       const rawOpenPrice = sessionPrices[h.id] ?? h.current_price;
       const currentPrice = h.current_price;

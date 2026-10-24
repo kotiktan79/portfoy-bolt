@@ -3,6 +3,7 @@ import { Zap, SlidersHorizontal } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { calculateScenario, PRESET_SCENARIOS } from '../services/scenarioService';
 import { assetName, fmtTRY0, fmtSignedTRY0 } from '../lib/chartTheme';
+import { isClosedHolding } from '../lib/openPosition';
 
 // Preset şoklar scenarioService'te varlık sınıfı bazında sabit yüzdeler —
 // deterministik ve şeffaf: ne varsayıldığı tabloda aynen görünür.
@@ -17,7 +18,8 @@ const PRESET_LABELS: Record<string, { label: string; desc: string }> = {
 const CUSTOM_KEY = 'custom';
 
 export default function StressTestCard() {
-  const { holdings } = usePortfolio();
+  const { holdings: allHoldings } = usePortfolio();
+  const holdings = useMemo(() => allHoldings.filter(h => !isClosedHolding(h)), [allHoldings]);
   const [selected, setSelected] = useState<string>('crisis');
   const [customShocks, setCustomShocks] = useState<Record<string, number>>({});
 

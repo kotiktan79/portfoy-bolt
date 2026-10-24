@@ -3,6 +3,7 @@ import { TARGET_PCT, allocationClassFor } from '../config/portfolioPolicy';
 import { computePeriodChange, sumRealizedTryBetween, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
 import { getRealizedTryByDay } from './eurPnlService';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
+import { isClosedHolding } from '../lib/openPosition';
 
 // Egress quota koruması: getDynamicWithdrawal price_history + portfolio_snapshots
 // çekiyor (~100KB her çağrı). LivePage 30s'de bir çağırınca quotayı patlatır.
@@ -254,7 +255,7 @@ export function calculateRebalance(
   // FX-aware: USD/EUR pozisyonları TRY'ye çevirip topluyoruz.
   // Eski sürüm raw price×qty topluyordu → multicurrency portföyde yanlış yüzdeler.
   const fxRates = getFxRatesFromHoldings(holdings as never);
-  const valued = holdings.filter(h => (Number(h.quantity) || 0) > 0 && allocationClassFor(h)).map((h) => ({
+  const valued = holdings.filter(h => !isClosedHolding(h) && allocationClassFor(h)).map((h) => ({
     h,
     value: holdingValueTRY(h as never, fxRates),
   }));
@@ -445,25 +446,40 @@ export async function getPnLSummaryByAssetType(): Promise<AssetTypePnLSummary[]>
 
   if (!holdings || holdings.length === 0) return [];
 
-  // Unified computeClassMetrics + realized PnL ekle (cash hariç tutuluyor)
+  // Açık pozisyonlar: değer ve maliyet adet × fiyattır (cost_basis yok).
+  // Realize, adet 0 olsa da durur; yalnız kapalı kalan sınıfta yatırım 0 kalır.
   const classMetrics = computeClassMetrics(holdings);
   const realizedByType: Record<string, number> = {};
   for (const h of holdings) {
     if (!h.asset_type || h.asset_type === 'cash') continue;
     realizedByType[h.asset_type] = (realizedByType[h.asset_type] || 0) + (h.total_realized_pnl || 0);
   }
-  const result: AssetTypePnLSummary[] = classMetrics.map(c => {
-    const realized = realizedByType[c.asset_type] || 0;
-    const totalPnl = c.pnlTRY + realized;
-    return {
-      asset_type: c.asset_type,
-      total_value: c.valueTRY,
-      total_investment: c.costTRY,
-      total_unrealized_pnl: c.pnlTRY,
-      total_realized_pnl: realized,
-      total_pnl: totalPnl,
-      pnl_percent: c.costTRY > 0 ? (totalPnl / c.costTRY) * 100 : 0,
-    };
-  });
-  return result.sort((a, b) => b.total_value - a.total_value);
+  const seen = new Set(classMetrics.map(c => c.asset_type));
+  const result: AssetTypePnLSummary[] = [
+    ...classMetrics.map(c => {
+      const realized = realizedByType[c.asset_type] || 0;
+      const totalPnl = c.pnlTRY + realized;
+      return {
+        asset_type: c.asset_type,
+        total_value: c.valueTRY,
+        total_investment: c.costTRY,
+        total_unrealized_pnl: c.pnlTRY,
+        total_realized_pnl: realized,
+        total_pnl: totalPnl,
+        pnl_percent: c.costTRY > 0 ? (totalPnl / c.costTRY) * 100 : 0,
+      };
+    }),
+    ...Object.entries(realizedByType)
+      .filter(([asset_type, realized]) => !seen.has(asset_type) && realized)
+      .map(([asset_type, realized]) => ({
+        asset_type,
+        total_value: 0,
+        total_investment: 0,
+        total_unrealized_pnl: 0,
+        total_realized_pnl: realized,
+        total_pnl: realized,
+        pnl_percent: 0,
+      })),
+  ];
+  return result.sort((a, b) => b.total_value - a.total_value || Math.abs(b.total_realized_pnl) - Math.abs(a.total_realized_pnl));
 }

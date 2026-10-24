@@ -60,6 +60,7 @@ describe('sekme cetveli', () => {
 const EXPORT = '/home/ubuntu/.cursor/projects/workspace/uploads/portfoy_export_043b.json';
 
 describe.skipIf(!existsSync(EXPORT))('ihracat ile sekme mutabakatı', () => {
+  if (!existsSync(EXPORT)) return;
   const raw = JSON.parse(readFileSync(EXPORT, 'utf8'));
   const holdings = raw.holdings as Holding[];
 

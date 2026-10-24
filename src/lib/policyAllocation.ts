@@ -6,6 +6,7 @@ import { Holding } from './supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from './fx';
 import { allocationClassFor, isHouseMoney, type AllocationClass } from '../config/portfolioPolicy';
 import { planRebalance, type RebalanceAction, type RebalanceRow } from './rebalance';
+import { isClosedHolding } from './openPosition';
 
 export interface PolicySnapshot {
   rows: RebalanceRow[];
@@ -29,7 +30,7 @@ export function policySnapshot(holdings: Holding[], asOf: Date = new Date()): Po
   let houseMoneyTRY = 0;
   let houseMoneyEUR = 0;
   for (const h of holdings) {
-    if ((Number(h.quantity) || 0) <= 0) continue;
+    if (isClosedHolding(h)) continue;
     const tryValue = holdingValueTRY(h, fx);
     if (isHouseMoney(h)) {
       houseMoneyTRY += tryValue;

@@ -1,9 +1,7 @@
 // Kapalı pozisyon (adet 0) ekranı. Kâr motoruna girmez; realize euro yalnız gösterimdir.
 import { inceptionDay } from './inceptionLots';
 
-export function isClosedHolding(h: { quantity?: number | string | null }): boolean {
-  return (Number(h.quantity) || 0) <= 0;
-}
+export { isClosedHolding, isOpenHolding, openCostNative, openValueNative, QTY_EPSILON } from './openPosition';
 
 export interface ClosedSale {
   day: string;

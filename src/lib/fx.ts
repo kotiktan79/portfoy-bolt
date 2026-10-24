@@ -4,6 +4,7 @@
 
 import { Holding } from './supabase';
 import { getLastKnownPrice } from '../services/priceService';
+import { openCostNative, openValueNative } from './openPosition';
 
 export interface FxRates {
   usd: number;
@@ -47,16 +48,14 @@ export function fxToTRY(amount: number, ccy: string | null | undefined, rates: F
   return amount;
 }
 
-// Holding'in TRY karşılığı değeri.
+// Holding'in TRY karşılığı değeri. Adet 0 ise eski fiyat toplama girmez.
 export function holdingValueTRY(h: Pick<Holding, 'current_price' | 'quantity' | 'currency'>, rates: FxRates): number {
-  const v = (h.current_price || 0) * (h.quantity || 0);
-  return fxToTRY(v, h.currency, rates);
+  return fxToTRY(openValueNative(h), h.currency, rates);
 }
 
-// Holding'in TRY karşılığı maliyet bazı.
-export function holdingCostTRY(h: Pick<Holding, 'purchase_price' | 'quantity' | 'currency'>, rates: FxRates): number {
-  const v = (h.purchase_price || 0) * (h.quantity || 0);
-  return fxToTRY(v, h.currency, rates);
+// Holding'in TRY karşılığı maliyeti. Adet 0 iken cost_basis okunmaz (bayat toplam maliyet).
+export function holdingCostTRY(h: Pick<Holding, 'purchase_price' | 'quantity' | 'currency'> & { cost_basis?: number | string | null }, rates: FxRates): number {
+  return fxToTRY(openCostNative(h), h.currency, rates);
 }
 
 // Holding listesinin toplam TRY değeri.

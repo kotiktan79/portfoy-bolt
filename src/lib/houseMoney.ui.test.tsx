@@ -41,6 +41,20 @@ describe('Ev Parası ekranda ayrı durur', () => {
     expect(screen.queryByText('GPY1PPF')).not.toBeInTheDocument();
   });
 
+  it('adet 0 ve eski cost_basis dağılım toplamına girmez', () => {
+    const rows = [
+      ...holdings,
+      H({ symbol: 'EKGYO', asset_type: 'stock', quantity: 0, purchase_price: 14, current_price: 20, cost_basis: 60_000 }),
+      H({ symbol: 'US900123CJ75', asset_type: 'eurobond', quantity: 0, purchase_price: 37_500, current_price: 42_000, cost_basis: 75_000 }),
+    ];
+    render(<AssetAllocationPage holdings={rows} onBack={() => {}} />);
+    expect(screen.queryByText('EKGYO')).not.toBeInTheDocument();
+    expect(screen.queryByText('US900123CJ75')).not.toBeInTheDocument();
+    expect(screen.queryByText('₺75.000')).not.toBeInTheDocument();
+    expect(screen.queryByText('₺60.000')).not.toBeInTheDocument();
+    expect(screen.getAllByText('₺9.050').length).toBeGreaterThan(0);
+  });
+
   it('dengeleme kartı Ev Parası tutarını hedef paydasının dışında gösterir', () => {
     render(<RebalancePlan holdings={holdings} totalCashValue={0} />);
     expect(screen.getByText(/kasa ve Ev Parası hariç/)).toBeInTheDocument();

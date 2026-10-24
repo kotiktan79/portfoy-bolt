@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertTriangle, TrendingDown, TrendingUp, X, ChevronDown, ChevronUp, Bell } from 'lucide-react';
 import { usePortfolio } from '../contexts/PortfolioContext';
 import { checkAlerts, getPreviousPrices, savePreviousPrices, Alert } from '../services/smartAlertService';
+import { isClosedHolding } from '../lib/openPosition';
 import { showNotification, playAlertSound } from '../services/notificationService';
 
 const ALERT_COOLDOWN_MS = 30 * 60 * 1000;
@@ -103,7 +104,7 @@ export function SmartAlerts() {
     // Save current prices for next check
     const currentPrices: Record<string, number> = {};
     for (const h of holdings) {
-      if (h.current_price > 0 && h.asset_type !== 'cash') {
+      if (h.current_price > 0 && h.asset_type !== 'cash' && !isClosedHolding(h)) {
         currentPrices[h.symbol] = h.current_price;
       }
     }
