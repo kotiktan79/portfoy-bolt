@@ -40,7 +40,7 @@ export function ClosedPositions({ holdings }: { holdings: Holding[] }) {
   if (!closed.length) return null;
 
   return (
-    <div className="mt-4 border-t border-slate-100 dark:border-gray-800 px-4 md:px-5 py-4">
+    <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-5 py-4">
       <h3 className="text-sm font-bold text-slate-700 dark:text-gray-200">Kapanmış pozisyonlar</h3>
       <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5 mb-3">
         Adet sıfır, itfa etmiş tahvil dahil. Geçmiş durur. Realize euro satış gününün kuruyla; kâr cetveline burada eklenmez.

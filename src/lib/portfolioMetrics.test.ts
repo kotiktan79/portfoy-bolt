@@ -86,6 +86,31 @@ describe('computePortfolioMetrics', () => {
     const m = computePortfolioMetrics([zeroQty, zeroPrice]);
     expect(isFinite(m.totalValueTRY)).toBe(true);
     expect(isFinite(m.totalPnLPct)).toBe(true);
+    expect(m.holdingCount).toBe(1);
+  });
+
+  it('5b. kapanmış pozisyonun cost_basis yatırılan tutara girmez', () => {
+    const closed = makeHolding({
+      symbol: 'US900123CJ75',
+      asset_type: 'eurobond',
+      quantity: 0,
+      purchase_price: 37500,
+      current_price: 42496,
+      cost_basis: 75_000,
+    });
+    const soldStock = makeHolding({
+      symbol: 'EKGYO',
+      quantity: 0,
+      purchase_price: 14.38,
+      current_price: 20,
+      cost_basis: 60_000,
+    });
+    const open = makeHolding({ symbol: 'TUPRS', purchase_price: 100, current_price: 120, quantity: 10 });
+    const m = computePortfolioMetrics([closed, soldStock, open]);
+    expect(m.totalCostTRY).toBe(1000);
+    expect(m.totalValueTRY).toBe(1200);
+    expect(m.holdingCount).toBe(1);
+    expect(m.totalPnLTRY).toBe(200);
   });
 
   it('6. negative PnL — düşüş doğru hesaplanır', () => {

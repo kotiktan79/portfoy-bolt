@@ -1,4 +1,5 @@
 import { Holding } from '../lib/supabase';
+import { isClosedHolding } from '../lib/openPosition';
 import { showNotification, playAlertSound } from './notificationService';
 
 export type AlertSeverity = 'critical' | 'warning' | 'opportunity';
@@ -59,7 +60,7 @@ export function checkAlerts(
   const now = Date.now();
 
   for (const holding of holdings) {
-    if (holding.asset_type === 'cash') continue;
+    if (holding.asset_type === 'cash' || isClosedHolding(holding)) continue;
     if (holding.current_price <= 0 || holding.purchase_price <= 0) continue;
 
     const { symbol, purchase_price, current_price } = holding;

@@ -6,6 +6,7 @@ import { CLASS_LABELS } from '../config/portfolioPolicy';
 import { policySnapshot } from '../lib/policyAllocation';
 import { assetColor, assetName, fmtTRY0, fmtSignedTRY0 } from '../lib/chartTheme';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { isClosedHolding } from '../lib/openPosition';
 
 // "Şunu satıp şuna girsem dağılım ne olur?" — hiçbir şey kaydetmez,
 // tamamen istemci tarafı simülasyon (tradeSimulatorService.applyTrades).
@@ -34,7 +35,7 @@ export default function TradeSimulatorCard({ holdings }: { holdings: Holding[] }
   const [trades, setTrades] = useState<ProposedTrade[]>([]);
 
   const symbols = useMemo(
-    () => [...new Set(holdings.filter(h => h.quantity > 0).map(h => h.symbol))].sort(),
+    () => [...new Set(holdings.filter(h => !isClosedHolding(h)).map(h => h.symbol))].sort(),
     [holdings]
   );
 
