@@ -260,6 +260,7 @@ export interface SnapshotForGrowth {
 export function computeDynamicWithdrawal(
   snapshots: SnapshotForGrowth[],
   safetyFactor: number = 0.85,
+  externalNetUSD: number = 0,
 ): DynamicWithdrawal | null {
   if (!snapshots || snapshots.length < 2) return null;
 
@@ -280,11 +281,9 @@ export function computeDynamicWithdrawal(
   const startValueUSD = (Number(first.total_value) || 0) / usdFirst;
   const endValueUSD = (Number(last.total_value) || 0) / usdLast;
 
-  // Yeni para (net deposit değişimi), ortalama kurla USD'ye çevir
-  const firstNet = (Number(first.total_deposits || 0)) - (Number(first.total_withdrawals || 0));
-  const lastNet = (Number(last.total_deposits || 0)) - (Number(last.total_withdrawals || 0));
-  const avgRate = (usdFirst + usdLast) / 2;
-  const newMoneyUSD = avgRate > 0 ? (lastNet - firstNet) / avgRate : 0;
+  // Yeni para snapshot total_deposits'ten OKUNMAZ (2026-08-01 sıçraması sahte akış üretiyordu).
+  // Çağıran, kasa defterindeki yatırma/çekmeyi USD olarak verir.
+  const newMoneyUSD = Number.isFinite(externalNetUSD) ? externalNetUSD : 0;
 
   const realGrowthUSD = (endValueUSD - startValueUSD) - newMoneyUSD;
   const periodDays = Math.max(1, (lastDate.getTime() - new Date(first.snapshot_date).getTime()) / 86400000);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom } from './fireProjectionService';
+import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, nominalCapitalOn } from './fireProjectionService';
 
 describe('projectFire', () => {
   it('hedef portföyü SWR üzerinden hesaplar (aylık gelir × 12 / SWR)', () => {
@@ -13,6 +13,7 @@ describe('projectFire', () => {
     expect(p.targetPortfolio).toBe(600_000); // 24k/yıl ÷ %4
     expect(p.currentGap).toBe(500_000);
     expect(p.currentMonthlyAtSWR).toBeCloseTo((100_000 * 0.04) / 12, 6);
+    expect(p.realProgressPct).toBeCloseTo((100_000 / 600_000) * 100, 6);
   });
 
   it('getiri ve katkı sıfırken değer sabit kalır, hedefe ulaşılmaz', () => {
@@ -70,6 +71,10 @@ describe('projectFire', () => {
     });
     expect(p.yearsToTarget).toBe(5);
     expect(p.inflationAdjustedTarget).toBeCloseTo(600_000 * Math.pow(1.03, 5), 4);
+    expect(p.yearByYear[0].realTarget).toBe(600_000);
+    expect(p.yearByYear[4].realTarget).toBe(600_000);
+    expect(p.yearByYear[0].realEndOfYearValue).toBeCloseTo(p.yearByYear[0].endOfYearValue / 1.03, 4);
+    expect(p.yearByYear[2].inflationTarget).toBeCloseTo(600_000 * Math.pow(1.03, 3), 4);
   });
 
   it('SWR 0 ise hedef 0 ve hedefe-ulaşma işaretlenmez', () => {
@@ -117,6 +122,14 @@ describe('poolRuleCapitalFor / poolRuleMonthlyFrom', () => {
   });
   it('aylık tavan bağlar: büyük sermayede maaş tavanı aşmaz', () => {
     expect(poolRuleMonthlyFrom(2_000_000, 3, 0.85, 1000)).toBe(1000);       // 4.250 → tavan 1.000
+  });
+  it('Nisan 2027 nominal hedefi, bugünkü reel sermayeyi enflasyonla büyütür', () => {
+    const real = (1000 * 12) / 0.035;
+    const on = nominalCapitalOn(real, 3, '2026-10-24', '2027-04-01');
+    const years = (Date.parse('2027-04-01T00:00:00Z') - Date.parse('2026-10-24T00:00:00Z')) / (365.25 * 86400000);
+    expect(on).toBeCloseTo(real * Math.pow(1.03, years), 4);
+    expect(on).toBeGreaterThan(real);
+    expect(nominalCapitalOn(real, 3, '2027-05-01', '2027-04-01')).toBe(real);
   });
   it('reel getiri ≤ 0 ya da sermaye 0 ise NaN/Infinity değil 0 döner', () => {
     expect(poolRuleCapitalFor(1000, 0, 0.85)).toBe(0);

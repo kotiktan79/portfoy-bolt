@@ -273,8 +273,23 @@ describe('computeDynamicWithdrawal', () => {
       { snapshot_date: '2026-01-01', total_value: 4500000, total_deposits: 0, total_withdrawals: 0, usdRate: 45 },
       { snapshot_date: '2026-04-11', total_value: 4950000, total_deposits: 450000, total_withdrawals: 0, usdRate: 45 },
     ];
-    const r = computeDynamicWithdrawal(snaps);
+    const r = computeDynamicWithdrawal(snaps, 0.85, 10_000);
     expect(r!.realGrowthUSD).toBeCloseTo(0, -2);
+  });
+
+  it('17b. snapshot yatırma sıçraması, defter akışı verilmediyse büyümeyi bozmaz', () => {
+    const snaps = [
+      { snapshot_date: '2026-07-31', total_value: 4500000, total_deposits: 830000, total_withdrawals: 0, usdRate: 45 },
+      { snapshot_date: '2026-08-01', total_value: 4518000, total_deposits: 2260000, total_withdrawals: 0, usdRate: 45 },
+    ];
+    const clean = computeDynamicWithdrawal(snaps, 0.85, 0);
+    const poisoned = computeDynamicWithdrawal(
+      snaps.map(s => ({ ...s, total_deposits: s.snapshot_date === '2026-08-01' ? 9_999_999 : s.total_deposits })),
+      0.85,
+      0,
+    );
+    expect(clean!.realGrowthUSD).toBeCloseTo(poisoned!.realGrowthUSD, 6);
+    expect(clean!.newMoneyUSD).toBe(0);
   });
 
   it('18. negatif büyüme — güvenli max 0 (anaparaya dokunma)', () => {

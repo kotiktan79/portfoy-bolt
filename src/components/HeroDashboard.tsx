@@ -23,6 +23,8 @@ interface HeroDashboardProps {
   // TL fiyat kârı alt satırda kalır. Tan Romanya'da euro harcar.
   inceptionGainEUR?: number;
   inceptionGainPct?: number;
+  /** Kuruluştan bugüne Modified Dietz, kasa defterinden. Maliyet bazlı yüzdenin yerine geçmez. */
+  inceptionMwrPct?: number | null;
   todayGainEUR?: number;
   prevWealthEUR?: number;      // önceki snapshot günü serveti — günlük % TABANI (LivePage/cron/risk-monitor ile aynı)
   eurState?: 'loading' | 'ok' | 'error';   // motor verisi: yüklenirken 'hesaplanıyor…', hatada 'veri yüklenemedi'
@@ -104,6 +106,7 @@ export default function HeroDashboard({
   dynamicSalaryLabel,
   inceptionGainEUR,
   inceptionGainPct,
+  inceptionMwrPct,
   todayGainEUR,
   prevWealthEUR,
   eurState = 'ok',
@@ -266,7 +269,7 @@ export default function HeroDashboard({
             valueRaw: eurReady ? gainEUR : 0,
             valueFmt: (n: number) => eurReady ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : missingNote,
             subtitle: eurReady
-              ? `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% euro, kur dahil · TL ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)`
+              ? `${inceptionMwrPct != null ? `para ağırlıklı ${inceptionMwrPct >= 0 ? '+' : ''}${inceptionMwrPct.toFixed(1)}% · ` : ''}maliyet bazlı ${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% · TL ${pnlTRY >= 0 ? '+' : '−'}₺${fmtTRY(Math.abs(pnlTRY))} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)`
               : missingNote,
             symbol: '✦',
           },

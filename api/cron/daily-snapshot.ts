@@ -10,6 +10,8 @@ import { isManualEurValue } from '../../src/lib/manualPrice.js';
 import { fetchTRGramGold } from '../lib/gramGold.js';
 import { resolveTryRate, type FxDecision } from '../lib/fxQuote.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '../lib/eurEngine.js';
+import { externalFlowsFromLedger, ledgerCashTotals } from '../../src/lib/moneyWeightedReturn.js';
 
 // Yaygın BIST/US hisse split oranları. Fiyat bu oranlardan birine yakın bir
 // faktör kadar düştüyse split olarak şüphelen.
@@ -121,15 +123,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Deposit/withdraw kümülatif toplamını cash_balances'tan canlı hesapla.
-    // Eski mantık önceki snapshot'tan kopyalıyordu → 25 Mayıs'ta €1000 ek alım
-    // cash_balances'a yazıldı ama snapshot'a yansımadı; ayrıca eski FX kuruyla
-    // donmuş kalıyordu (€2787 = ₺95K eski, oysa ₺132K güncel).
+    // Yatırma/çekme kümülatifi KASA DEFTERİNDEN. cash_balances.total_deposits bayat
+    // kalıyor ve eski cron onu her gün bugünkü kurla çarpıyordu → 2026-08-01'de
+    // ₺830 bin → ₺2,26 milyon sıçraması. Her işlem kendi gününün kuruyla çevrilir.
     let totalDepositsTRY = 0;
     let totalWithdrawalsTRY = 0;
-    const { data: cashBalances } = await supabase
-      .from('cash_balances')
-      .select('currency, total_deposits, total_withdrawals');
+    let ledgerDepositsUSD: number | null = null;
+    let ledgerWithdrawalsUSD: number | null = null;
     // Canlı çapraz kurlar (open.er-api tek istekte tüm birimleri verir).
     // API erişilemezse eski kaba yaklaşımlara düşülür.
     const crossRates = await fetchUsdCrossRates();
@@ -148,17 +148,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (cur === 'RUB') return crossToTry('RUB', usdRateForTotal / 100);
       return crossToTry(cur, 1);
     };
-    for (const cb of cashBalances || []) {
-      const rate = ccyRate(cb.currency);
-      totalDepositsTRY += (Number(cb.total_deposits) || 0) * rate;
-      totalWithdrawalsTRY += (Number(cb.total_withdrawals) || 0) * rate;
+    try {
+      const OTHER = ['GBP', 'CHF', 'RON', 'RUB'];
+      const rateQ = (ccy: string) => () => supabase.from('exchange_rates_daily').select('day,rate,source')
+        .eq('from_currency', ccy).eq('to_currency', 'TRY').in('source', ['api', 'ecb']).order('day', { ascending: true });
+      const [txs, eurRows, usdRows, others] = await Promise.all([
+        fetchAll<{ created_at: string; currency: string | null; transaction_type: string | null; amount: number | null }>('cashFlows', () => supabase.from('cash_transactions')
+          .select('created_at,currency,transaction_type,amount')
+          .order('created_at', { ascending: true }).order('id', { ascending: true })),
+        fetchAll<{ day: string; rate: number; source?: string }>('snapEur', rateQ('EUR')),
+        fetchAll<{ day: string; rate: number; source?: string }>('snapUsd', rateQ('USD')),
+        Promise.all(OTHER.map(c => fetchAll<{ day: string; rate: number; source?: string }>('snap' + c, rateQ(c)))),
+      ]);
+      const points = (rows: Array<{ day: string; rate: number; source?: string }>) => {
+        const m = new Map<string, number>();
+        const api = new Set<string>();
+        for (const r of rows || []) {
+          const d = String(r.day).slice(0, 10);
+          if (api.has(d)) continue;
+          m.set(d, Number(r.rate));
+          if (r.source === 'api') api.add(d);
+        }
+        return [...m.entries()].map(([date, rate]) => ({ date, rate }));
+      };
+      const built = externalFlowsFromLedger(txs, {
+        eur: points(eurRows),
+        usd: points(usdRows),
+        other: Object.fromEntries(OTHER.map((c, i) => [c, points(others[i])])),
+      });
+      const totals = ledgerCashTotals(built.flows);
+      totalDepositsTRY = totals.depositsTRY;
+      totalWithdrawalsTRY = totals.withdrawalsTRY;
+      ledgerDepositsUSD = totals.depositsUSD;
+      ledgerWithdrawalsUSD = totals.withdrawalsUSD;
+      log.push(`Defter: yatırma ₺${totals.depositsTRY.toFixed(0)} (€${totals.depositsEUR.toFixed(0)}, $${totals.depositsUSD.toFixed(0)}), çekme ₺${totals.withdrawalsTRY.toFixed(0)}${built.unpriced ? `, kursuz ${built.unpriced} kayıt` : ''}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log.push(`Kasa defteri okunamadı, önceki snapshot yatırma alanları korunuyor: ${msg}`);
+      const { data: prevSnap } = await supabase.from('portfolio_snapshots')
+        .select('total_deposits,total_withdrawals,total_deposits_usd,total_withdrawals_usd')
+        .order('snapshot_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (prevSnap) {
+        totalDepositsTRY = Number(prevSnap.total_deposits) || 0;
+        totalWithdrawalsTRY = Number(prevSnap.total_withdrawals) || 0;
+        ledgerDepositsUSD = Number(prevSnap.total_deposits_usd) || 0;
+        ledgerWithdrawalsUSD = Number(prevSnap.total_withdrawals_usd) || 0;
+      }
     }
-    // USD karşılığını da yaz: native→TRY-bugün / USD-bugün = native × (ccyTRY/usdTRY),
-    // yani EUR deposit için EUR×EURUSD → TRY hareketinden BAĞIMSIZ, kümülatif USD stabil.
-    // KarCuzdani iki snapshot'ın USD farkını alır → sahte FX-deposit'i ortadan kalkar.
-    const totalDepositsUSD = usdRateForTotal > 0 ? totalDepositsTRY / usdRateForTotal : 0;
-    const totalWithdrawalsUSD = usdRateForTotal > 0 ? totalWithdrawalsTRY / usdRateForTotal : 0;
-    log.push(`Deposits: ₺${totalDepositsTRY.toFixed(0)} ($${totalDepositsUSD.toFixed(0)}, canlı FX), Withdrawals: ₺${totalWithdrawalsTRY.toFixed(0)}`);
+    // USD, işlemin günündeki kurla. Bugünkü kurla stoğu bölmek kur hareketini sahte yatırma yapardı.
+    const totalDepositsUSD = ledgerDepositsUSD != null ? ledgerDepositsUSD : (usdRateForTotal > 0 ? totalDepositsTRY / usdRateForTotal : 0);
+    const totalWithdrawalsUSD = ledgerWithdrawalsUSD != null ? ledgerWithdrawalsUSD : (usdRateForTotal > 0 ? totalWithdrawalsTRY / usdRateForTotal : 0);
+    log.push(`Deposits: ₺${totalDepositsTRY.toFixed(0)} ($${totalDepositsUSD.toFixed(0)}, defter), Withdrawals: ₺${totalWithdrawalsTRY.toFixed(0)}`);
 
     // exchange_rates tablosunu tazele — UI'daki getExchangeRate en yeni satırı
     // okur; tazelenmezse nakit bakiyeler aylar önceki elle girilmiş kurla
