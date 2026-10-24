@@ -131,6 +131,36 @@ describe('poolRuleCapitalFor / poolRuleMonthlyFrom', () => {
     expect(on).toBeGreaterThan(real);
     expect(nominalCapitalOn(real, 3, '2027-05-01', '2027-04-01')).toBe(real);
   });
+  it('dış gelir hedef sermayeyi düşürür; kasa ilerlemeye girer, çizgiyi şişirmez', () => {
+    const base = pf({
+      currentValue: 148_249,
+      monthlyContribution: 0,
+      annualReturnPct: 4,
+      targetMonthlyIncome: 1000,
+      safeWithdrawalRatePct: 3.5,
+      annualInflationPct: 3,
+    });
+    const all = pf({
+      currentValue: 148_249,
+      progressValue: 148_249 + 10_000,
+      monthlyContribution: 0,
+      annualReturnPct: 4,
+      targetMonthlyIncome: 1000,
+      safeWithdrawalRatePct: 3.5,
+      annualInflationPct: 3,
+      annualExternalIncome: 8_600,
+    });
+    expect(base.targetPortfolio).toBeCloseTo(12_000 / 0.035, 4);
+    expect(all.targetPortfolio).toBeCloseTo(3_400 / 0.035, 4);
+    expect(all.yearByYear[0].realTarget).toBeCloseTo(3_400 / 0.035, 4);
+    expect(all.yearByYear[0].realTarget).toBe(all.yearByYear[2].realTarget);
+    expect(all.realProgressPct).toBeCloseTo((148_249 + 10_000) / (3_400 / 0.035) * 100, 4);
+    expect(all.currentGap).toBe(0);
+    expect(all.yearsToTarget).toBe(0);
+    // Getiri çizgisi kasa eklenmeden portföyden başlar.
+    expect(all.yearByYear[0].startOfYearValue).toBe(148_249);
+    expect(base.realProgressPct).toBeCloseTo(148_249 / (12_000 / 0.035) * 100, 4);
+  });
   it('reel getiri ≤ 0 ya da sermaye 0 ise NaN/Infinity değil 0 döner', () => {
     expect(poolRuleCapitalFor(1000, 0, 0.85)).toBe(0);
     expect(poolRuleCapitalFor(1000, -1, 0.85)).toBe(0);
