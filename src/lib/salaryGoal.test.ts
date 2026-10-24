@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONSERVATIVE_WITHDRAWAL_PCT,
+  PLANNED_NOMINAL_RETURN_PCT,
   PLANNED_WITHDRAWAL_PCT,
   fixedRealWithdrawalYears,
   roughYearsPhrase,
@@ -11,9 +12,10 @@ import {
 const resources = 148_249 + 29_400;
 
 describe('aylık maaş hedefi', () => {
-  it('planlanan çekim %5, muhafazakâr %4', () => {
+  it('planlanan çekim %5, muhafazakâr %4, nominal getiri %6,5', () => {
     expect(PLANNED_WITHDRAWAL_PCT).toBe(5);
     expect(CONSERVATIVE_WITHDRAWAL_PCT).toBe(4);
+    expect(PLANNED_NOMINAL_RETURN_PCT).toBe(6.5);
   });
 
   it('durum yuvarlanmış euro ile: yetiyor / %10 altı sınırda / daha altı kısa', () => {
@@ -33,6 +35,16 @@ describe('aylık maaş hedefi', () => {
     expect(salaryProgressPct(sustainable, 700)).toBeCloseTo(105.743452, 4);
     expect(salaryProgressPct(0, 700)).toBe(0);
     expect(salaryProgressPct(500, 0)).toBe(0);
+  });
+
+  it('sabit €1.000, planlanan reel %3,5 ile bugünkü sermayede yaklaşık 20,7 yıl', () => {
+    const real = PLANNED_NOMINAL_RETURN_PCT - 3;
+    expect(real).toBeCloseTo(3.5, 6);
+    const years = fixedRealWithdrawalYears(resources, 1_000, real);
+    expect(years).not.toBeNull();
+    expect(years!).toBeCloseTo(20.737, 2);
+    expect(roughYearsPhrase(years)).toBe('yaklaşık 20,7 yıl');
+    expect(Math.ceil(years! * 12 - 1e-6)).toBe(monthsUntilEmpty(resources, 1_000, real));
   });
 
   it('sabit €1.000, reel %1 ile bugünkü sermayede yaklaşık 16,0 yıl', () => {

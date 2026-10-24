@@ -24,6 +24,7 @@ import { MONTHLY_CAP_EUR, INFLATION_EUR, SALARY_SAFETY, dayInTZ, normalizeInflat
 import { SALARY_START_MONTH, SALARY_FLOOR_EUR, KASA_MIN_EUR } from '../lib/salaryPlan';
 import {
   CONSERVATIVE_WITHDRAWAL_PCT,
+  PLANNED_NOMINAL_RETURN_PCT,
   PLANNED_WITHDRAWAL_PCT,
   SALARY_SHORTFALL_BAND,
   fixedRealWithdrawalYears,
@@ -64,15 +65,19 @@ interface StoredInputs {
   annualInflationPct: number;
 }
 
-const INPUTS_VERSION = 2;
+const INPUTS_VERSION = 3;
+/** Maaş tabanı ve çekim oranı bu sürümde yerleşti. Sonraki sürüm onları yeniden göçürmez. */
+const SALARY_INPUTS_VERSION = 2;
 /** PR #13 varsayılanı. Kayıtta sürüm yoksa ve oran hâlâ buysa planlanan %5'e alınır. */
 const OLD_DEFAULT_WITHDRAWAL_PCT = CONSERVATIVE_WITHDRAWAL_PCT;
 /** Eski tek hedef, iyi yıl tavanıydı. Sürüm yoksa tabana (€700) çekilir. */
 const OLD_DEFAULT_TARGET_EUR = MONTHLY_CAP_EUR;
+/** Eski sayfa varsayılanı. Sürüm 3'ten önce kayıtlı %4 planlanan %6,5'e alınır. */
+const OLD_DEFAULT_RETURN_PCT = 4;
 
 const DEFAULTS: StoredInputs = {
   monthlyContribution: 0,                     // dış katkı yok (kullanıcı beyanı 2026-09-18)
-  annualReturnPct: 4,                         // politika dağılımı ~%4-5 nominal EUR; bugünkü (%40 nakit) ~%3
+  annualReturnPct: PLANNED_NOMINAL_RETURN_PCT, // nominal plan ~%6-8; süre notu bundan enflasyonu düşer
   targetMonthlyIncome: SALARY_FLOOR_EUR,      // €700/ay birincil maaş hedefi
   goodYearMonthlyEUR: MONTHLY_CAP_EUR,        // €1.000 iyi yıl; isteğe bağlı
   safeWithdrawalRatePct: PLANNED_WITHDRAWAL_PCT,
@@ -91,19 +96,26 @@ function loadStored(): { inputs: StoredInputs; migrated: boolean } | null {
     const p = JSON.parse(raw) as Record<string, unknown>;
     if (!p || typeof p !== 'object') return null;
     const version = Number(p.inputsVersion);
-    const current = version >= INPUTS_VERSION;
-    const storedTarget = numOr(p.targetMonthlyIncome, current ? DEFAULTS.targetMonthlyIncome : OLD_DEFAULT_TARGET_EUR);
-    const storedRate = numOr(p.safeWithdrawalRatePct, current ? DEFAULTS.safeWithdrawalRatePct : OLD_DEFAULT_WITHDRAWAL_PCT);
+    const salarySettled = version >= SALARY_INPUTS_VERSION;
+    const returnSettled = version >= INPUTS_VERSION;
+    const storedTarget = numOr(p.targetMonthlyIncome, salarySettled ? DEFAULTS.targetMonthlyIncome : OLD_DEFAULT_TARGET_EUR);
+    const storedRate = numOr(p.safeWithdrawalRatePct, salarySettled ? DEFAULTS.safeWithdrawalRatePct : OLD_DEFAULT_WITHDRAWAL_PCT);
+    const storedReturn = numOr(p.annualReturnPct, returnSettled ? DEFAULTS.annualReturnPct : OLD_DEFAULT_RETURN_PCT);
+    // Eski kayıtta €1.000 "hedef gelir"di; artık tavan. Özel bir tutar (1000 değilse) durur.
+    const targetMonthlyIncome = salarySettled || storedTarget !== OLD_DEFAULT_TARGET_EUR ? storedTarget : DEFAULTS.targetMonthlyIncome;
+    // Eski varsayılan çekim %4 ise planlanan %5 olur; kullanıcı başka oran yazdıysa o kalır.
+    const safeWithdrawalRatePct = salarySettled || storedRate !== OLD_DEFAULT_WITHDRAWAL_PCT ? storedRate : DEFAULTS.safeWithdrawalRatePct;
+    // Eski varsayılan getiri %4 ise planlanan %6,5 olur. Başka bir kayıtlı getiri durur.
+    // Sürüm 3'te %4 bilinçli seçimdir, yeniden göçmez.
+    const annualReturnPct = returnSettled || storedReturn !== OLD_DEFAULT_RETURN_PCT ? storedReturn : DEFAULTS.annualReturnPct;
     return {
-      migrated: !current,
+      migrated: targetMonthlyIncome !== storedTarget || safeWithdrawalRatePct !== storedRate || annualReturnPct !== storedReturn,
       inputs: {
         monthlyContribution: numOr(p.monthlyContribution, DEFAULTS.monthlyContribution),
-        annualReturnPct: numOr(p.annualReturnPct, DEFAULTS.annualReturnPct),
-        // Eski kayıtta €1.000 "hedef gelir"di; artık tavan. Özel bir tutar (1000 değilse) durur.
-        targetMonthlyIncome: current || storedTarget !== OLD_DEFAULT_TARGET_EUR ? storedTarget : DEFAULTS.targetMonthlyIncome,
+        annualReturnPct,
+        targetMonthlyIncome,
         goodYearMonthlyEUR: numOr(p.goodYearMonthlyEUR, DEFAULTS.goodYearMonthlyEUR),
-        // Eski varsayılan %4 ise planlanan %5 olur; kullanıcı başka oran yazdıysa o kalır.
-        safeWithdrawalRatePct: current || storedRate !== OLD_DEFAULT_WITHDRAWAL_PCT ? storedRate : DEFAULTS.safeWithdrawalRatePct,
+        safeWithdrawalRatePct,
         annualInflationPct: DEFAULTS.annualInflationPct,
       },
     };
@@ -303,7 +315,7 @@ export default function FireProjection() {
     { key: 'targetMonthlyIncome', label: 'Aylık maaş hedefi', suffix: '€', step: '50', hint: `Birincil hedef. ${goalLabel}'den itibaren taban. Varsayılan €${SALARY_FLOOR_EUR.toLocaleString('de-DE')}.` },
     { key: 'goodYearMonthlyEUR', label: 'İyi yıl tavanı', suffix: '€', step: '50', hint: `İsteğe bağlı. İyi yılda üst seviye; 0 ise gizlenir. Varsayılan €${MONTHLY_CAP_EUR.toLocaleString('de-DE')}.` },
     { key: 'safeWithdrawalRatePct', label: 'Güvenli çekim (SWR)', suffix: '%', step: '0.1', hint: 'Planlanan seviye %5, muhafazakâr %4. Bu tarayıcıda durur.' },
-    { key: 'annualReturnPct', label: 'Yıllık getiri', suffix: '%', step: '0.5', hint: 'Süre notunun reel getirisinde kullanılır.' },
+    { key: 'annualReturnPct', label: 'Yıllık getiri', suffix: '%', step: '0.5', hint: `Varsayılan %${PLANNED_NOMINAL_RETURN_PCT.toLocaleString('de-DE')} nominal (yaklaşık %6–8). Süre notunda enflasyon düşülür.` },
     { key: 'annualInflationPct', label: 'Enflasyon (uygulama ayarı)', suffix: '%', step: '0.5' },
     { key: 'monthlyContribution', label: 'Aylık dış katkı', suffix: '€', step: '100' },
   ];

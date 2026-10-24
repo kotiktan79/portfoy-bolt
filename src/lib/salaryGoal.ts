@@ -3,6 +3,8 @@
 
 /** Planlanan çekim oranı. Sayfa varsayılanı budur. */
 export const PLANNED_WITHDRAWAL_PCT = 5;
+/** Planlanan nominal getiri. Yaklaşık %6–8 bandı. Eski sayfa varsayılanı %4'tü. */
+export const PLANNED_NOMINAL_RETURN_PCT = 6.5;
 /** Muhafazakâr çekim oranı. Eski varsayılan; seçenek olarak durur. */
 export const CONSERVATIVE_WITHDRAWAL_PCT = 4;
 

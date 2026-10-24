@@ -31,7 +31,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MONTHLY_CAP_EUR } from '../lib/eurPnl';
 import { SALARY_FLOOR_EUR } from '../lib/salaryPlan';
-import { fixedRealWithdrawalYears, PLANNED_WITHDRAWAL_PCT, roughYearsPhrase, salaryProgressPct } from '../lib/salaryGoal';
+import { fixedRealWithdrawalYears, PLANNED_NOMINAL_RETURN_PCT, PLANNED_WITHDRAWAL_PCT, roughYearsPhrase, salaryProgressPct } from '../lib/salaryGoal';
 import FireProjection from './FireProjection';
 
 const RESOURCES = 148_249 + 29_400;
@@ -51,6 +51,7 @@ describe('Hedef aylık maaş', () => {
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(700);
     expect(screen.getByLabelText(/İyi yıl tavanı/)).toHaveValue(1_000);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(5);
+    expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(PLANNED_NOMINAL_RETURN_PCT);
     expect(screen.getByRole('button', { name: 'Planlanan %5', pressed: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Muhafazakâr %4', pressed: false })).toBeInTheDocument();
     expect(screen.getAllByText('Sermaye hedefi (portföy, bugünkü €)').length).toBeGreaterThan(0);
@@ -69,16 +70,16 @@ describe('Hedef aylık maaş', () => {
     expect(sustainable).toBe(740);
     const progress = Math.max(0, salaryProgressPct(RESOURCES * 0.05 / 12, 700)).toFixed(0);
     expect(progress).toBe('106');
-    const years = fixedRealWithdrawalYears(RESOURCES, 1_000, 4 - 3);
-    expect(roughYearsPhrase(years)).toBe('yaklaşık 16,0 yıl');
+    const years = fixedRealWithdrawalYears(RESOURCES, 1_000, PLANNED_NOMINAL_RETURN_PCT - 3);
+    expect(roughYearsPhrase(years)).toBe('yaklaşık 20,7 yıl');
 
     await waitFor(() => {
       expect(screen.getByText(`Bugünkü sermaye ile sürdürülebilir maaş: ${eur(sustainable)}/ay`)).toBeInTheDocument();
       expect(screen.getByText('€700 maaş sürdürülebilir')).toBeInTheDocument();
       expect(screen.getByText('€700 hedefine ilerleme %106')).toBeInTheDocument();
       expect(screen.getByText(/Portföy €148\.249 \+ kasa €29\.400/, { selector: 'p' })).toBeInTheDocument();
-      expect(screen.getByText(/Sabit €1\.000\/ay, bugünkü sermayeden \(portföy \+ kasa\) yaklaşık 16,0 yıl sürer/, { selector: 'p' })).toBeInTheDocument();
-      expect(screen.getByText(/yıllık getiri %4 − enflasyon %3 = reel %1/, { selector: 'p' })).toBeInTheDocument();
+      expect(screen.getByText(/Sabit €1\.000\/ay, bugünkü sermayeden \(portföy \+ kasa\) yaklaşık 20,7 yıl sürer/, { selector: 'p' })).toBeInTheDocument();
+      expect(screen.getByText(/yıllık getiri %6,5 − enflasyon %3 = reel %3,5/, { selector: 'p' })).toBeInTheDocument();
       expect(screen.getByText('Portföy + kasa yetiyor. Grafik yalnız portföyü büyütür.')).toBeInTheDocument();
     });
   });
@@ -116,7 +117,8 @@ describe('Hedef aylık maaş', () => {
     expect(saved.safeWithdrawalRatePct).toBe(4);
     expect(saved.targetMonthlyIncome).toBe(700);
     expect(saved.goodYearMonthlyEUR).toBe(1_000);
-    expect(saved.inputsVersion).toBe(2);
+    expect(saved.annualReturnPct).toBe(PLANNED_NOMINAL_RETURN_PCT);
+    expect(saved.inputsVersion).toBe(3);
     expect(saved.annualInflationPct).toBeUndefined();
 
     await waitFor(() => {
@@ -139,7 +141,7 @@ describe('Hedef aylık maaş', () => {
     await waitFor(() => {
       expect(screen.getByText(/yıllık getiri %8 − enflasyon %3 = reel %5/, { selector: 'p' })).toBeInTheDocument();
     });
-    expect(screen.queryByText(/reel %1\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/yıllık getiri %6,5/)).not.toBeInTheDocument();
   });
 
   it('eski varsayılan €1.000 ve %4 bir kez tabana ve %5e alınır', async () => {
@@ -156,7 +158,7 @@ describe('Hedef aylık maaş', () => {
     expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(6);
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem('tandor_fire_inputs_eur') || '{}');
-      expect(saved.inputsVersion).toBe(2);
+      expect(saved.inputsVersion).toBe(3);
       expect(saved.targetMonthlyIncome).toBe(700);
       expect(saved.safeWithdrawalRatePct).toBe(5);
       expect(saved.annualReturnPct).toBe(6);
@@ -164,20 +166,40 @@ describe('Hedef aylık maaş', () => {
     });
   });
 
-  it('eski kayıtta özel hedef ve oran durur; sürüm 2 yeniden göçmez', async () => {
+  it('eski varsayılan getiri %4 plana çekilir; başka getiri ve sürüm 3 durur', async () => {
     localStorage.setItem('tandor_fire_inputs_eur', JSON.stringify({
       targetMonthlyIncome: 850,
       safeWithdrawalRatePct: 3.5,
       annualReturnPct: 4,
       monthlyContribution: 0,
     }));
-    const { unmount } = render(<FireProjection />);
+    const first = render(<FireProjection />);
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(850);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(3.5);
+    expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(6.5);
     await waitFor(() => {
-      expect(JSON.parse(localStorage.getItem('tandor_fire_inputs_eur') || '{}').inputsVersion).toBe(2);
+      const saved = JSON.parse(localStorage.getItem('tandor_fire_inputs_eur') || '{}');
+      expect(saved.inputsVersion).toBe(3);
+      expect(saved.annualReturnPct).toBe(6.5);
+      expect(saved.targetMonthlyIncome).toBe(850);
+      expect(saved.safeWithdrawalRatePct).toBe(3.5);
     });
-    unmount();
+    first.unmount();
+
+    localStorage.setItem('tandor_fire_inputs_eur', JSON.stringify({
+      inputsVersion: 2,
+      targetMonthlyIncome: 1_000,
+      goodYearMonthlyEUR: 1_200,
+      safeWithdrawalRatePct: 4,
+      annualReturnPct: 8,
+      monthlyContribution: 0,
+    }));
+    const second = render(<FireProjection />);
+    expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(1_000);
+    expect(screen.getByLabelText(/İyi yıl tavanı/)).toHaveValue(1_200);
+    expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
+    expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(8);
+    second.unmount();
 
     localStorage.setItem('tandor_fire_inputs_eur', JSON.stringify({
       inputsVersion: 2,
@@ -187,9 +209,30 @@ describe('Hedef aylık maaş', () => {
       annualReturnPct: 4,
       monthlyContribution: 0,
     }));
-    render(<FireProjection />);
+    const third = render(<FireProjection />);
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(1_000);
-    expect(screen.getByLabelText(/İyi yıl tavanı/)).toHaveValue(1_200);
+    expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
+    expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(6.5);
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('tandor_fire_inputs_eur') || '{}');
+      expect(saved.inputsVersion).toBe(3);
+      expect(saved.annualReturnPct).toBe(6.5);
+      expect(saved.targetMonthlyIncome).toBe(1_000);
+      expect(saved.safeWithdrawalRatePct).toBe(4);
+    });
+    third.unmount();
+
+    localStorage.setItem('tandor_fire_inputs_eur', JSON.stringify({
+      inputsVersion: 3,
+      targetMonthlyIncome: 1_000,
+      goodYearMonthlyEUR: 1_200,
+      safeWithdrawalRatePct: 4,
+      annualReturnPct: 4,
+      monthlyContribution: 0,
+    }));
+    render(<FireProjection />);
+    expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(4);
+    expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(1_000);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
   });
 });
