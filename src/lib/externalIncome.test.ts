@@ -6,18 +6,22 @@ import {
   parseExternalSettings,
   requiredRealCapital,
   scenarioProgressPct,
+  sustainableMonthlyEUR,
 } from './externalIncome';
 
 const swr = 3.5;
 const goal = 1000;
 
 describe('dış gelir ve hedef sermaye', () => {
-  it('varsayılan çiftlik €5.000 aktif, kira €3.600 beklenen; birincil senaryo yalnız aktif', () => {
-    expect(annualExternalEUR(DEFAULT_EXTERNAL_INCOMES, 'aktif')).toBe(5_000);
+  it('varsayılan çiftlik ve kira beklenendir; aktif toplam 0, portföy hedefi €300.000', () => {
+    expect(DEFAULT_EXTERNAL_INCOMES.every(s => s.status === 'beklenen')).toBe(true);
+    expect(annualExternalEUR(DEFAULT_EXTERNAL_INCOMES, 'aktif')).toBe(0);
     expect(annualExternalEUR(DEFAULT_EXTERNAL_INCOMES, 'tumu')).toBe(8_600);
     expect(parseExternalSettings(null).scenario).toBe('aktif');
-    const rentOn = DEFAULT_EXTERNAL_INCOMES.map(s => s.id === 'kira' ? { ...s, status: 'aktif' as const } : s);
-    expect(annualExternalEUR(rentOn, 'aktif')).toBe(8_600);
+    expect(requiredRealCapital(1000, 0, 4)).toBeCloseTo(300_000, 6);
+    const farmOn = DEFAULT_EXTERNAL_INCOMES.map(s => s.id === 'ciftlik' ? { ...s, status: 'aktif' as const } : s);
+    expect(annualExternalEUR(farmOn, 'aktif')).toBe(5_000);
+    expect(requiredRealCapital(1000, 5_000, 4)).toBeCloseTo(175_000, 6);
   });
 
   it('aylık tutar 12 ile çarpılır, eksi ve sıfır sayılmaz', () => {
@@ -36,6 +40,10 @@ describe('dış gelir ve hedef sermaye', () => {
     expect(requiredRealCapital(goal, 5_000, 4)).toBeCloseTo(175_000, 6);
     expect(requiredRealCapital(goal, 8_600, 4)).toBeCloseTo(85_000, 6);
     expect(requiredRealCapital(goal, 0, 4)).toBeCloseTo(300_000, 6);
+    expect(sustainableMonthlyEUR(300_000, 4)).toBeCloseTo(1_000, 6);
+    expect(sustainableMonthlyEUR(148_249 + 29_400, 4)).toBeCloseTo((148_249 + 29_400) * 0.04 / 12, 6);
+    expect(sustainableMonthlyEUR(0, 4)).toBe(0);
+    expect(sustainableMonthlyEUR(100_000, 0)).toBe(0);
   });
 
   it('ilerleme kaynak / senaryo sermayesi; dış gelir hedefi kapatırsa %100', () => {

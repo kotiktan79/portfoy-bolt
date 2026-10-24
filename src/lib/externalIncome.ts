@@ -21,15 +21,15 @@ export interface ExternalIncomeSettings {
   scenario: ExternalScenario;
 }
 
-/** Çiftlik sürmekte. Ev kirası ~€300/ay, henüz başlamadı → beklenen. */
+/** İkisi de belirsiz: hedef yalnız portföydür. Aktif yapılınca sermayeden düşülür. */
 export const DEFAULT_EXTERNAL_INCOMES: ExternalIncome[] = [
-  { id: 'ciftlik', label: 'Çiftlik (bal, aronya, alıç, APIA)', amountEUR: 5_000, frequency: 'yearly', status: 'aktif' },
+  { id: 'ciftlik', label: 'Çiftlik (bal, aronya, alıç, APIA)', amountEUR: 5_000, frequency: 'yearly', status: 'beklenen' },
   { id: 'kira', label: 'Ev kirası', amountEUR: 3_600, frequency: 'yearly', status: 'beklenen' },
 ];
 
 export const DEFAULT_EXTERNAL_SETTINGS: ExternalIncomeSettings = {
   sources: DEFAULT_EXTERNAL_INCOMES,
-  // Kira henüz yok. Birincil senaryo yalnız aktif gelir; beklenen kira karşılaştırmada kalır.
+  // Aktif gelir yokken birincil senaryo portföyün kendisidir.
   scenario: 'aktif',
 };
 
@@ -60,6 +60,14 @@ export function requiredRealCapital(monthlyGoalEUR: number, annualExternal: numb
   if (!(swr > 0) || !Number.isFinite(goal) || goal <= 0) return 0;
   const external = Math.max(0, Number(annualExternal) || 0);
   return Math.max(0, goal * 12 - external) / swr;
+}
+
+/** Portföy + kasa tamponunun seçilen SWR ile sürdürebileceği aylık gelir. Dış gelir eklenmez. */
+export function sustainableMonthlyEUR(resourcesEUR: number, swrPct: number): number {
+  const swr = swrPct / 100;
+  const resources = Number(resourcesEUR);
+  if (!(swr > 0) || !Number.isFinite(resources) || resources <= 0) return 0;
+  return (resources * swr) / 12;
 }
 
 /**

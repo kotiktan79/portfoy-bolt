@@ -30,6 +30,7 @@ import {
   parseExternalSettings,
   requiredRealCapital,
   scenarioProgressPct,
+  sustainableMonthlyEUR,
   type ExternalIncome,
   type ExternalIncomeSettings,
   type ExternalScenario,
@@ -153,6 +154,8 @@ export default function FireProjection() {
   const resourcesEUR = currentValueEUR + kasaCounted;
   const progressAll = scenarioProgressPct(resourcesEUR, inputs.targetMonthlyIncome, annualAll, inputs.safeWithdrawalRatePct);
   const progressActive = scenarioProgressPct(resourcesEUR, inputs.targetMonthlyIncome, annualActive, inputs.safeWithdrawalRatePct);
+  const sustainableMonthly = sustainableMonthlyEUR(resourcesEUR, inputs.safeWithdrawalRatePct);
+  const portfolioOnly = annualChosen <= 0;
 
   const projection = useMemo(() => {
     const fi: FireInputs = {
@@ -197,9 +200,10 @@ export default function FireProjection() {
     : targetReached
       ? `${projection.yearsToTarget} yıl (${baseYear + (projection.yearsToTarget || 0)})`
       : '40+ yıl';
-  const scenarioLabel = income.scenario === 'aktif' ? 'yalnız aktif' : 'tüm dış gelir';
+  const scenarioLabel = portfolioOnly ? 'portföy' : income.scenario === 'aktif' ? 'yalnız aktif' : 'tüm dış gelir';
   const compareName = income.scenario === 'aktif' ? 'Tüm gelir (karşılaştırma, bugünkü €)' : 'Yalnız aktif (karşılaştırma, bugünkü €)';
-  const selectedName = income.scenario === 'aktif' ? 'Reel hedef, yalnız aktif' : 'Reel hedef, tüm gelir';
+  const selectedName = portfolioOnly ? 'Reel hedef (portföy, bugünkü €)' : income.scenario === 'aktif' ? 'Reel hedef, yalnız aktif' : 'Reel hedef, tüm gelir';
+  const showCompare = !portfolioOnly && Math.abs(capitalAll - capitalActive) >= 1;
 
   const inputFields: { key: keyof StoredInputs; label: string; suffix: string; step: string; hint?: string }[] = [
     { key: 'monthlyContribution', label: 'Aylık dış katkı', suffix: '€', step: '100' },
@@ -245,13 +249,15 @@ export default function FireProjection() {
         ))}
       </div>
 
-      <div className="px-5 py-4 border-b border-slate-200 dark:border-gray-700 space-y-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">Dış gelir (hedeften düşülür)</p>
-          <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
-            Gelir sekmesi kupon ve temettü kaydıdır; kira ve çiftlik orada yok. Bu liste portföy getirisine ikinci kez eklenmez. Ayar bu tarayıcıda durur.
-          </p>
-        </div>
+      <details className="px-5 py-4 border-b border-slate-200 dark:border-gray-700">
+        <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
+          Dış gelir (beklenen, hedefe dahil değil)
+        </summary>
+        <div className="mt-3 space-y-3">
+        <p className="text-[11px] text-slate-500 dark:text-gray-400">
+          Çiftlik ve kira belirsiz olduğu için beklenen başlar; hedef yalnız portföydür. Durumu aktif yapılınca birincil senaryo o geliri düşer.
+          Gelir sekmesi kupon ve temettü kaydıdır. Ayar bu tarayıcıda durur.
+        </p>
         <div className="space-y-2">
           {income.sources.map(source => (
             <div key={source.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-end">
@@ -338,8 +344,17 @@ export default function FireProjection() {
           />
         </div>
         <p className="text-[11px] text-slate-500 dark:text-gray-400">
-          Birincil senaryo yalnız aktif gelirdir. Kira beklenen kaldıkça hedefe girmez; durumu aktif yapılınca birincil senaryo onu da sayar.
-          Dış gelir yokken aynı SWR ile {fmtEUR0(grossCapital)} gerekirdi. İlerleme çubuğu ve grafik hedefi seçilen senaryodur ({scenarioLabel}).
+          Portföy tek başına {fmtEUR0(grossCapital)} ister. İlerleme çubuğu ve grafik hedefi seçilen senaryodur ({scenarioLabel}).
+        </p>
+        </div>
+      </details>
+
+      <div className="px-5 pt-5">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+          Bugünkü sermaye ile sürdürülebilir maaş: {fmtEUR0(sustainableMonthly)}/ay
+        </p>
+        <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
+          Portföy {fmtEUR0(currentValueEUR)} + kasa {fmtEUR0(kasaCounted)} × %{inputs.safeWithdrawalRatePct} SWR ÷ 12. Dış gelir eklenmez.
         </p>
       </div>
 
@@ -460,7 +475,7 @@ export default function FireProjection() {
               dot={false}
               activeDot={{ r: 4 }}
             />
-            {Math.abs(capitalAll - capitalActive) >= 1 && (
+            {showCompare && (
               <Line
                 type="monotone"
                 dataKey="compareTarget"
@@ -487,8 +502,12 @@ export default function FireProjection() {
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
           {/* 2026-09-23: rakamlar sayfanın KENDİ girdilerinden türetilir (eski sabit '~€343k / ~€460k+' metni girdiler
               değişince yanlış kalıyordu ve panelle çelişiyordu). İki ölçüt ayrı ayrı yazılır ki çelişki gibi görünmesin. */}
-          Dürüst not: grafik bugünkü alım gücündedir. Seçilen düz çizgi, dış gelir düşüldükten sonra kalan reel sermayedir ({scenarioLabel}, {goalLabel}'den itibaren €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay).
-          Karşılaştırma çizgisi öteki senaryodur. Nominal çizgiler enflasyonla şişmiş gelecek eurodur; onlara ulaşmak reel hedefe ulaşmak değildir.
+          Dürüst not: grafik bugünkü alım gücündedir.
+          {portfolioOnly
+            ? ` Düz çizgi portföyün reel hedefidir (${fmtEUR0(grossCapital)}). Çiftlik ve kira beklenendir, bu hedefe girmez.`
+            : ` Seçilen düz çizgi, aktif dış gelir düşüldükten sonra kalan reel sermayedir (${scenarioLabel}).`}
+          {showCompare ? ' Karşılaştırma çizgisi öteki senaryodur.' : ''} Hedef {goalLabel}'den itibaren €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay reeldir.
+          Nominal çizgiler enflasyonla şişmiş gelecek eurodur; onlara ulaşmak reel hedefe ulaşmak değildir.
           <strong>SWR (%{inputs.safeWithdrawalRatePct})</strong> ile kalan açık için {projection.targetPortfolio > 0 ? fmtEUR0(projection.targetPortfolio) : '€0'} gerekir; dış gelir yokken {fmtEUR0(grossCapital)}.
           <strong> Kâr Cüzdanı'nın havuz kuralı</strong> kira ve çiftliği bilmez (reel kârın %{Math.round(SALARY_SAFETY * 100)}'i; çekim her hâlükârda aylık €{MONTHLY_CAP_EUR.toLocaleString('de-DE')} ile sınırlı).
           Bu sayfadaki varsayımlarla (%{inputs.annualReturnPct} getiri − %{inputs.annualInflationPct} enflasyon = reel %{realRatePct.toFixed(1)})
