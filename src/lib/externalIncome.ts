@@ -29,7 +29,8 @@ export const DEFAULT_EXTERNAL_INCOMES: ExternalIncome[] = [
 
 export const DEFAULT_EXTERNAL_SETTINGS: ExternalIncomeSettings = {
   sources: DEFAULT_EXTERNAL_INCOMES,
-  scenario: 'tumu',
+  // Kira henüz yok. Birincil senaryo yalnız aktif gelir; beklenen kira karşılaştırmada kalır.
+  scenario: 'aktif',
 };
 
 export function annualAmountEUR(item: Pick<ExternalIncome, 'amountEUR' | 'frequency'>): number {
@@ -84,7 +85,7 @@ export function parseExternalSettings(raw: string | null): ExternalIncomeSetting
   if (!raw) return cloneSettings(DEFAULT_EXTERNAL_SETTINGS);
   try {
     const parsed = JSON.parse(raw) as { sources?: unknown; scenario?: unknown };
-    const scenario: ExternalScenario = parsed?.scenario === 'aktif' ? 'aktif' : 'tumu';
+    const scenario: ExternalScenario = parsed?.scenario === 'tumu' ? 'tumu' : 'aktif';
     if (!Array.isArray(parsed?.sources)) return { sources: cloneSettings(DEFAULT_EXTERNAL_SETTINGS).sources, scenario };
     const sources: ExternalIncome[] = [];
     for (const row of parsed.sources) {

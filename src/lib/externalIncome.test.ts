@@ -12,9 +12,12 @@ const swr = 3.5;
 const goal = 1000;
 
 describe('dış gelir ve hedef sermaye', () => {
-  it('varsayılan çiftlik €5.000 aktif, kira €3.600 beklenen', () => {
+  it('varsayılan çiftlik €5.000 aktif, kira €3.600 beklenen; birincil senaryo yalnız aktif', () => {
     expect(annualExternalEUR(DEFAULT_EXTERNAL_INCOMES, 'aktif')).toBe(5_000);
     expect(annualExternalEUR(DEFAULT_EXTERNAL_INCOMES, 'tumu')).toBe(8_600);
+    expect(parseExternalSettings(null).scenario).toBe('aktif');
+    const rentOn = DEFAULT_EXTERNAL_INCOMES.map(s => s.id === 'kira' ? { ...s, status: 'aktif' as const } : s);
+    expect(annualExternalEUR(rentOn, 'aktif')).toBe(8_600);
   });
 
   it('aylık tutar 12 ile çarpılır, eksi ve sıfır sayılmaz', () => {
@@ -45,7 +48,8 @@ describe('dış gelir ve hedef sermaye', () => {
 
   it('kayıt bozulursa varsayılanlara döner, boş liste boş kalır', () => {
     expect(parseExternalSettings(null).sources).toHaveLength(2);
-    expect(parseExternalSettings('nope').scenario).toBe('tumu');
+    expect(parseExternalSettings(null).scenario).toBe('aktif');
+    expect(parseExternalSettings('nope').scenario).toBe('aktif');
     const empty = parseExternalSettings(JSON.stringify({ sources: [], scenario: 'aktif' }));
     expect(empty.sources).toEqual([]);
     expect(empty.scenario).toBe('aktif');
@@ -57,5 +61,6 @@ describe('dış gelir ve hedef sermaye', () => {
       ],
     }));
     expect(kept.sources).toEqual([{ id: 'a', label: 'X', amountEUR: 100, frequency: 'monthly', status: 'aktif' }]);
+    expect(kept.scenario).toBe('tumu');
   });
 });

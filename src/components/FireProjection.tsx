@@ -320,23 +320,24 @@ export default function FireProjection() {
         </button>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <ScenarioCard
-            selected={income.scenario === 'tumu'}
-            title="Tüm dış gelirle"
-            capital={capitalAll}
-            progress={progressAll}
-            detail={`(12 × €${inputs.targetMonthlyIncome.toLocaleString('de-DE')} − ${fmtEUR0(annualAll)}) / %${inputs.safeWithdrawalRatePct} · aktif + beklenen`}
-            onPick={() => saveIncome({ ...income, scenario: 'tumu' satisfies ExternalScenario })}
-          />
-          <ScenarioCard
             selected={income.scenario === 'aktif'}
             title="Yalnız aktif gelirle"
             capital={capitalActive}
             progress={progressActive}
-            detail={`(12 × €${inputs.targetMonthlyIncome.toLocaleString('de-DE')} − ${fmtEUR0(annualActive)}) / %${inputs.safeWithdrawalRatePct} · beklenen hariç`}
+            detail={`(12 × €${inputs.targetMonthlyIncome.toLocaleString('de-DE')} − ${fmtEUR0(annualActive)}) / %${inputs.safeWithdrawalRatePct} · birincil · beklenen hariç`}
             onPick={() => saveIncome({ ...income, scenario: 'aktif' })}
+          />
+          <ScenarioCard
+            selected={income.scenario === 'tumu'}
+            title="Tüm dış gelirle"
+            capital={capitalAll}
+            progress={progressAll}
+            detail={`(12 × €${inputs.targetMonthlyIncome.toLocaleString('de-DE')} − ${fmtEUR0(annualAll)}) / %${inputs.safeWithdrawalRatePct} · karşılaştırma · aktif + beklenen`}
+            onPick={() => saveIncome({ ...income, scenario: 'tumu' satisfies ExternalScenario })}
           />
         </div>
         <p className="text-[11px] text-slate-500 dark:text-gray-400">
+          Birincil senaryo yalnız aktif gelirdir. Kira beklenen kaldıkça hedefe girmez; durumu aktif yapılınca birincil senaryo onu da sayar.
           Dış gelir yokken aynı SWR ile {fmtEUR0(grossCapital)} gerekirdi. İlerleme çubuğu ve grafik hedefi seçilen senaryodur ({scenarioLabel}).
         </p>
       </div>

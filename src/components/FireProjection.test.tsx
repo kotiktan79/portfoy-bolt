@@ -37,10 +37,11 @@ describe('Hedef dış gelir senaryoları', () => {
     localStorage.removeItem('tandor_fire_inputs_eur');
   });
 
-  it('tüm gelir ≈ €97 bin, yalnız aktif €200 bin; ilerleme portföy + kasa', async () => {
+  it('birincil senaryo yalnız aktif €200 bin; tüm gelir €97 bin karşılaştırmadır', async () => {
     render(<FireProjection />);
-    expect(screen.getByText(/Tüm dış gelirle/)).toBeInTheDocument();
+    expect(screen.getByText('Reel hedef (yalnız aktif, bugünkü €)')).toBeInTheDocument();
     expect(screen.getByText(/Yalnız aktif gelirle/)).toBeInTheDocument();
+    expect(screen.getByText(/Tüm dış gelirle/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Çiftlik (bal, aronya, alıç, APIA)')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Ev kirası')).toBeInTheDocument();
     expect(screen.getAllByText('€97.143').length).toBeGreaterThan(0);
@@ -48,18 +49,26 @@ describe('Hedef dış gelir senaryoları', () => {
     expect(screen.getByText(/Dış gelir yokken aynı SWR ile €342\.857/)).toBeInTheDocument();
 
     const resources = 148_249 + 29_400;
-    const allPct = Math.round(resources / (3_400 / 0.035) * 100);
+    const activePct = Math.round(resources / (7_000 / 0.035) * 100);
     await waitFor(() => {
-      expect(screen.getByText(new RegExp(`ilerleme %${allPct} · \\(12 × €1\\.000 − €8\\.600\\) / %3\\.5 · aktif \\+ beklenen`))).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`ilerleme %${activePct} · \\(12 × €1\\.000 − €5\\.000\\) / %3\\.5 · birincil`))).toBeInTheDocument();
     });
   });
 
-  it('seçilen senaryo ilerleme kartını değiştirir ve kaydeder', async () => {
+  it('kira aktif olunca birincil senaryo onu da sayar; tüm gelir seçilince kaydedilir', async () => {
     const user = userEvent.setup();
     render(<FireProjection />);
-    await user.click(screen.getByRole('button', { name: /Yalnız aktif gelirle/ }));
-    expect(screen.getByText('Reel hedef (yalnız aktif, bugünkü €)')).toBeInTheDocument();
+    const statuses = screen.getAllByRole('combobox').filter(el => (el as HTMLSelectElement).value === 'beklenen' || (el as HTMLSelectElement).value === 'aktif');
+    const rentStatus = statuses.find(el => (el as HTMLSelectElement).value === 'beklenen');
+    expect(rentStatus).toBeTruthy();
+    await user.selectOptions(rentStatus!, 'aktif');
+    expect(screen.getAllByText('€97.143').length).toBeGreaterThan(1);
+    expect(screen.queryByText('€200.000')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Tüm dış gelirle/ }));
+    expect(screen.getByText('Reel hedef (tüm dış gelir, bugünkü €)')).toBeInTheDocument();
     const saved = JSON.parse(localStorage.getItem('tandor_fire_external_income_eur') || '{}');
-    expect(saved.scenario).toBe('aktif');
+    expect(saved.scenario).toBe('tumu');
+    expect(saved.sources.find((s: { id: string }) => s.id === 'kira').status).toBe('aktif');
   });
 });
