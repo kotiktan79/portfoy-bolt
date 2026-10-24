@@ -11,7 +11,7 @@ export default function ProjectionPage() {
         <PageHeader
           icon={Target}
           title="Hedef & Projeksiyon"
-          subtitle="FIRE hedefine gidiş ve yıl bazında kazanç dökümü"
+          subtitle="Aylık maaş hedefi, reel projeksiyon ve yıl dökümü"
         />
         <div className="space-y-6">
           <FireProjection />

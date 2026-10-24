@@ -15,11 +15,24 @@ import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, nominalCapitalOn,
 import { useDarkMode } from '../hooks/useDarkMode';
 import { chartChrome } from '../lib/chartTheme';
 
-// HEDEFE ULAŞMA PLANI — EUR. Dış katkı varsayılan 0 (2026-09-20).
-// Kira ve çiftlik, SWR sermayesinden düşülür. Kasa maaş tamponudur: ilerlemeye girer, getiri çizgisinde büyümez.
+// AYLIK MAAŞ HEDEFİ — EUR. Birincil ölçü taban maaş (€700), tavan iyi yıl (€1.000).
+// Sermaye grafiği bu maaşın gerektirdiği tutardır. Dış katkı varsayılan 0 (2026-09-20).
+// Kira ve çiftlik beklenendir: maaş kartına girmez; aktif olursa yalnız grafikten düşülür.
+// Kasa maaş tamponudur: ilerlemeye girer, getiri çizgisinde büyümez.
 // Gelir sekmesi kupon/temettüdür; bu liste oradan okunmaz.
 import { MONTHLY_CAP_EUR, INFLATION_EUR, SALARY_SAFETY, dayInTZ, normalizeInflation } from '../lib/eurPnl';
 import { SALARY_START_MONTH, SALARY_FLOOR_EUR, KASA_MIN_EUR } from '../lib/salaryPlan';
+import {
+  CONSERVATIVE_WITHDRAWAL_PCT,
+  PLANNED_NOMINAL_RETURN_PCT,
+  PLANNED_WITHDRAWAL_PCT,
+  SALARY_SHORTFALL_BAND,
+  fixedRealWithdrawalYears,
+  roughYearsPhrase,
+  salaryCoverage,
+  salaryProgressPct,
+  type SalaryCoverage,
+} from '../lib/salaryGoal';
 import { getEurDaily } from '../services/eurPnlService';
 import { getKasaFx } from '../services/kasaFxService';
 import { fmtEUR0, fmtAxisEUR } from '../lib/chartTheme';
@@ -44,36 +57,115 @@ const INCOME_KEY = 'tandor_fire_external_income_eur';
 interface StoredInputs {
   monthlyContribution: number;
   annualReturnPct: number;
+  /** Birincil hedef: aylık maaş tabanı, bugünkü euro. */
   targetMonthlyIncome: number;
+  /** İyi yıl tavanı. 0 ise satır ve süre notu gizlenir. */
+  goodYearMonthlyEUR: number;
   safeWithdrawalRatePct: number;
   annualInflationPct: number;
 }
 
+const INPUTS_VERSION = 3;
+/** Maaş tabanı ve çekim oranı bu sürümde yerleşti. Sonraki sürüm onları yeniden göçürmez. */
+const SALARY_INPUTS_VERSION = 2;
+/** PR #13 varsayılanı. Kayıtta sürüm yoksa ve oran hâlâ buysa planlanan %5'e alınır. */
+const OLD_DEFAULT_WITHDRAWAL_PCT = CONSERVATIVE_WITHDRAWAL_PCT;
+/** Eski tek hedef, iyi yıl tavanıydı. Sürüm yoksa tabana (€700) çekilir. */
+const OLD_DEFAULT_TARGET_EUR = MONTHLY_CAP_EUR;
+/** Eski sayfa varsayılanı. Sürüm 3'ten önce kayıtlı %4 planlanan %6,5'e alınır. */
+const OLD_DEFAULT_RETURN_PCT = 4;
+
 const DEFAULTS: StoredInputs = {
   monthlyContribution: 0,                     // dış katkı yok (kullanıcı beyanı 2026-09-18)
-  annualReturnPct: 4,                         // politika dağılımı ~%4-5 nominal EUR; bugünkü (%40 nakit) ~%3
-  targetMonthlyIncome: MONTHLY_CAP_EUR,       // €1.000/ay (geçim planı)
-  safeWithdrawalRatePct: 4,                   // maaş Kâr Cüzdanı ile esner, kasa tamponu var → %4 uygun
+  annualReturnPct: PLANNED_NOMINAL_RETURN_PCT, // nominal plan ~%6-8; süre notu bundan enflasyonu düşer
+  targetMonthlyIncome: SALARY_FLOOR_EUR,      // €700/ay birincil maaş hedefi
+  goodYearMonthlyEUR: MONTHLY_CAP_EUR,        // €1.000 iyi yıl; isteğe bağlı
+  safeWithdrawalRatePct: PLANNED_WITHDRAWAL_PCT,
   annualInflationPct: INFLATION_EUR * 100,    // motorla aynı (varsayılan %3)
 };
 
-function loadStored(): StoredInputs | null {
+function numOr(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function loadStored(): { inputs: StoredInputs; migrated: boolean } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw);
-    // Enflasyon uygulama ayarından gelir (Kâr Cüzdanı). Eski yerel kayıt hedefi nominal bırakmasın.
-    return { ...DEFAULTS, ...p, annualInflationPct: DEFAULTS.annualInflationPct };
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    if (!p || typeof p !== 'object') return null;
+    const version = Number(p.inputsVersion);
+    const salarySettled = version >= SALARY_INPUTS_VERSION;
+    const returnSettled = version >= INPUTS_VERSION;
+    const storedTarget = numOr(p.targetMonthlyIncome, salarySettled ? DEFAULTS.targetMonthlyIncome : OLD_DEFAULT_TARGET_EUR);
+    const storedRate = numOr(p.safeWithdrawalRatePct, salarySettled ? DEFAULTS.safeWithdrawalRatePct : OLD_DEFAULT_WITHDRAWAL_PCT);
+    const storedReturn = numOr(p.annualReturnPct, returnSettled ? DEFAULTS.annualReturnPct : OLD_DEFAULT_RETURN_PCT);
+    // Eski kayıtta €1.000 "hedef gelir"di; artık tavan. Özel bir tutar (1000 değilse) durur.
+    const targetMonthlyIncome = salarySettled || storedTarget !== OLD_DEFAULT_TARGET_EUR ? storedTarget : DEFAULTS.targetMonthlyIncome;
+    // Eski varsayılan çekim %4 ise planlanan %5 olur; kullanıcı başka oran yazdıysa o kalır.
+    const safeWithdrawalRatePct = salarySettled || storedRate !== OLD_DEFAULT_WITHDRAWAL_PCT ? storedRate : DEFAULTS.safeWithdrawalRatePct;
+    // Eski varsayılan getiri %4 ise planlanan %6,5 olur. Başka bir kayıtlı getiri durur.
+    // Sürüm 3'te %4 bilinçli seçimdir, yeniden göçmez.
+    const annualReturnPct = returnSettled || storedReturn !== OLD_DEFAULT_RETURN_PCT ? storedReturn : DEFAULTS.annualReturnPct;
+    return {
+      migrated: targetMonthlyIncome !== storedTarget || safeWithdrawalRatePct !== storedRate || annualReturnPct !== storedReturn,
+      inputs: {
+        monthlyContribution: numOr(p.monthlyContribution, DEFAULTS.monthlyContribution),
+        annualReturnPct,
+        targetMonthlyIncome,
+        goodYearMonthlyEUR: numOr(p.goodYearMonthlyEUR, DEFAULTS.goodYearMonthlyEUR),
+        safeWithdrawalRatePct,
+        annualInflationPct: DEFAULTS.annualInflationPct,
+      },
+    };
   } catch {
     return null;
   }
+}
+
+function persistInputs(next: StoredInputs) {
+  const payload: Record<string, unknown> = { ...next, inputsVersion: INPUTS_VERSION };
+  delete payload.annualInflationPct;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+function fmtPctTr(n: number): string {
+  return (Math.round(n * 10) / 10).toLocaleString('de-DE', { maximumFractionDigits: 1 });
+}
+
+function depletionNote(
+  years: number | null,
+  monthlyEUR: number,
+  realPct: number,
+  returnPct: number,
+  inflationPct: number,
+): string {
+  const money = fmtEUR0(monthlyEUR);
+  const assumption = `Varsayım: yıllık getiri %${fmtPctTr(returnPct)} − enflasyon %${fmtPctTr(inflationPct)} = reel %${fmtPctTr(realPct)}. Ay sonu çekim, reel getiri aylık bileşik.`;
+  if (years == null) return `Sabit ${money}/ay için süre hesaplanamadı. ${assumption}`;
+  if (!Number.isFinite(years)) return `Sabit ${money}/ay bu reel getiriyle sermayeyi eritmez. ${assumption}`;
+  if (years <= 0) return `Bugünkü sermaye sabit ${money}/ay taşımaz. ${assumption}`;
+  return `Sabit ${money}/ay, bugünkü sermayeden (portföy + kasa) ${roughYearsPhrase(years)} sürer. ${assumption}`;
+}
+
+function coverageTone(coverage: SalaryCoverage): string {
+  if (coverage === 'sürdürülebilir') return 'text-emerald-700 dark:text-emerald-300';
+  if (coverage === 'sınırda') return 'text-amber-700 dark:text-amber-300';
+  return 'text-rose-700 dark:text-rose-300';
+}
+
+function coverageBox(coverage: SalaryCoverage): string {
+  if (coverage === 'sürdürülebilir') return 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900';
+  if (coverage === 'sınırda') return 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900';
+  return 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900';
 }
 
 export default function FireProjection() {
   const { isDark } = useDarkMode();
   const chrome = chartChrome(isDark);
 
-  const [inputs, setInputs] = useState<StoredInputs>(() => loadStored() || DEFAULTS);
+  const [inputs, setInputs] = useState<StoredInputs>(() => loadStored()?.inputs ?? { ...DEFAULTS });
   const [income, setIncome] = useState<ExternalIncomeSettings>(() => parseExternalSettings(localStorage.getItem(INCOME_KEY)));
   const [policyInflationPct, setPolicyInflationPct] = useState(INFLATION_EUR * 100);
   const inflationTouched = useRef(false);
@@ -81,6 +173,12 @@ export default function FireProjection() {
   const [wealthEUR, setWealthEUR] = useState<number | null>(null);
   const [kasaEUR, setKasaEUR] = useState<number | null>(null);
   const [kasaNote, setKasaNote] = useState('kasa yükleniyor');
+  useEffect(() => {
+    const loaded = loadStored();
+    if (!loaded?.migrated) return;
+    persistInputs(loaded.inputs);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     getEurDaily().then(d => { if (!cancelled && d.length) setWealthEUR(d[d.length - 1].wealthEUR); }).catch(() => {});
@@ -122,7 +220,7 @@ export default function FireProjection() {
     if (field === 'annualInflationPct') inflationTouched.current = true;
     const next = { ...inputs, [field]: Number.isFinite(v) ? v : 0 };
     setInputs(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, annualInflationPct: undefined }));
+    persistInputs(next);
   }
 
   function saveIncome(next: ExternalIncomeSettings) {
@@ -155,6 +253,14 @@ export default function FireProjection() {
   const progressAll = scenarioProgressPct(resourcesEUR, inputs.targetMonthlyIncome, annualAll, inputs.safeWithdrawalRatePct);
   const progressActive = scenarioProgressPct(resourcesEUR, inputs.targetMonthlyIncome, annualActive, inputs.safeWithdrawalRatePct);
   const sustainableMonthly = sustainableMonthlyEUR(resourcesEUR, inputs.safeWithdrawalRatePct);
+  const salaryGoal = inputs.targetMonthlyIncome;
+  const goodYear = inputs.goodYearMonthlyEUR;
+  const showGoodYear = goodYear > 0;
+  const capitalForGoal = requiredRealCapital(salaryGoal, 0, inputs.safeWithdrawalRatePct);
+  const capitalForGoodYear = showGoodYear ? requiredRealCapital(goodYear, 0, inputs.safeWithdrawalRatePct) : 0;
+  const salaryProgress = salaryProgressPct(sustainableMonthly, salaryGoal);
+  const coverage = salaryCoverage(sustainableMonthly, salaryGoal);
+  const depletionYears = showGoodYear ? fixedRealWithdrawalYears(resourcesEUR, goodYear, realRatePct) : null;
   const portfolioOnly = annualChosen <= 0;
 
   const projection = useMemo(() => {
@@ -202,15 +308,16 @@ export default function FireProjection() {
       : '40+ yıl';
   const scenarioLabel = portfolioOnly ? 'portföy' : income.scenario === 'aktif' ? 'yalnız aktif' : 'tüm dış gelir';
   const compareName = income.scenario === 'aktif' ? 'Tüm gelir (karşılaştırma, bugünkü €)' : 'Yalnız aktif (karşılaştırma, bugünkü €)';
-  const selectedName = portfolioOnly ? 'Reel hedef (portföy, bugünkü €)' : income.scenario === 'aktif' ? 'Reel hedef, yalnız aktif' : 'Reel hedef, tüm gelir';
+  const selectedName = portfolioOnly ? 'Sermaye hedefi (portföy, bugünkü €)' : income.scenario === 'aktif' ? 'Sermaye hedefi, yalnız aktif' : 'Sermaye hedefi, tüm gelir';
   const showCompare = !portfolioOnly && Math.abs(capitalAll - capitalActive) >= 1;
 
   const inputFields: { key: keyof StoredInputs; label: string; suffix: string; step: string; hint?: string }[] = [
-    { key: 'monthlyContribution', label: 'Aylık dış katkı', suffix: '€', step: '100' },
-    { key: 'annualReturnPct', label: 'Yıllık getiri', suffix: '%', step: '0.5' },
-    { key: 'targetMonthlyIncome', label: 'Hedef aylık gelir', suffix: '€', step: '100' },
-    { key: 'safeWithdrawalRatePct', label: 'Güvenli çekim (SWR)', suffix: '%', step: '0.1', hint: 'Varsayılan %4. Maaş Kâr Cüzdanı ile esner, kasa tamponu vardır. Bu tarayıcıda durur.' },
+    { key: 'targetMonthlyIncome', label: 'Aylık maaş hedefi', suffix: '€', step: '50', hint: `Birincil hedef. ${goalLabel}'den itibaren taban. Varsayılan €${SALARY_FLOOR_EUR.toLocaleString('de-DE')}.` },
+    { key: 'goodYearMonthlyEUR', label: 'İyi yıl tavanı', suffix: '€', step: '50', hint: `İsteğe bağlı. İyi yılda üst seviye; 0 ise gizlenir. Varsayılan €${MONTHLY_CAP_EUR.toLocaleString('de-DE')}.` },
+    { key: 'safeWithdrawalRatePct', label: 'Güvenli çekim (SWR)', suffix: '%', step: '0.1', hint: 'Planlanan seviye %5, muhafazakâr %4. Bu tarayıcıda durur.' },
+    { key: 'annualReturnPct', label: 'Yıllık getiri', suffix: '%', step: '0.5', hint: `Varsayılan %${PLANNED_NOMINAL_RETURN_PCT.toLocaleString('de-DE')} nominal (yaklaşık %6–8). Süre notunda enflasyon düşülür.` },
     { key: 'annualInflationPct', label: 'Enflasyon (uygulama ayarı)', suffix: '%', step: '0.5' },
+    { key: 'monthlyContribution', label: 'Aylık dış katkı', suffix: '€', step: '100' },
   ];
 
   return (
@@ -218,34 +325,64 @@ export default function FireProjection() {
       <div className="p-5 border-b border-slate-200 dark:border-gray-700 flex items-center gap-2">
         <Target className="text-brand-600 dark:text-brand-400" size={22} />
         <div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">Hedefe Ulaşma Planı (€)</h3>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">Aylık maaş hedefi</h3>
           <p className="text-xs text-slate-500 dark:text-gray-400">
             {wealthMissing
               ? 'Euro servet henüz yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.'
-              : `Portföy €${Math.round(currentValueEUR).toLocaleString('de-DE')} + ${kasaNote} €${Math.round(kasaCounted).toLocaleString('de-DE')}. Hedef ${goalLabel}'den itibaren €${inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay reel. Çizgiler bugünkü €; nominal ayrı.`}
+              : `Portföy €${Math.round(currentValueEUR).toLocaleString('de-DE')} + ${kasaNote} €${Math.round(kasaCounted).toLocaleString('de-DE')}. ${goalLabel}'den itibaren taban ${fmtEUR0(salaryGoal)}/ay${showGoodYear ? `, iyi yıl ${fmtEUR0(goodYear)}/ay` : ''}. Grafik bu maaşın gerektirdiği sermayedir.`}
           </p>
         </div>
       </div>
 
       {/* Varsayımlar */}
-      <div className="p-5 grid grid-cols-2 md:grid-cols-5 gap-3 border-b border-slate-200 dark:border-gray-700">
+      <div className="p-5 grid grid-cols-2 md:grid-cols-3 gap-3 border-b border-slate-200 dark:border-gray-700">
         {inputFields.map((f) => (
-          <label key={f.key} className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
-              {f.label}
-            </span>
-            <div className="mt-1 flex items-center gap-1 bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-600 rounded-lg px-2 py-1.5">
-              <input
-                type="number"
-                step={f.step}
-                value={inputs[f.key]}
-                onChange={(e) => update(f.key, e.target.value)}
-                className="w-full bg-transparent text-sm font-bold text-gray-900 dark:text-white outline-none"
-              />
-              <span className="text-xs text-slate-400">{f.suffix}</span>
-            </div>
-            {f.hint && <span className="mt-1 block text-[10px] normal-case tracking-normal font-normal text-slate-500 dark:text-gray-400">{f.hint}</span>}
-          </label>
+          <div key={f.key}>
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
+                {f.label}
+              </span>
+              <div className="mt-1 flex items-center gap-1 bg-slate-50 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-600 rounded-lg px-2 py-1.5">
+                <input
+                  type="number"
+                  step={f.step}
+                  value={inputs[f.key]}
+                  onChange={(e) => update(f.key, e.target.value)}
+                  className="w-full bg-transparent text-sm font-bold text-gray-900 dark:text-white outline-none"
+                />
+                <span className="text-xs text-slate-400">{f.suffix}</span>
+              </div>
+              {f.hint && <span className="mt-1 block text-[10px] normal-case tracking-normal font-normal text-slate-500 dark:text-gray-400">{f.hint}</span>}
+            </label>
+            {f.key === 'safeWithdrawalRatePct' && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  aria-pressed={inputs.safeWithdrawalRatePct === PLANNED_WITHDRAWAL_PCT}
+                  onClick={() => update('safeWithdrawalRatePct', String(PLANNED_WITHDRAWAL_PCT))}
+                  className={`text-[10px] font-semibold rounded-md px-1.5 py-0.5 border ${
+                    inputs.safeWithdrawalRatePct === PLANNED_WITHDRAWAL_PCT
+                      ? 'border-brand-600 text-brand-700 dark:text-brand-300 bg-brand-50/70 dark:bg-brand-950/30'
+                      : 'border-slate-200 dark:border-gray-600 text-slate-500 dark:text-gray-400'
+                  }`}
+                >
+                  Planlanan %{PLANNED_WITHDRAWAL_PCT}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={inputs.safeWithdrawalRatePct === CONSERVATIVE_WITHDRAWAL_PCT}
+                  onClick={() => update('safeWithdrawalRatePct', String(CONSERVATIVE_WITHDRAWAL_PCT))}
+                  className={`text-[10px] font-semibold rounded-md px-1.5 py-0.5 border ${
+                    inputs.safeWithdrawalRatePct === CONSERVATIVE_WITHDRAWAL_PCT
+                      ? 'border-brand-600 text-brand-700 dark:text-brand-300 bg-brand-50/70 dark:bg-brand-950/30'
+                      : 'border-slate-200 dark:border-gray-600 text-slate-500 dark:text-gray-400'
+                  }`}
+                >
+                  Muhafazakâr %{CONSERVATIVE_WITHDRAWAL_PCT}
+                </button>
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
@@ -255,7 +392,7 @@ export default function FireProjection() {
         </summary>
         <div className="mt-3 space-y-3">
         <p className="text-[11px] text-slate-500 dark:text-gray-400">
-          Çiftlik ve kira belirsiz olduğu için beklenen başlar; hedef yalnız portföydür. Durumu aktif yapılınca birincil senaryo o geliri düşer.
+          Çiftlik ve kira belirsiz olduğu için beklenen başlar; maaş kartı onları saymaz. Durumu aktif yapılınca grafik o geliri sermayeden düşer.
           Gelir sekmesi kupon ve temettü kaydıdır. Ayar bu tarayıcıda durur.
         </p>
         <div className="space-y-2">
@@ -331,7 +468,7 @@ export default function FireProjection() {
             title="Yalnız aktif gelirle"
             capital={capitalActive}
             progress={progressActive}
-            detail={`(12 × €${inputs.targetMonthlyIncome.toLocaleString('de-DE')} − ${fmtEUR0(annualActive)}) / %${inputs.safeWithdrawalRatePct} · birincil · beklenen hariç`}
+            detail={`(12 × €${inputs.targetMonthlyIncome.toLocaleString('de-DE')} − ${fmtEUR0(annualActive)}) / %${inputs.safeWithdrawalRatePct} · grafik · beklenen hariç`}
             onPick={() => saveIncome({ ...income, scenario: 'aktif' })}
           />
           <ScenarioCard
@@ -344,47 +481,110 @@ export default function FireProjection() {
           />
         </div>
         <p className="text-[11px] text-slate-500 dark:text-gray-400">
-          Portföy tek başına {fmtEUR0(grossCapital)} ister. İlerleme çubuğu ve grafik hedefi seçilen senaryodur ({scenarioLabel}).
+          Portföy tek başına {fmtEUR0(grossCapital)} ister. Grafik hedefi seçilen senaryodur ({scenarioLabel}). Birincil maaş kartı dış geliri saymaz.
         </p>
         </div>
       </details>
 
-      <div className="px-5 pt-5">
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">
-          Bugünkü sermaye ile sürdürülebilir maaş: {fmtEUR0(sustainableMonthly)}/ay
-        </p>
-        <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
-          Portföy {fmtEUR0(currentValueEUR)} + kasa {fmtEUR0(kasaCounted)} × %{inputs.safeWithdrawalRatePct} SWR ÷ 12. Dış gelir eklenmez.
-        </p>
+      <div className="p-5 border-b border-slate-200 dark:border-gray-700 space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className={`lg:col-span-2 rounded-xl p-4 border ${coverageBox(coverage)}`}>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              Bugünkü sermaye ile sürdürülebilir maaş: {fmtEUR0(sustainableMonthly)}/ay
+            </p>
+            <p className={`text-base font-bold mt-1 ${coverageTone(coverage)}`}>
+              {fmtEUR0(salaryGoal)} maaş {coverage}
+            </p>
+            <div className="h-2 rounded-full bg-white/70 dark:bg-gray-700 overflow-hidden mt-3">
+              <div
+                className="h-full bg-brand-600"
+                style={{ width: `${Math.min(100, Math.max(0, salaryProgress))}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300 mt-1">
+              {fmtEUR0(salaryGoal)} hedefine ilerleme %{Math.max(0, salaryProgress).toFixed(0)}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
+              Portföy {fmtEUR0(currentValueEUR)} + kasa {fmtEUR0(kasaCounted)} × %{inputs.safeWithdrawalRatePct} SWR ÷ 12. Dış gelir eklenmez.
+              Karşılıyorsa sürdürülebilir. Görünen tutar hedefin %{Math.round(SALARY_SHORTFALL_BAND * 100)} yakınında ama altındaysa sınırda; daha altta kısa geliyor.
+            </p>
+          </div>
+          <div className="rounded-xl p-4 border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-900/60 space-y-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-gray-400">
+                {fmtEUR0(salaryGoal)} için gerekli sermaye
+              </p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{fmtEUR0(capitalForGoal)}</p>
+              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
+                12 × {fmtEUR0(salaryGoal)} ÷ %{inputs.safeWithdrawalRatePct}. Dış gelir hariç.
+              </p>
+            </div>
+            {showGoodYear && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-gray-400">
+                  {fmtEUR0(goodYear)} iyi yıl için gerekli sermaye
+                </p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{fmtEUR0(capitalForGoodYear)}</p>
+                <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
+                  12 × {fmtEUR0(goodYear)} ÷ %{inputs.safeWithdrawalRatePct}. İyi yıl; taban kasadan tamamlanır.
+                </p>
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500 dark:text-gray-400">
+              %{PLANNED_WITHDRAWAL_PCT} planlanan, %{CONSERVATIVE_WITHDRAWAL_PCT} muhafazakâr çekim oranı.
+            </p>
+          </div>
+        </div>
+        {showGoodYear && (
+          <p className="text-xs text-slate-600 dark:text-gray-300">
+            {depletionNote(depletionYears, goodYear, realRatePct, inputs.annualReturnPct, inputs.annualInflationPct)}
+          </p>
+        )}
       </div>
 
-      {/* Özet kartlar */}
-      <div className="p-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* İkincil: maaşın gerektirdiği sermaye */}
+      <div className="p-5 space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
+            İkincil görünüm · maaş için sermaye
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
+            Grafik, {fmtEUR0(salaryGoal)}/ay hedefin seçilen senaryodaki sermayesine bakar. Birincil kart dış geliri saymaz.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryTile
           icon={<Flag size={14} />}
-          label={`Reel hedef (${scenarioLabel}, bugünkü €)`}
+          label={`Sermaye hedefi (${scenarioLabel}, bugünkü €)`}
           value={fmtEUR0(projection.targetPortfolio)}
-          sub={`kalan yıllık açık ${fmtEUR0(Math.max(0, inputs.targetMonthlyIncome * 12 - annualChosen))} ÷ %${inputs.safeWithdrawalRatePct} SWR`}
+          sub={`kalan yıllık açık ${fmtEUR0(Math.max(0, salaryGoal * 12 - annualChosen))} ÷ %${inputs.safeWithdrawalRatePct} SWR`}
         />
         <SummaryTile
           icon={<Wallet size={14} />}
-          label="Reel ilerleme"
+          label="Sermaye ilerlemesi"
           value={`%${Math.max(0, projection.realProgressPct).toFixed(0)}`}
           sub={`portföy ${fmtEUR0(currentValueEUR)} + kasa ${fmtEUR0(kasaCounted)} · ${scenarioLabel}`}
         />
         <SummaryTile
           icon={<TrendingUp size={14} />}
-          label="Reel hedefe kalan"
+          label="Sermayeye kalan"
           value={yearsLabel}
-          sub={targetReached ? `Açık: ${fmtEUR0(projection.currentGap)} bugünkü €` : 'Bu varsayımlarla ulaşılamıyor'}
+          sub={
+            !targetReached
+              ? 'Bu varsayımlarla ulaşılamıyor'
+              : currentValueEUR + 0.5 < projection.targetPortfolio
+                ? 'Portföy + kasa yetiyor. Grafik yalnız portföyü büyütür.'
+                : 'Portföy hedefi karşılıyor'
+          }
           warn={!targetReached}
         />
         <SummaryTile
           icon={<Target size={14} />}
           label={`${goalLabel} nominal hedef`}
           value={fmtEUR0(nominalAtGoal)}
-          sub={`aynı reel gelirin o tarihteki euro karşılığı · enflasyon %${inputs.annualInflationPct}`}
+          sub={`aynı reel maaşın o tarihteki euro karşılığı · enflasyon %${inputs.annualInflationPct}`}
         />
+        </div>
       </div>
       <div className="px-5 pb-2">
         <div className="h-2 rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
@@ -394,7 +594,7 @@ export default function FireProjection() {
           />
         </div>
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-          İlerleme bugünkü alım gücündedir: portföy + kasa tamponu ÷ seçilen senaryonun reel sermayesi ({scenarioLabel}).
+          Sermaye ilerlemesi: portföy + kasa ÷ seçilen senaryo ({scenarioLabel}). Maaş kartındaki yüzde dış geliri saymaz.
           {Math.abs(inputs.annualInflationPct - policyInflationPct) > 0.05
             ? ` Bu kutu senaryodur (uygulama ayarı %${policyInflationPct}); maaş hesabını değiştirmez.`
             : ' Enflasyon, Kâr Cüzdanı\'ndaki uygulama ayarıdır.'}
@@ -431,7 +631,7 @@ export default function FireProjection() {
                       Reel portföy: {fmtEUR0(d.realValue)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-300">
-                      Reel hedef: {fmtEUR0(d.realTarget)} · Öteki senaryo: {fmtEUR0(d.compareTarget)} · Nominal portföy: {fmtEUR0(d.nominalValue)}
+                      Maaş sermayesi: {fmtEUR0(d.realTarget)} · Öteki senaryo: {fmtEUR0(d.compareTarget)} · Nominal portföy: {fmtEUR0(d.nominalValue)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-300">
                       Nominal hedef: {fmtEUR0(d.nominalTarget)} · Anapara+katkı: {fmtEUR0(d.principal)}
@@ -502,11 +702,11 @@ export default function FireProjection() {
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
           {/* 2026-09-23: rakamlar sayfanın KENDİ girdilerinden türetilir (eski sabit '~€343k / ~€460k+' metni girdiler
               değişince yanlış kalıyordu ve panelle çelişiyordu). İki ölçüt ayrı ayrı yazılır ki çelişki gibi görünmesin. */}
-          Dürüst not: grafik bugünkü alım gücündedir.
+          Dürüst not: grafik bugünkü alım gücündedir ve birincil maaş hedefinin gerektirdiği sermayeyi gösterir.
           {portfolioOnly
-            ? ` Düz çizgi portföyün reel hedefidir (${fmtEUR0(grossCapital)}). Çiftlik ve kira beklenendir, bu hedefe girmez.`
+            ? ` Düz çizgi ${fmtEUR0(salaryGoal)}/ay için portföy sermayesidir (${fmtEUR0(grossCapital)}). Çiftlik ve kira beklenendir, bu çizgiye girmez.`
             : ` Seçilen düz çizgi, aktif dış gelir düşüldükten sonra kalan reel sermayedir (${scenarioLabel}).`}
-          {showCompare ? ' Karşılaştırma çizgisi öteki senaryodur.' : ''} Hedef {goalLabel}'den itibaren €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay reeldir.
+          {showCompare ? ' Karşılaştırma çizgisi öteki senaryodur.' : ''} Hedef {goalLabel}'den itibaren {fmtEUR0(salaryGoal)}/ay reeldir.
           Nominal çizgiler enflasyonla şişmiş gelecek eurodur; onlara ulaşmak reel hedefe ulaşmak değildir.
           <strong>SWR (%{inputs.safeWithdrawalRatePct})</strong> ile kalan açık için {projection.targetPortfolio > 0 ? fmtEUR0(projection.targetPortfolio) : '€0'} gerekir; dış gelir yokken {fmtEUR0(grossCapital)}.
           <strong> Kâr Cüzdanı'nın havuz kuralı</strong> kira ve çiftliği bilmez (reel kârın %{Math.round(SALARY_SAFETY * 100)}'i; çekim her hâlükârda aylık €{MONTHLY_CAP_EUR.toLocaleString('de-DE')} ile sınırlı).
@@ -525,7 +725,7 @@ export default function FireProjection() {
               <th className="py-2 pr-3">Yıl</th>
               <th className="py-2 pr-3 text-right">Reel değer</th>
               <th className="py-2 pr-3 text-right">Nominal değer</th>
-              <th className="py-2 pr-3 text-right">Reel hedef</th>
+              <th className="py-2 pr-3 text-right">Maaş sermayesi</th>
               <th className="py-2 text-right">Nominal hedef</th>
             </tr>
           </thead>
