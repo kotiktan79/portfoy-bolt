@@ -33,6 +33,9 @@ describe('dış gelir ve hedef sermaye', () => {
     expect(requiredRealCapital(goal, 12_000, swr)).toBe(0);
     expect(requiredRealCapital(goal, 20_000, swr)).toBe(0);
     expect(requiredRealCapital(goal, 5_000, 0)).toBe(0);
+    expect(requiredRealCapital(goal, 5_000, 4)).toBeCloseTo(175_000, 6);
+    expect(requiredRealCapital(goal, 8_600, 4)).toBeCloseTo(85_000, 6);
+    expect(requiredRealCapital(goal, 0, 4)).toBeCloseTo(300_000, 6);
   });
 
   it('ilerleme kaynak / senaryo sermayesi; dış gelir hedefi kapatırsa %100', () => {

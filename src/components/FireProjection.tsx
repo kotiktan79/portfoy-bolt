@@ -52,7 +52,7 @@ const DEFAULTS: StoredInputs = {
   monthlyContribution: 0,                     // dış katkı yok (kullanıcı beyanı 2026-09-18)
   annualReturnPct: 4,                         // politika dağılımı ~%4-5 nominal EUR; bugünkü (%40 nakit) ~%3
   targetMonthlyIncome: MONTHLY_CAP_EUR,       // €1.000/ay (geçim planı)
-  safeWithdrawalRatePct: 3.5,                 // Morningstar 2025 %3,9 / ERN %3,25-3,4 bandının ortası
+  safeWithdrawalRatePct: 4,                   // maaş Kâr Cüzdanı ile esner, kasa tamponu var → %4 uygun
   annualInflationPct: INFLATION_EUR * 100,    // motorla aynı (varsayılan %3)
 };
 
@@ -201,11 +201,11 @@ export default function FireProjection() {
   const compareName = income.scenario === 'aktif' ? 'Tüm gelir (karşılaştırma, bugünkü €)' : 'Yalnız aktif (karşılaştırma, bugünkü €)';
   const selectedName = income.scenario === 'aktif' ? 'Reel hedef, yalnız aktif' : 'Reel hedef, tüm gelir';
 
-  const inputFields: { key: keyof StoredInputs; label: string; suffix: string; step: string }[] = [
+  const inputFields: { key: keyof StoredInputs; label: string; suffix: string; step: string; hint?: string }[] = [
     { key: 'monthlyContribution', label: 'Aylık dış katkı', suffix: '€', step: '100' },
     { key: 'annualReturnPct', label: 'Yıllık getiri', suffix: '%', step: '0.5' },
     { key: 'targetMonthlyIncome', label: 'Hedef aylık gelir', suffix: '€', step: '100' },
-    { key: 'safeWithdrawalRatePct', label: 'Güvenli çekim (SWR)', suffix: '%', step: '0.5' },
+    { key: 'safeWithdrawalRatePct', label: 'Güvenli çekim (SWR)', suffix: '%', step: '0.1', hint: 'Varsayılan %4. Maaş Kâr Cüzdanı ile esner, kasa tamponu vardır. Bu tarayıcıda durur.' },
     { key: 'annualInflationPct', label: 'Enflasyon (uygulama ayarı)', suffix: '%', step: '0.5' },
   ];
 
@@ -240,6 +240,7 @@ export default function FireProjection() {
               />
               <span className="text-xs text-slate-400">{f.suffix}</span>
             </div>
+            {f.hint && <span className="mt-1 block text-[10px] normal-case tracking-normal font-normal text-slate-500 dark:text-gray-400">{f.hint}</span>}
           </label>
         ))}
       </div>
