@@ -1,7 +1,9 @@
 import { supabase } from '../lib/supabase';
 import { TARGET_PCT, allocationClassFor } from '../config/portfolioPolicy';
 import { computePeriodChange, sumRealizedTryBetween, computeClassMetrics, computeDynamicWithdrawal, DynamicWithdrawal, SnapshotForGrowth } from '../lib/portfolioMetrics';
+import { flowAdjustedReturn, type ExternalFlow } from '../lib/moneyWeightedReturn';
 import { getRealizedTryByDay } from './eurPnlService';
+import { getExternalFlows } from './performanceReturnService';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { isClosedHolding } from '../lib/openPosition';
 
@@ -22,12 +24,15 @@ export async function getDynamicWithdrawal(): Promise<DynamicWithdrawal | null> 
   try {
     // Sadece son 365 gün snapshot — computeDynamicWithdrawal zaten 365 gün penceresi kullanıyor
     const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
-    const { data: snaps } = await supabase
-      .from('portfolio_snapshots')
-      .select('snapshot_date,total_value,total_deposits,total_withdrawals')
-      .gte('snapshot_date', oneYearAgo)
-      .order('snapshot_date', { ascending: true })
-      .limit(400);
+    const [{ data: snaps }, { flows }] = await Promise.all([
+      supabase
+        .from('portfolio_snapshots')
+        .select('snapshot_date,total_value')
+        .gte('snapshot_date', oneYearAgo)
+        .order('snapshot_date', { ascending: true })
+        .limit(400),
+      getExternalFlows(),
+    ]);
     if (!snaps || snaps.length < 2) return null;
 
     // Tarihsel USD/TRY kuru (price_history'den USD sembolü) — son 365 gün, en eskiden yeniye
@@ -56,12 +61,22 @@ export async function getDynamicWithdrawal(): Promise<DynamicWithdrawal | null> 
     const forGrowth: SnapshotForGrowth[] = Array.from(byDate.values()).map(s => ({
       snapshot_date: s.snapshot_date,
       total_value: s.total_value,
-      total_deposits: s.total_deposits,
-      total_withdrawals: s.total_withdrawals,
       usdRate: usdRateAt(s.snapshot_date),
     }));
 
-    const result = computeDynamicWithdrawal(forGrowth);
+    const ordered = [...forGrowth].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+    const lastDay = ordered[ordered.length - 1]?.snapshot_date;
+    const windowStart = lastDay ? new Date(lastDay) : null;
+    if (windowStart && lastDay) windowStart.setDate(windowStart.getDate() - 365);
+    const windowStartStr = windowStart ? windowStart.toISOString().split('T')[0] : '';
+    const firstDay = ordered.find(s => s.snapshot_date >= windowStartStr)?.snapshot_date;
+    let netUSD = 0;
+    if (firstDay && lastDay) {
+      for (const f of flows) {
+        if (f.date > firstDay && f.date <= lastDay) netUSD += f.kind === 'deposit' ? f.amountUSD : -f.amountUSD;
+      }
+    }
+    const result = computeDynamicWithdrawal(forGrowth, 0.85, netUSD);
     _dwCache = { value: result, ts: Date.now() };
     return result;
   } catch (error) {
@@ -297,32 +312,35 @@ export interface AdvancedMetrics {
   alpha: number;
 }
 
-// Deposit-adjusted daily returns. The portfolio receives regular external
-// deposits (e.g. weekly buys); a raw (curr-prev)/prev return would count that
-// new money as performance and inflate every return-based metric. Here we strip
-// the net cash flow (deposits in, withdrawals out) of each period.
-function depositAdjustedDailyReturns(snapshots: PortfolioSnapshot[]): number[] {
+// Akış-düzeltilmiş günlük getiri. Nakit, snapshot yatırma alanından değil
+// kasa defterinden (işlem günü kuru, TRY) gelir. total_deposits sıçraması
+// (2026-08-01 ₺830 bin → ₺2,26 milyon) buraya giremez.
+function depositAdjustedDailyReturns(snapshots: PortfolioSnapshot[], flows: ExternalFlow[]): number[] {
   const returns: number[] = [];
   for (let i = 1; i < snapshots.length; i++) {
     const prevValue = snapshots[i - 1].total_value;
     const currValue = snapshots[i].total_value;
-    if (prevValue <= 0) continue;
-    const cashFlow =
-      ((snapshots[i].total_deposits ?? 0) - (snapshots[i - 1].total_deposits ?? 0)) -
-      ((snapshots[i].total_withdrawals ?? 0) - (snapshots[i - 1].total_withdrawals ?? 0));
-    const dailyReturn = (currValue - prevValue - cashFlow) / prevValue;
-    if (!isNaN(dailyReturn) && isFinite(dailyReturn)) {
-      returns.push(dailyReturn);
+    let cashFlow = 0;
+    const after = snapshots[i - 1].date;
+    const through = snapshots[i].date;
+    for (const f of flows) {
+      if (f.date > after && f.date <= through) cashFlow += f.kind === 'deposit' ? f.amountTRY : -f.amountTRY;
     }
+    const dailyReturn = flowAdjustedReturn(prevValue, currValue, cashFlow);
+    if (dailyReturn != null) returns.push(dailyReturn);
   }
   return returns;
 }
 
-export async function calculateSharpeRatio(riskFreeRate: number = 0.15): Promise<number> {
+async function ledgerFlows(): Promise<ExternalFlow[]> {
+  return (await getExternalFlows()).flows;
+}
+
+export async function calculateSharpeRatio(riskFreeRate: number = 0.15, flows?: ExternalFlow[]): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
-  const returns = depositAdjustedDailyReturns(snapshots);
+  const returns = depositAdjustedDailyReturns(snapshots, flows ?? await ledgerFlows());
 
   if (returns.length < 2) return 0;
 
@@ -339,14 +357,13 @@ export async function calculateSharpeRatio(riskFreeRate: number = 0.15): Promise
   return isFinite(sharpeRatio) ? sharpeRatio : 0;
 }
 
-export async function calculateMaxDrawdown(): Promise<number> {
+export async function calculateMaxDrawdown(flows?: ExternalFlow[]): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
-  // Measure drawdown on the deposit-adjusted return index, not raw value — a
-  // deposit raises value without any gain and would otherwise reset the peak
-  // and mask real drawdowns.
-  const returns = depositAdjustedDailyReturns(snapshots);
+  // Drawdown, defter akışı düşülmüş getiri endeksi üzerinden. Ham değer,
+  // yatırmayı zirve sanır. Snapshot total_deposits kullanılmaz.
+  const returns = depositAdjustedDailyReturns(snapshots, flows ?? await ledgerFlows());
   if (returns.length < 1) return 0;
 
   let maxDrawdown = 0;
@@ -366,11 +383,11 @@ export async function calculateMaxDrawdown(): Promise<number> {
   return isFinite(maxDrawdown) ? maxDrawdown * 100 : 0;
 }
 
-export async function calculateVolatility(): Promise<number> {
+export async function calculateVolatility(flows?: ExternalFlow[]): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
-  const returns = depositAdjustedDailyReturns(snapshots);
+  const returns = depositAdjustedDailyReturns(snapshots, flows ?? await ledgerFlows());
 
   if (returns.length < 2) return 0;
 
@@ -382,16 +399,13 @@ export async function calculateVolatility(): Promise<number> {
   return isFinite(annualizedVolatility) ? annualizedVolatility : 0;
 }
 
-export async function calculateCAGR(): Promise<number> {
+export async function calculateCAGR(flows?: ExternalFlow[]): Promise<number> {
   const snapshots = await getHistoricalSnapshots(365);
   if (snapshots.length < 2) return 0;
 
-  // CAGR must be a return, not a money-growth figure. A naive lastValue/firstValue
-  // would be dominated by the new money deposited over the window. Instead we
-  // compound the deposit-adjusted daily returns (true time-weighted growth) and
-  // annualize over the ACTUAL elapsed calendar span (not snapshots.length/365,
-  // which assumes one gap-free snapshot per day).
-  const returns = depositAdjustedDailyReturns(snapshots);
+  // CAGR, defter akışı düşülmüş günlük getirilerin bileşkesidir. Snapshot
+  // total_deposits farkı (kurla yeniden değerlenen kümülatif) kullanılmaz.
+  const returns = depositAdjustedDailyReturns(snapshots, flows ?? await ledgerFlows());
   if (returns.length < 1) return 0;
 
   const firstDate = new Date(snapshots[0].date).getTime();
@@ -407,11 +421,12 @@ export async function calculateCAGR(): Promise<number> {
 }
 
 export async function getAdvancedMetrics(): Promise<AdvancedMetrics> {
+  const flows = await ledgerFlows();
   const [sharpeRatio, maxDrawdown, volatility, cagr] = await Promise.all([
-    calculateSharpeRatio(),
-    calculateMaxDrawdown(),
-    calculateVolatility(),
-    calculateCAGR(),
+    calculateSharpeRatio(0.15, flows),
+    calculateMaxDrawdown(flows),
+    calculateVolatility(flows),
+    calculateCAGR(flows),
   ]);
 
   return {

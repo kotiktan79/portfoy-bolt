@@ -34,6 +34,7 @@ import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
+import { getPerformanceReturns } from '../services/performanceReturnService';
 import { getEurDaily, getLiveEurGain, type EurDaily } from '../services/eurPnlService';
 import type { LiveGain } from '../lib/eurPnl';
 // Dinamik Maaş kart alt yazısı: sıfırın SEBEBİNİ göster (devreden açık) — hakem/tarama bulgusu
@@ -101,6 +102,7 @@ export default function HomePage() {
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
   const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
   const [inception, setInception] = useState<InceptionSummary | null>(null);
+  const [inceptionMwr, setInceptionMwr] = useState<number | null>(null);
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
   const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
@@ -125,6 +127,7 @@ export default function HomePage() {
     Promise.all([
       getDynamicSalary().then(setDynamic),
       getInceptionPnl().then(setInception),
+      getPerformanceReturns(null, null).then(r => setInceptionMwr(r.inception?.dietzPct ?? null)).catch(() => setInceptionMwr(null)),
       getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }),
     ]).then(() => setEurState('ok')).catch(() => setEurState('error'));
   }, []);
@@ -195,6 +198,7 @@ export default function HomePage() {
                 dynamicSalaryLabel={dynamic ? salaryLabel(dynamic) : undefined}
                 inceptionGainEUR={inception?.totalGainEUR}
                 inceptionGainPct={inception?.totalGainPct}
+                inceptionMwrPct={inceptionMwr}
                 todayGainEUR={lastDay?.gainEUR}
                 prevWealthEUR={prevDay?.wealthEUR}
                 liveGainEUR={live?.gainEUR}

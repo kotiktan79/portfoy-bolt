@@ -28,6 +28,10 @@ describe('sekme cetveli', () => {
     const nominal = (1000 * 12) / 0.035;
     expect(p.yearByYear[0].inflationTarget).toBeCloseTo(nominal * 1.03, 6);
     expect(p.yearByYear[2].inflationTarget).toBeCloseTo(nominal * Math.pow(1.03, 3), 4);
+    expect(p.yearByYear[0].realTarget).toBeCloseTo(nominal, 6);
+    expect(p.yearByYear[2].realTarget).toBeCloseTo(nominal, 6);
+    expect(p.yearByYear[2].realEndOfYearValue).toBeCloseTo(p.yearByYear[2].endOfYearValue / Math.pow(1.03, 3), 4);
+    expect(p.realProgressPct).toBeCloseTo((100_000 * 0.035 / 12) / 1000 * 100, 4);
     expect(p.yearByYear[0].reachedTarget).toBe(p.yearByYear[0].endOfYearValue >= p.yearByYear[0].inflationTarget);
   });
 
@@ -58,10 +62,11 @@ describe('sekme cetveli', () => {
 });
 
 const EXPORT = '/home/ubuntu/.cursor/projects/workspace/uploads/portfoy_export_043b.json';
+const exportRaw = existsSync(EXPORT) ? JSON.parse(readFileSync(EXPORT, 'utf8')) : null;
 
-describe.skipIf(!existsSync(EXPORT))('ihracat ile sekme mutabakatı', () => {
-  if (!existsSync(EXPORT)) return;
-  const raw = JSON.parse(readFileSync(EXPORT, 'utf8'));
+describe.skipIf(!exportRaw)('ihracat ile sekme mutabakatı', () => {
+  if (!exportRaw) return;
+  const raw = exportRaw;
   const holdings = raw.holdings as Holding[];
 
   it('dağılım, plan ve x-ray aynı sınıf payını verir', () => {

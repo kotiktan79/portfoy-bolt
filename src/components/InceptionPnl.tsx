@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Landmark } from 'lucide-react';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
+import { getPerformanceReturns } from '../services/performanceReturnService';
+import type { MwrResult } from '../lib/moneyWeightedReturn';
 import { fmtEUR0, fmtSignedEUR0 } from '../lib/chartTheme';
 
 // KURULUŞTAN BUGÜNE (EURO): her pozisyonun alış günü kuruyla euro maliyeti vs bugünkü euro değeri.
 // Kur şişmesi yok: €30.100 EUR nakit → kâr 0; USD nakit → sadece EUR/USD hareketi.
 export function InceptionPnl() {
   const [d, setD] = useState<InceptionSummary | null>(null);
+  const [mwr, setMwr] = useState<MwrResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { getInceptionPnl().then(x => setD(x)).catch(e => setErr(e?.message || 'hesaplanamadı')).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    getInceptionPnl().then(x => setD(x)).catch(e => setErr(e?.message || 'hesaplanamadı')).finally(() => setLoading(false));
+    getPerformanceReturns(null, null).then(r => setMwr(r.inception)).catch(() => setMwr(null));
+  }, []);
   if (err) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Kuruluştan bugüne kâr hesaplanamadı</p><p className="text-xs text-red-500 mt-1">{err}</p></div>;
   if (loading) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 text-sm text-slate-400">Kuruluştan bugüne hesaplanıyor…</div>;
   if (!d) return null;
@@ -20,10 +26,11 @@ export function InceptionPnl() {
         <div className="flex items-center gap-2"><Landmark className="text-brand-600 dark:text-brand-400" size={22} /><h3 className="text-lg font-bold text-gray-900 dark:text-white">Kuruluştan Bugüne (€)</h3></div>
         <span className="text-[11px] text-slate-500 dark:text-gray-400">alış günü kuruyla maliyet · {d.eurTryInception} → {d.asOf}</span>
       </div>
-      <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div><p className="text-xs text-slate-500 dark:text-gray-400">Euro maliyet</p><p className="text-lg font-bold text-gray-900 dark:text-white">{fmtEUR0(d.totalCostEUR)}</p></div>
         <div><p className="text-xs text-slate-500 dark:text-gray-400">Bugünkü euro değer</p><p className="text-lg font-bold text-gray-900 dark:text-white">{fmtEUR0(d.totalValueEUR)}</p></div>
-        <div><p className="text-xs text-slate-500 dark:text-gray-400">Toplam kâr (satışlar dahil)</p><p className={`text-lg font-bold ${pos ? 'text-green-600' : 'text-red-600'}`}>{fmtSignedEUR0(d.totalGainEUR)} <span className="text-sm">({d.totalGainPct >= 0 ? '+' : ''}{d.totalGainPct.toFixed(1)}%)</span></p></div>
+        <div><p className="text-xs text-slate-500 dark:text-gray-400">Toplam kâr (maliyet bazlı)</p><p className={`text-lg font-bold ${pos ? 'text-green-600' : 'text-red-600'}`}>{fmtSignedEUR0(d.totalGainEUR)} <span className="text-sm">({d.totalGainPct >= 0 ? '+' : ''}{d.totalGainPct.toFixed(1)}%)</span></p></div>
+        <div><p className="text-xs text-slate-500 dark:text-gray-400">Para ağırlıklı getiri</p><p className={`text-lg font-bold ${mwr && (mwr.dietzPct ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{mwr?.dietzPct == null ? '—' : `${mwr.dietzPct >= 0 ? '+' : ''}${mwr.dietzPct.toFixed(1)}%`}</p><p className="text-[11px] text-slate-500 dark:text-gray-400">{mwr ? `net katkı ${fmtSignedEUR0(mwr.netFlowEUR)}${mwr.annualizedPct == null ? '' : ` · yıllık ${mwr.annualizedPct >= 0 ? '+' : ''}${mwr.annualizedPct.toFixed(1)}%`}` : 'kasa defteri'}</p></div>
         <div><p className="text-xs text-slate-500 dark:text-gray-400">≈ TL kârı (kur dahil, bilgi)</p><p className="text-lg font-bold text-slate-600 dark:text-gray-300">₺{Math.round(d.totalGainTRY).toLocaleString('tr-TR')}</p></div>
       </div>
       <div className="px-5 pb-5">
@@ -43,7 +50,7 @@ export function InceptionPnl() {
           ))}
         </div>
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-3">
-          Satılmış pozisyonların gerçekleşen kârı {fmtSignedEUR0(d.realizedEUR)} dahil. Alış tarihi = sisteme giriş tarihi (22 Eki 2025 toplu giriş); gerçek alış daha eskiyse euro kârı biraz farklıdır. Nisan 2026 öncesi kurlar ECB referans kuru.
+          Satılmış pozisyonların gerçekleşen kârı {fmtSignedEUR0(d.realizedEUR)} dahil. Yüzde iki ayrı sorudur: maliyet bazlı kâr ÷ euro maliyet, ve para ağırlıklı getiri (Modified Dietz, kasa yatırma/çekme, işlem günü kuru). Snapshot yatırma alanları kullanılmaz. Alış tarihi = sisteme giriş tarihi (22 Eki 2025 toplu giriş); gerçek alış daha eskiyse euro kârı biraz farklıdır. Nisan 2026 öncesi kurlar ECB referans kuru.
         </p>
       </div>
     </div>

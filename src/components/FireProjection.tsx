@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Target, TrendingUp, Flag, Wallet } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -11,7 +11,7 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, FireInputs } from '../services/fireProjectionService';
+import { projectFire, poolRuleCapitalFor, poolRuleMonthlyFrom, nominalCapitalOn, FireInputs } from '../services/fireProjectionService';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { chartChrome } from '../lib/chartTheme';
 
@@ -19,9 +19,11 @@ import { chartChrome } from '../lib/chartTheme';
 // Eski sürüm USD'ydi, hedefi salary_settings'ten ($1.500) alıyordu ve 'aylık katkı'yı son 90 günün
 // mevduat farkından türetiyordu — o fark kasa→portföy İÇ transferiydi ($7.076/ay 'katkı' sanıp
 // '2 yıl 7 ay' diyordu). Gerçek: dış katkı yok, hedef €1.000/ay, gerçekçi getiriyle ~17-21 yıl.
-import { MONTHLY_CAP_EUR, INFLATION_EUR, SALARY_SAFETY } from '../lib/eurPnl';
+import { MONTHLY_CAP_EUR, INFLATION_EUR, SALARY_SAFETY, dayInTZ, normalizeInflation } from '../lib/eurPnl';
+import { SALARY_START_MONTH } from '../lib/salaryPlan';
 import { getEurDaily } from '../services/eurPnlService';
 import { fmtEUR0, fmtAxisEUR } from '../lib/chartTheme';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'tandor_fire_inputs_eur';   // eski USD kayıtları ('tandor_fire_inputs') bilerek okunmaz
 
@@ -46,7 +48,8 @@ function loadStored(): StoredInputs | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw);
-    return { ...DEFAULTS, ...p };
+    // Enflasyon uygulama ayarından gelir (Kâr Cüzdanı). Eski yerel kayıt hedefi nominal bırakmasın.
+    return { ...DEFAULTS, ...p, annualInflationPct: DEFAULTS.annualInflationPct };
   } catch {
     return null;
   }
@@ -57,6 +60,8 @@ export default function FireProjection() {
   const chrome = chartChrome(isDark);
 
   const [inputs, setInputs] = useState<StoredInputs>(() => loadStored() || DEFAULTS);
+  const [policyInflationPct, setPolicyInflationPct] = useState(INFLATION_EUR * 100);
+  const inflationTouched = useRef(false);
   // Taban: motorun EUR serveti (kasa HARİÇ, kilitli kural). Motor gelmezse holdings'ten TL/EUR.
   const [wealthEUR, setWealthEUR] = useState<number | null>(null);
   useEffect(() => {
@@ -65,11 +70,28 @@ export default function FireProjection() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('portfoy_bolt_salary_policy').select('inflation_annual').eq('id', 1).maybeSingle();
+        if (cancelled || error || !data) return;
+        const pct = Math.round(normalizeInflation(data.inflation_annual) * 1000) / 10;
+        setPolicyInflationPct(pct);
+        if (!inflationTouched.current) setInputs(prev => ({ ...prev, annualInflationPct: pct }));
+      } catch {
+        /* ayar okunamazsa varsayılan %3 kalır */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   function update(field: keyof StoredInputs, raw: string) {
     const v = parseFloat(raw);
+    if (field === 'annualInflationPct') inflationTouched.current = true;
     const next = { ...inputs, [field]: Number.isFinite(v) ? v : 0 };
     setInputs(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, annualInflationPct: undefined }));
   }
 
   // Motor gelene kadar uydurma EUR/USD yok. Servet 0 görünür ve uyarı yazılır.
@@ -88,15 +110,25 @@ export default function FireProjection() {
   }, [currentValueEUR, inputs]);
 
   const baseYear = new Date().getFullYear();
+  const asOf = dayInTZ(new Date());
+  const goalDate = `${SALARY_START_MONTH}-01`;
+  const nominalAtGoal = nominalCapitalOn(projection.targetPortfolio, inputs.annualInflationPct, asOf, goalDate);
+  const goalLabel = (() => {
+    const [y, m] = SALARY_START_MONTH.split('-');
+    const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    return `${months[Number(m) - 1] || m} ${y}`;
+  })();
   const chartData = useMemo(
     () =>
       projection.yearByYear.map((y) => ({
         yearLabel: String(baseYear + y.year),
-        value: y.endOfYearValue,
+        nominalValue: y.endOfYearValue,
+        realValue: y.realEndOfYearValue,
         principal: currentValueEUR + y.contributionsYTD,
         monthlyAtSWR: y.monthlyIncomeAtSWR,
         growthYTD: y.growthYTD,
-        inflationTarget: y.inflationTarget,
+        realTarget: y.realTarget,
+        nominalTarget: y.inflationTarget,
       })),
     [projection, baseYear, currentValueEUR]
   );
@@ -110,7 +142,7 @@ export default function FireProjection() {
     { key: 'annualReturnPct', label: 'Yıllık getiri', suffix: '%', step: '0.5' },
     { key: 'targetMonthlyIncome', label: 'Hedef aylık gelir', suffix: '€', step: '100' },
     { key: 'safeWithdrawalRatePct', label: 'Güvenli çekim (SWR)', suffix: '%', step: '0.5' },
-    { key: 'annualInflationPct', label: 'Enflasyon (EUR)', suffix: '%', step: '0.5' },
+    { key: 'annualInflationPct', label: 'Enflasyon (uygulama ayarı)', suffix: '%', step: '0.5' },
   ];
 
   return (
@@ -122,7 +154,7 @@ export default function FireProjection() {
           <p className="text-xs text-slate-500 dark:text-gray-400">
             {wealthMissing
               ? 'Euro servet henüz yok. Son gerçek kur da yoksa usd ile çarpılarak euro uydurulmaz.'
-              : `Portföy €${Math.round(currentValueEUR).toLocaleString('de-DE')} (kasa hariç) + dış katkı → hedef aylık gelir. Hedef REEL: enflasyonla birlikte büyür.`}
+              : `Portföy €${Math.round(currentValueEUR).toLocaleString('de-DE')} (kasa hariç). Hedef ${goalLabel}'den itibaren €${inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay reel. Çizgiler bugünkü €; nominal ayrı.`}
           </p>
         </div>
       </div>
@@ -152,29 +184,43 @@ export default function FireProjection() {
       <div className="p-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryTile
           icon={<Flag size={14} />}
-          label="Hedef portföy (bugünkü €)"
+          label="Reel hedef sermaye (bugünkü €)"
           value={fmtEUR0(projection.targetPortfolio)}
-          sub={`€${inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay ÷ %${inputs.safeWithdrawalRatePct} SWR`}
+          sub={`€${inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay reel ÷ %${inputs.safeWithdrawalRatePct} SWR`}
         />
         <SummaryTile
           icon={<Wallet size={14} />}
-          label="Referans: SWR ile"
-          value={`${fmtEUR0(projection.currentMonthlyAtSWR)}/ay`}
-          sub="karşılaştırma ölçüsü — gerçek çekim hakkı Kâr Cüzdanı'nda (havuz kuralı)"
+          label="Reel ilerleme"
+          value={`%${Math.max(0, projection.realProgressPct).toFixed(0)}`}
+          sub={`bugün ${fmtEUR0(projection.currentMonthlyAtSWR)}/ay reel · hedef €${inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay (${goalLabel})`}
         />
         <SummaryTile
           icon={<TrendingUp size={14} />}
-          label="Hedefe kalan"
+          label="Reel hedefe kalan"
           value={targetReached ? `${projection.yearsToTarget} yıl (${baseYear + (projection.yearsToTarget || 0)})` : '40+ yıl'}
-          sub={targetReached ? `Açık: ${fmtEUR0(projection.currentGap)} · reel hedef` : 'Bu varsayımlarla ulaşılamıyor'}
+          sub={targetReached ? `Açık: ${fmtEUR0(projection.currentGap)} bugünkü €` : 'Bu varsayımlarla ulaşılamıyor'}
           warn={!targetReached}
         />
         <SummaryTile
           icon={<Target size={14} />}
-          label="Hedef yılındaki nominal hedef"
-          value={fmtEUR0(projection.inflationAdjustedTarget)}
-          sub={`%${inputs.annualInflationPct}/yıl ile hedef yılındaki eşdeğer`}
+          label={`${goalLabel} nominal hedef`}
+          value={fmtEUR0(nominalAtGoal)}
+          sub={`aynı reel gelirin o tarihteki euro karşılığı · enflasyon %${inputs.annualInflationPct}`}
         />
+      </div>
+      <div className="px-5 pb-2">
+        <div className="h-2 rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
+          <div
+            className="h-full bg-brand-600"
+            style={{ width: `${Math.min(100, Math.max(0, projection.realProgressPct))}%` }}
+          />
+        </div>
+        <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
+          İlerleme bugünkü alım gücündedir: servetin SWR geliri ÷ €{inputs.targetMonthlyIncome.toLocaleString('de-DE')} reel.
+          {Math.abs(inputs.annualInflationPct - policyInflationPct) > 0.05
+            ? ` Bu kutu senaryodur (uygulama ayarı %${policyInflationPct}); maaş hesabını değiştirmez.`
+            : ' Enflasyon, Kâr Cüzdanı\'ndaki uygulama ayarıdır.'}
+        </p>
       </div>
 
       {/* Grafik */}
@@ -204,13 +250,16 @@ export default function FireProjection() {
                   <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 space-y-1">
                     <p className="text-xs text-gray-500 dark:text-gray-400">{d.yearLabel} sonu</p>
                     <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      Portföy: {fmtEUR0(d.value)}
+                      Reel portföy: {fmtEUR0(d.realValue)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-300">
-                      Anapara+katkı: {fmtEUR0(d.principal)} · O yıl büyüme: {fmtEUR0(d.growthYTD)}
+                      Reel hedef: {fmtEUR0(d.realTarget)} · Nominal portföy: {fmtEUR0(d.nominalValue)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-300">
-                      SWR ile aylık: {fmtEUR0(d.monthlyAtSWR)}
+                      Nominal hedef: {fmtEUR0(d.nominalTarget)} · Anapara+katkı: {fmtEUR0(d.principal)}
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                      O yıl büyüme (nominal): {fmtEUR0(d.growthYTD)} · SWR ile aylık: {fmtEUR0(d.monthlyAtSWR)}
                     </p>
                   </div>
                 );
@@ -220,18 +269,18 @@ export default function FireProjection() {
             {projection.targetPortfolio > 0 && (
               <Line
                 type="monotone"
-                dataKey="inflationTarget"
-                name="Enflasyona göre hedef"
+                dataKey="realTarget"
+                name="Reel hedef (bugünkü €)"
                 stroke={chrome.neutralLine}
-                strokeWidth={1.5}
+                strokeWidth={2}
                 strokeDasharray="6 4"
                 dot={false}
               />
             )}
             <Area
               type="monotone"
-              dataKey="value"
-              name="Projeksiyon"
+              dataKey="realValue"
+              name="Reel projeksiyon (bugünkü €)"
               stroke={seriesColor}
               strokeWidth={2}
               fill="url(#fireGradient)"
@@ -240,21 +289,34 @@ export default function FireProjection() {
             />
             <Line
               type="monotone"
-              dataKey="principal"
-              name="Anapara + katkı"
+              dataKey="nominalValue"
+              name="Nominal projeksiyon"
               stroke={principalColor}
-              strokeWidth={2}
+              strokeWidth={1.5}
               strokeDasharray="4 3"
               dot={false}
               activeDot={{ r: 4 }}
             />
+            {projection.targetPortfolio > 0 && (
+              <Line
+                type="monotone"
+                dataKey="nominalTarget"
+                name="Nominal hedef"
+                stroke={isDark ? '#c4b5fd' : '#7c3aed'}
+                strokeWidth={1.25}
+                strokeDasharray="2 4"
+                dot={false}
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
         <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
           {/* 2026-09-23: rakamlar sayfanın KENDİ girdilerinden türetilir (eski sabit '~€343k / ~€460k+' metni girdiler
               değişince yanlış kalıyordu ve panelle çelişiyordu). İki ölçüt ayrı ayrı yazılır ki çelişki gibi görünmesin. */}
-          Dürüst not: iki farklı ölçüt var. <strong>SWR (%{inputs.safeWithdrawalRatePct})</strong> ile
-          €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay için {projection.targetPortfolio > 0 ? fmtEUR0(projection.targetPortfolio) : '—'} gerekir.
+          Dürüst not: grafik bugünkü alım gücündedir. Düz çizgi reel hedeftir (€{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay, {goalLabel}'den itibaren).
+          Nominal çizgiler enflasyonla şişmiş gelecek eurodur; onlara ulaşmak reel hedefe ulaşmak değildir.
+          <strong>SWR (%{inputs.safeWithdrawalRatePct})</strong> ile
+          €{inputs.targetMonthlyIncome.toLocaleString('de-DE')}/ay reel için {projection.targetPortfolio > 0 ? fmtEUR0(projection.targetPortfolio) : '—'} (bugünkü €) gerekir.
           <strong> Kâr Cüzdanı'nın havuz kuralı</strong> (reel kârın %{Math.round(SALARY_SAFETY * 100)}'i; çekim her hâlükârda aylık €{MONTHLY_CAP_EUR.toLocaleString('de-DE')} ile sınırlı)
           bu sayfadaki varsayımlarla (%{inputs.annualReturnPct} getiri − %{inputs.annualInflationPct} enflasyon = reel %{realRatePct.toFixed(1)})
           {poolRuleCapital > 0 ? ` ${fmtEUR0(poolRuleCapital)}` : ' —'} ister; bugünkü portföyün bu kuralla beklenen maaşı {fmtEUR0(poolRuleMonthlyNow)}/ay ve ayların çoğu €0.
@@ -268,10 +330,10 @@ export default function FireProjection() {
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 dark:text-gray-400 border-b border-slate-200 dark:border-gray-700">
               <th className="py-2 pr-3">Yıl</th>
-              <th className="py-2 pr-3 text-right">Yıl sonu değer</th>
-              <th className="py-2 pr-3 text-right">Toplam katkı</th>
-              <th className="py-2 pr-3 text-right">O yıl büyüme</th>
-              <th className="py-2 text-right">SWR ile aylık</th>
+              <th className="py-2 pr-3 text-right">Reel değer</th>
+              <th className="py-2 pr-3 text-right">Nominal değer</th>
+              <th className="py-2 pr-3 text-right">Reel hedef</th>
+              <th className="py-2 text-right">Nominal hedef</th>
             </tr>
           </thead>
           <tbody>
@@ -288,10 +350,10 @@ export default function FireProjection() {
                     <span className="ml-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">🎯</span>
                   )}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-semibold text-gray-900 dark:text-white">{fmtEUR0(y.endOfYearValue)}</td>
-                <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-gray-300">{fmtEUR0(y.contributionsYTD)}</td>
-                <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-gray-300">{fmtEUR0(y.growthYTD)}</td>
-                <td className="py-1.5 text-right text-slate-600 dark:text-gray-300">{fmtEUR0(y.monthlyIncomeAtSWR)}</td>
+                <td className="py-1.5 pr-3 text-right font-semibold text-gray-900 dark:text-white">{fmtEUR0(y.realEndOfYearValue)}</td>
+                <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-gray-300">{fmtEUR0(y.endOfYearValue)}</td>
+                <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-gray-300">{fmtEUR0(y.realTarget)}</td>
+                <td className="py-1.5 text-right text-slate-600 dark:text-gray-300">{fmtEUR0(y.inflationTarget)}</td>
               </tr>
             ))}
           </tbody>

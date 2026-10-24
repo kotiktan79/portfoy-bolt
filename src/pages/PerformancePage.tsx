@@ -29,6 +29,7 @@ import {
 } from '../services/benchmarkService';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { chartChrome, fmtEUR0, fmtSignedEUR0, fmtAxisEUR, paddedDomain } from '../lib/chartTheme';
+import { getPerformanceReturns, type PerformanceReturns } from '../services/performanceReturnService';
 
 type Period = 7 | 30 | 90 | 9999;
 
@@ -66,6 +67,7 @@ export default function PerformancePage() {
   const [benchmarkKey, setBenchmarkKey] = useState<BenchmarkKey | null>(null);
   const [benchmarkSeries, setBenchmarkSeries] = useState<BenchmarkPoint[]>([]);
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
+  const [mwr, setMwr] = useState<PerformanceReturns | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +152,18 @@ export default function PerformancePage() {
     return { startValue, endValue, gainEUR, twrPct, rateStart: snapshots[0].eurRate, rateEnd: snapshots[snapshots.length - 1].eurRate };
   }, [snapshots, chartData]);
 
+  useEffect(() => {
+    if (snapshots.length < 2) { setMwr(null); return; }
+    let cancelled = false;
+    getPerformanceReturns(snapshots[0].date, snapshots[snapshots.length - 1].date)
+      .then(r => { if (!cancelled) setMwr(r); })
+      .catch(() => { if (!cancelled) setMwr(null); });
+    return () => { cancelled = true; };
+  }, [snapshots]);
+
   const isPositive = stats.gainEUR >= 0;
+  const periodMwr = mwr?.period?.dietzPct;
+  const inceptionMwr = mwr?.inception?.dietzPct;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50/40 via-white to-accent-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 p-4 md:p-6">
@@ -325,10 +338,19 @@ export default function PerformancePage() {
             <StatCard label="Dönem başı servet" value={fmtEUR0(stats.startValue)} />
             <StatCard label="Şu anki servet" value={fmtEUR0(stats.endValue)} />
             <StatCard
-              label="Dönem kârı (para hariç)"
+              label="Dönem kârı (euro cetveli)"
               value={fmtSignedEUR0(stats.gainEUR)}
-              sub={`${stats.twrPct >= 0 ? '+' : ''}${stats.twrPct.toFixed(2)}% getiri`}
+              sub={periodMwr == null
+                ? `zaman ağırlıklı ${stats.twrPct >= 0 ? '+' : ''}${stats.twrPct.toFixed(2)}%`
+                : `para ağırlıklı ${periodMwr >= 0 ? '+' : ''}${periodMwr.toFixed(2)}% · zaman ağırlıklı ${stats.twrPct >= 0 ? '+' : ''}${stats.twrPct.toFixed(2)}%`}
               color={isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
+            />
+            <StatCard
+              label="Kuruluştan getiri (para ağırlıklı)"
+              value={inceptionMwr == null ? '—' : `${inceptionMwr >= 0 ? '+' : ''}${inceptionMwr.toFixed(2)}%`}
+              sub={mwr?.inception?.annualizedPct == null
+                ? 'kasa yatırma/çekme, işlem günü kuru'
+                : `yıllık ${mwr.inception.annualizedPct >= 0 ? '+' : ''}${mwr.inception.annualizedPct.toFixed(2)}% · net katkı ${fmtSignedEUR0(mwr.inception.netFlowEUR)}`}
             />
             <StatCard
               label="Kur EUR/TL (euro kârına dahil)"

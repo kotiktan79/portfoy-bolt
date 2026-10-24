@@ -18,6 +18,7 @@ import { usePortfolio } from '../contexts/PortfolioContext';
 import { computePortfolioMetrics, computeHoldingMetrics, computePassiveYearlyUSD } from '../lib/portfolioMetrics';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
+import { getPerformanceReturns } from '../services/performanceReturnService';
 import { getEurDaily, getLiveEurGain, type EurDaily } from '../services/eurPnlService';
 import type { LiveGain } from '../lib/eurPnl';
 import { dayPct } from '../lib/eurPnl';
@@ -55,6 +56,7 @@ export default function LivePage() {
   const [countdown, setCountdown] = useState(REFRESH_SEC);
   const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
   const [inception, setInception] = useState<InceptionSummary | null>(null);
+  const [inceptionMwr, setInceptionMwr] = useState<number | null>(null);
   const [lastDay, setLastDay] = useState<EurDaily | null>(null);
   const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
   const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
@@ -69,6 +71,7 @@ export default function LivePage() {
   const loadEur = () => {
     Promise.all([
       getInceptionPnl().then(setInception),
+      getPerformanceReturns(null, null).then(r => setInceptionMwr(r.inception?.dietzPct ?? null)).catch(() => setInceptionMwr(null)),
       getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }),
     ]).then(() => setEurState('ok')).catch(() => setEurState('error'));
   };
@@ -274,7 +277,7 @@ export default function LivePage() {
           {[
             // Veri gelmediyse '—': '+€0' bir olgu gibi okunur (hakem 2026-09-19)
             { label: 'Kuruluştan Bugüne Kâr', icon: DollarSign, color: !inception ? 'gold' : inception.totalGainEUR >= 0 ? 'emerald' : 'rose',
-              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => inception ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: inception ? `${inception.totalGainPct >= 0 ? '+' : ''}${inception.totalGainPct.toFixed(1)}% · alış günü kuruyla` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
+              value: inception?.totalGainEUR ?? 0, fmt: (n: number) => inception ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: inception ? `${inceptionMwr != null ? `para ağırlıklı ${inceptionMwr >= 0 ? '+' : ''}${inceptionMwr.toFixed(1)}% · ` : ''}maliyet bazlı ${inception.totalGainPct >= 0 ? '+' : ''}${inception.totalGainPct.toFixed(1)}%` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
             { label: lastDay ? `Kapanış ${lastDay.date.slice(5).replace('-', '/')}` : 'Son Gün', icon: isPos ? TrendingUp : TrendingDown, color: !lastDay ? 'gold' : isPos ? 'emerald' : 'rose',
               value: dailyChange, fmt: (n: number) => lastDay ? `${n >= 0 ? '+' : '−'}€${fmtUSD(Math.abs(n))}` : '—', sub: lastDay ? `${isPos ? '+' : ''}${dailyPct.toFixed(2)}% · euro, para hariç · taban dünkü servet` : (eurState === 'error' ? 'veri yüklenemedi' : 'hesaplanıyor…') },
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
