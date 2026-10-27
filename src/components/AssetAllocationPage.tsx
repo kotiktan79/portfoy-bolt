@@ -6,7 +6,6 @@ import { useDarkMode } from '../hooks/useDarkMode';
 import { assetColor, chartChrome, fmtAxisTRY, fmtTRY0 } from '../lib/chartTheme';
 import { CLASS_LABELS, TARGET_ALLOCATION, allocationClassFor, isHouseMoney, type AllocationClass } from '../config/portfolioPolicy';
 import { isClosedHolding } from '../lib/openPosition';
-import { RomaniaRenovationCard } from './RomaniaRenovationCard';
 
 interface AssetAllocationPageProps {
   holdings: Holding[];
@@ -158,8 +157,6 @@ export function AssetAllocationPage({ holdings, onBack }: AssetAllocationPagePro
             );
           })}
         </div>
-
-        <RomaniaRenovationCard />
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,5 +1,5 @@
 import {
-  Home, PieChart, Brain, FileText, TrendingUp, Target, Scale,
+  Home, PieChart, Brain, FileText, TrendingUp, Target, Scale, Hammer,
 } from 'lucide-react';
 
 interface MobileBottomNavProps {
@@ -15,12 +15,13 @@ const PRIMARY_TABS = [
   { id: 'projection', icon: Target, label: 'Hedef' },
   { id: 'report', icon: FileText, label: 'Rapor' },
   { id: 'olcu', icon: Scale, label: 'Ölçü' },
+  { id: 'ev', icon: Hammer, label: 'Ev' },
 ];
 
 export default function MobileBottomNav({ onNavigate, currentPage = 'home' }: MobileBottomNavProps) {
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 z-50 safe-area-inset-bottom shadow-lg">
-      <div className="grid grid-cols-7 gap-0.5 px-1 pt-1.5 pb-1">
+      <div className="grid grid-cols-8 gap-0.5 px-0.5 pt-1.5 pb-1">
         {PRIMARY_TABS.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
@@ -35,7 +36,7 @@ export default function MobileBottomNav({ onNavigate, currentPage = 'home' }: Mo
               }`}
             >
               <Icon className="w-5 h-5 mb-0.5" strokeWidth={isActive ? 2.5 : 2} />
-              <span className={`text-[10px] leading-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+              <span className={`text-[10px] leading-tight whitespace-nowrap ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
             </button>
           );
         })}

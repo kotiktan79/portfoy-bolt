@@ -94,11 +94,83 @@ describe('Romanya ev tadilat toplamı', () => {
     expect(summary.totalEUR).toBe(20_000 + 3_500 + 4_050 + 5_000);
   });
 
-  it('başka günün aynı tutarını tadilat saymaz', () => {
+  it('başka günün aynı tutarını çekim değilse tadilat saymaz', () => {
     const summary = buildRenovationSummary({
       cashRows: [{ at: '2026-08-03T10:00:00Z', currency: 'EUR', amount: 3500, notes: 'tadilat' }],
     });
+    expect(summary.lines).toHaveLength(4);
     expect(summary.lines[1].source).toBe('sabit');
+  });
+
+  it('notu tadilat veya remont olan sonraki çekimleri de ekler', () => {
+    const summary = buildRenovationSummary({
+      cashRows: [
+        { id: 55, at: '2026-07-03T09:00:00+03:00', currency: 'EUR', amount: 3500, notes: 'Ev tadilatı/remont harcaması', transaction_type: 'withdrawal' },
+        { id: 58, at: '2026-07-03T11:00:00+03:00', currency: 'EUR', amount: 4050, notes: 'Ev remontu harcaması', transaction_type: 'withdrawal' },
+        { id: 56, at: '2026-07-02T22:30:00Z', currency: 'RON', amount: 25000, notes: 'Ev tadilatı harcaması', transaction_type: 'withdrawal' },
+        { id: 90, at: '2026-09-12T10:00:00+03:00', currency: 'EUR', amount: 800, notes: 'ek remont', transaction_type: 'withdrawal' },
+        { id: 91, at: '2026-09-12T12:00:00+03:00', currency: 'EUR', amount: 800, notes: 'ek remont', transaction_type: 'deposit' },
+      ],
+      ronTry: 9.84,
+      eurTry: 50,
+    });
+    expect(summary.lines.map(l => l.amountEUR)).toEqual([20_000, 3_500, 4_050, 4_920, 800]);
+    expect(summary.lines.map(l => l.description)).toEqual([
+      'Ev tadilatı',
+      'Ev tadilatı/remont harcaması',
+      'Ev remontu harcaması',
+      'Ev tadilatı harcaması',
+      'ek remont',
+    ]);
+    expect(summary.lines[4].source).toBe('cash_transactions');
+    expect(summary.totalEUR).toBe(33_270);
+    expect(summary.years.map(y => [y.year, y.totalEUR])).toEqual([[2025, 20_000], [2026, 13_270]]);
+  });
+
+  it('RON tutarını harcama gününün kuruyla çevirir, gün yoksa güncel kuru söyler', () => {
+    const dated = buildRenovationSummary({
+      cashRows: [
+        { id: 56, at: '2026-07-03T10:00:00+03:00', currency: 'RON', amount: 25000, notes: 'Ev tadilatı harcaması', transaction_type: 'withdrawal' },
+      ],
+      ronTry: 10,
+      eurTry: 50,
+      rates: [
+        { day: '2026-07-03', from_currency: 'RON', rate: 9.84 },
+        { day: '2026-07-03', from_currency: 'EUR', rate: 50 },
+        { day: '2026-10-27', from_currency: 'RON', rate: 10 },
+        { day: '2026-10-27', from_currency: 'EUR', rate: 50 },
+      ],
+    });
+    const ron = dated.lines.find(l => l.currency === 'RON')!;
+    expect(ron.amountEUR).toBe(4_920);
+    expect(ron.fxKind).toBe('harcama-gunu');
+    expect(ron.fxNote).toBe('Harcama günü kuru (3 Temmuz 2026)');
+    expect(dated.fxSource).toBe('exchange_rates_daily');
+    expect(dated.totalEUR).toBe(32_470);
+
+    const current = buildRenovationSummary({
+      cashRows: [
+        { id: 56, at: '2026-07-03T10:00:00+03:00', currency: 'RON', amount: 25000, notes: 'Ev tadilatı harcaması', transaction_type: 'withdrawal' },
+      ],
+      rates: [
+        { day: '2026-10-27', from_currency: 'RON', rate: 10 },
+        { day: '2026-10-27', from_currency: 'EUR', rate: 50 },
+      ],
+    });
+    const ronNow = current.lines.find(l => l.currency === 'RON')!;
+    expect(ronNow.amountEUR).toBe(5_000);
+    expect(ronNow.fxKind).toBe('guncel');
+    expect(ronNow.fxNote).toContain('Güncel kur');
+  });
+
+  it('yıl alt toplamları 2025 ve 2026 olarak ayrılır', () => {
+    const summary = buildRenovationSummary({});
+    expect(summary.years).toEqual([
+      { year: 2025, totalEUR: 20_000, text: '€20.000' },
+      { year: 2026, totalEUR: 12_470, text: '€12.470' },
+    ]);
+    expect(summary.lines[3].fxKind).toBe('yedek');
+    expect(summary.lines[3].fxNote).toContain('Sabit yedek kur');
   });
 
   it('ham kayıtları ve kur serisinin son gününü eşler', () => {
@@ -131,14 +203,16 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe('tadilat kartı hesap modüllerine bağlı değil', () => {
-  it('romaniaRenovation yalnız kart, servis ve dağılım sayfasından okunur', () => {
+  it('romaniaRenovation portföy hesabına girmez; yalnız kendi ekranı okur', () => {
     const allow = new Set([
       'src/lib/romaniaRenovation.test.ts',
       'src/services/romaniaRenovationService.ts',
+      'src/services/romaniaRenovationService.test.ts',
       'src/components/RomaniaRenovationCard.tsx',
       'src/components/RomaniaRenovationCard.test.tsx',
-      'src/components/AssetAllocationPage.tsx',
-      'src/lib/houseMoney.ui.test.tsx',
+      'src/pages/RomaniaRenovationPage.tsx',
+      'src/pages/RomaniaRenovationPage.test.tsx',
+      'src/App.tsx',
     ]);
     const hits = walk('src')
       .map(file => relative(process.cwd(), file).replace(/\\/g, '/'))

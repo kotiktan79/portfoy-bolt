@@ -12,6 +12,7 @@ const pageMap: Record<string, string> = {
   research: '/research',
   projection: '/projection',
   olcu: '/olcu',
+  ev: '/romanya-ev',
 };
 
 const reverseMap: Record<string, string> = Object.fromEntries(

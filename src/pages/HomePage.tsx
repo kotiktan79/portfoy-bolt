@@ -172,6 +172,7 @@ export default function HomePage() {
             onShowAIAdvisor={() => navigate('/ai-advisor')}
             onShowResearch={() => navigate('/research')}
             onShowProjection={() => navigate('/projection')}
+            onShowRenovation={() => navigate('/romanya-ev')}
             onShowRebalanceModal={() => setShowRebalanceModal(true)}
             onEnableNotifications={enableNotifications}
             onThemeCycle={() => {

@@ -3,7 +3,7 @@ import {
   TrendingUp, Plus, RefreshCw, Moon, Sun, Bell,
   Activity, Download, Shield, Palette,
   PieChart, Database, Brain,
-  Target, Menu, X, Trash2, MoreHorizontal
+  Target, Menu, X, Trash2, MoreHorizontal, Hammer
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -25,6 +25,7 @@ interface DashboardHeaderProps {
   onShowPerformance: () => void;
   onShowResearch?: () => void;
   onShowProjection?: () => void;
+  onShowRenovation?: () => void;
   onShowRebalanceModal: () => void;
   onEnableNotifications: () => void;
   onThemeCycle: () => void;
@@ -47,6 +48,7 @@ export function DashboardHeader({
   onShowPerformance,
   onShowResearch,
   onShowProjection,
+  onShowRenovation,
   onShowRebalanceModal,
   onEnableNotifications,
   onThemeCycle,
@@ -113,6 +115,7 @@ export function DashboardHeader({
     { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
     { label: 'Hedef', onClick: onShowProjection || (() => {}), icon: Target },
+    { label: 'Ev Tadilatı', onClick: onShowRenovation || (() => {}), icon: Hammer },
   ];
 
   const iconBtn = 'p-2 rounded-xl text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors';
@@ -137,12 +140,12 @@ export function DashboardHeader({
         </div>
 
         {/* Center: Desktop navigation */}
-        <nav className="hidden lg:flex items-center gap-1">
+        <nav className="hidden lg:flex items-center gap-0.5 min-w-0 overflow-x-auto">
           {navItems.map((item) => (
             <button
               key={item.label}
               onClick={item.onClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors"
+              className="flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors"
             >
               <item.icon size={14} strokeWidth={2} />
               {item.label}

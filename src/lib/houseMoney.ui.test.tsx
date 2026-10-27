@@ -1,8 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('../services/romaniaRenovationService', () => ({
-  loadRomaniaRenovation: () => new Promise(() => {}),
-}));
+import { describe, expect, it } from 'vitest';
 
 class ResizeObserverStub {
   observe() {}
@@ -40,8 +36,9 @@ describe('Ev Parası ekranda ayrı durur', () => {
     render(<AssetAllocationPage holdings={holdings} onBack={() => {}} />);
     expect(screen.getByText(/Ev Parası ₺10\.142 · €203 — hedef ve dengeleme dışı/)).toBeInTheDocument();
     expect(screen.getByText('Toplam değer (TL, kasa ve Ev Parası hariç)')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Romanya ev tadilat toplamı' })).toBeInTheDocument();
-    expect(screen.getByText('≈ €32.470')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Romanya Ev Tadilatı' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Romanya ev tadilat toplamı' })).not.toBeInTheDocument();
+    expect(screen.queryByText('≈ €32.470')).not.toBeInTheDocument();
     expect(screen.getAllByText('₺9.050').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Fon').length).toBeGreaterThan(0);
     expect(screen.queryByText('GPY1PPF')).not.toBeInTheDocument();
