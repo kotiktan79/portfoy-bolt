@@ -109,8 +109,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     log.push('AI analizi tamamlandı');
     const weekPlanActions = (aiCtx?.weekPlan || []).map(p => ({
       urgency: 'this_week', type: 'buy', symbol: p.symbol, market: 'EU', platform: 'Revolut',
-      instruction: `${p.instruction} — ≈ €${p.amountEUR.toLocaleString('de-DE')}`,
-      detail: `Esnek plan (haftalık takvim yok): ${p.label}. Ayda yaklaşık €${(aiCtx?.trancheEUR || 0).toLocaleString('de-DE')} yatırırsan 31 Mart 2027'ye yetişir.`,
+      instruction: `${p.instruction} — €${p.amountEUR.toLocaleString('de-DE')}`,
+      detail: p.detail,
       amount_eur: p.amountEUR, risk: p.symbol === 'XEON' ? 'low' : 'medium',
     }));
     // Anomaliler yalnız KODDAN (aiCtx.anomalies) — AI kopyası/tespiti yok (AI_RULES: kendin anomali üretme); haber listesinden tekilleştirilir

@@ -10,7 +10,9 @@
 // Modified Dietz (GIPS): R = (bitiş − başlangıç − ΣCF) / (başlangıç + Σ CFᵢ·wᵢ),
 // wᵢ = kalan gün / dönem günü. Maaş cetveli (eurPnl) bu dosyayı okumaz.
 
-import { dayInTZ, makeRateSeries, MIN_RATE_MINOR, type RateSeries } from './eurPnl';
+// '.js' şart: bu dosyayı api/cron/daily-snapshot Node ESM ile yükler.
+// Uzantısız göreceli import modül açılışında çöker ve o günün snapshot'ı yazılmaz.
+import { dayInTZ, makeRateSeries, MIN_RATE_MINOR, type RateSeries } from './eurPnl.js';
 
 export interface LedgerTx {
   created_at?: string | null;

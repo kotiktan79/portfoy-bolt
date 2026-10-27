@@ -7,7 +7,8 @@
 // Profil: Romanya yerleşiği, EUR-bazlı ölçüm, ORTA risk, gelir = DİNAMİK MAAŞ (kâr havuzu).
 // Hedef (2026-10-13, kasa hariç portföy): hisse 62 / güvenli taraf 14 / altın 10 / kripto 5 / fon 4 / nakit 5.
 // Güvenli taraf = Eurobond + Para Piyasası (XEON) + Hazine Bonosu ETF (IB01).
-// Esnek alım planı (sabit haftalık takvim yok): VWCE %76 / V3YL %16 / XEON %8, €52.000, 31 Mart 2027.
+// Haftalık alım: EUR nakitten €1.000, tamamı VWCE. €7.000 EUR nakit kenarda.
+// V3YL ve XEON'a yeni alım yok; XEON ancak güvenli taraf %14 altına inerse.
 // Detay: src/lib/buyPlan.ts ve src/lib/rebalance.ts
 //
 // Hisse hedefinin içinde (bilgi, ayrı bant değil): küresel ETF ~%75, TL hisse ~%25.
