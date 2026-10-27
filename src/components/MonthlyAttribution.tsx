@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, ArrowDownToLine, Calendar } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
-import { ymInTZ, prevYMOf } from '../lib/eurPnl';
-import { qtyAsOf, heldPriceMove } from '../lib/attributionQty';
+import { dayInTZ, ymInTZ, prevYMOf } from '../lib/eurPnl';
 import { getEurMonths, RELIABLE_FROM } from '../services/eurPnlService';
 import { fmtEUR0, fmtSignedEUR0 } from '../lib/chartTheme';
-// 2026-09-19 gece: EURO cetveli. Pozisyon katkısı = ay sonu € değeri − ay başı € değeri (o günlerin kurlarıyla)
-// → EURO/USD kasası kur şişmesiyle 'kazanan' görünmez. Resmi ay kârı = motor (eurPnlService). Aylar ≥ Nisan 2026.
+import {
+  APPROX_NOTE,
+  bookFromRows,
+  buildPositionLines,
+  emptyFxBook,
+  rateOn,
+  sumPositionGains,
+  type BreakdownTx,
+  type FxBook,
+  type PositionLine,
+} from '../lib/monthlyPositionBreakdown';
+// 2026-09-19 gece: EURO cetveli. Resmi ay kârı = motor (eurPnlService). Aylar ≥ Nisan 2026.
+// Pozisyon dökümü ekrandadır: kapanış adedi × kapanış fiyatı, satış hasılatı ve alış maliyeti (lib/monthlyPositionBreakdown).
 
 interface PricePoint {
   holding_id: string;
@@ -14,8 +24,6 @@ interface PricePoint {
   price: number;
   recorded_at: string;
 }
-
-interface LotTx { holding_id: string; transaction_date: string; transaction_type: string; quantity: number }
 
 interface CashTx {
   id: string;
@@ -25,30 +33,6 @@ interface CashTx {
   amount: number;
   currency: string;
   notes?: string;
-}
-
-interface AttribRow {
-  symbol: string;
-  type: string;
-  currency: string;
-  qty: number;
-  startPrice: number;
-  endPrice: number;
-  pricePct: number;
-  gainEUR: number;
-  splitAdjusted?: number; // tespit edilen split oranı (varsa)
-}
-
-// Stock split tespiti: startPrice / endPrice oranı [2,3,4,5,10]'a ±5% yakınsa
-// split varsayıp startPrice'ı /ratio'la düzeltir.
-const SPLIT_RATIOS = [2, 3, 4, 5, 10];
-function detectSplitRatio(start: number, end: number): number | null {
-  if (!start || !end || end >= start * 0.95) return null;
-  const ratio = start / end;
-  for (const r of SPLIT_RATIOS) {
-    if (Math.abs(ratio - r) / r < 0.05) return r;
-  }
-  return null;
 }
 
 const MONTH_NAMES = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
@@ -70,15 +54,31 @@ function prevMonth(ym: string): string {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
 }
 
+const TX_COLUMNS = [
+  'holding_id,transaction_date,transaction_type,quantity,price,total_amount,fee,currency',
+  'holding_id,transaction_date,transaction_type,quantity,price,total_amount,currency',
+  'holding_id,transaction_date,transaction_type,quantity,price,total_amount',
+  'holding_id,transaction_date,transaction_type,quantity',
+];
+
+async function loadTrades(): Promise<BreakdownTx[]> {
+  for (const cols of TX_COLUMNS) {
+    const { data, error } = await supabase.from('transactions').select(cols);
+    if (!error) return (data || []) as unknown as BreakdownTx[];
+    if (!/column|schema cache/i.test(error.message)) throw error;
+  }
+  return [];
+}
+
 export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   // Ay sınırı tek kural: kullanıcının saat dilimi (lib/eurPnl ymInTZ) — tarayıcı TZ'siyle ekranlar ayrışmasın
   const [selectedMonth, setSelectedMonth] = useState<string>(() => ymInTZ());
   const [prices, setPrices] = useState<PricePoint[]>([]);
   const [cashTx, setCashTx] = useState<CashTx[]>([]);
-  const [lotTx, setLotTx] = useState<LotTx[]>([]);
+  const [trades, setTrades] = useState<BreakdownTx[]>([]);
   const [motorGainEUR, setMotorGainEUR] = useState<number | null>(null);
-  const [fxStart, setFxStart] = useState<{ eur: number; usd: number; rub: number; ron: number } | null>(null);
-  const [fxEnd, setFxEnd] = useState<{ eur: number; usd: number; rub: number; ron: number } | null>(null);
+  const [fxBook, setFxBook] = useState<FxBook>(() => emptyFxBook());
+  const [snapAt, setSnapAt] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -89,7 +89,9 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
     setErr(null);
     const prev = prevMonth(selectedMonth);
     const periodStart = `${prev}-25`;        // önceki ayın son haftası
-    const periodEnd = `${lastDayOf(selectedMonth)}T23:59:59`;
+    const periodEndDay = lastDayOf(selectedMonth);
+    const periodEnd = `${periodEndDay}T23:59:59`;
+    const startDay = lastDayOf(prev);
 
     (async () => {
       // Tüm sayfalanmış fiyat geçmişi
@@ -117,110 +119,123 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
         .gte('created_at', monthStart)
         .lte('created_at', periodEnd)
         .order('created_at', { ascending: true });
-      const { data: lots } = await supabase
-        .from('transactions')
-        .select('holding_id,transaction_date,transaction_type,quantity');
+      const lots = await loadTrades();
 
-      // Resmi ay kârı = euro motoru; ay başı/sonu kurları = exchange_rates (api)
+      // Resmi ay kârı = euro motoru. İşlem günü kuru = exchange_rates_daily.
       const months = await getEurMonths();
       const mrow = months.find(m => m.month === selectedMonth) || null;
-      const fxAt = async (dateMax: string) => {
-        const one = (ccy: string) => supabase.from('exchange_rates').select('rate').eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle();
-        const [e, u, rub, ron] = await Promise.all([one('EUR'), one('USD'), one('RUB'), one('RON')]);
-        return {
-          eur: Number(e.data?.rate) || 0,
-          usd: Number(u.data?.rate) || 0,
-          rub: Number(rub.data?.rate) || 0,
-          ron: Number(ron.data?.rate) || 0,
+      const today = dayInTZ(new Date());
+      const endDay = selectedMonth === today.slice(0, 7) ? today : periodEndDay;
+      const { data: fxRows, error: fxErr } = await supabase
+        .from('exchange_rates_daily')
+        .select('day, rate, from_currency')
+        .eq('to_currency', 'TRY')
+        .eq('source', 'api')
+        .in('from_currency', ['EUR', 'USD', 'RUB', 'RON'])
+        .gte('day', periodStart)
+        .lte('day', endDay);
+      let book = !fxErr && fxRows ? bookFromRows(fxRows) : emptyFxBook();
+      if (fxErr || book.eur.length === 0) {
+        const fxAt = async (dateMax: string) => {
+          const one = (ccy: string) => supabase.from('exchange_rates').select('rate').eq('from_currency', ccy).eq('to_currency', 'TRY').eq('source', 'api').lte('recorded_at', dateMax + 'T23:59:59').order('recorded_at', { ascending: false }).limit(1).maybeSingle();
+          const [e, u, rub, ron] = await Promise.all([one('EUR'), one('USD'), one('RUB'), one('RON')]);
+          return [
+            { day: dateMax, rate: Number(e.data?.rate) || 0, from_currency: 'EUR' },
+            { day: dateMax, rate: Number(u.data?.rate) || 0, from_currency: 'USD' },
+            { day: dateMax, rate: Number(rub.data?.rate) || 0, from_currency: 'RUB' },
+            { day: dateMax, rate: Number(ron.data?.rate) || 0, from_currency: 'RON' },
+          ];
         };
-      };
-      const prevEnd = lastDayOf(prev);
-      const [fs, fe] = await Promise.all([fxAt(prevEnd), fxAt(lastDayOf(selectedMonth))]);
+        const [fs, fe] = await Promise.all([fxAt(startDay), fxAt(endDay)]);
+        book = bookFromRows([...fs, ...fe]);
+      }
+      const { data: snapRows } = await supabase
+        .from('portfolio_snapshots')
+        .select('snapshot_date, created_at')
+        .in('snapshot_date', [startDay, endDay]);
+      const snaps: Record<string, string> = {};
+      for (const s of snapRows || []) {
+        const day = String(s.snapshot_date).slice(0, 10);
+        const at = String(s.created_at || '');
+        if (day && at && (!snaps[day] || at > snaps[day])) snaps[day] = at;
+      }
 
       if (!cancelled) {
         setPrices(all);
         setCashTx(tx || []);
-        setLotTx((lots || []) as LotTx[]);
+        setTrades(lots);
         setMotorGainEUR(mrow ? mrow.gainEUR : null);
-        setFxStart(fs); setFxEnd(fe);
+        setFxBook(book);
+        setSnapAt(snaps);
         setLoading(false);
       }
     })().catch((e) => {
       // Hata: eski ayın verisi YENİ ay etiketiyle görünmesin (hakem 2026-09-19)
-      if (!cancelled) { setPrices([]); setCashTx([]); setLotTx([]); setFxStart(null); setFxEnd(null); setMotorGainEUR(null); setErr(e?.message || 'veri yüklenemedi'); setLoading(false); }
+      if (!cancelled) {
+        setPrices([]); setCashTx([]); setTrades([]); setFxBook(emptyFxBook()); setSnapAt({}); setMotorGainEUR(null);
+        setErr(e?.message || 'veri yüklenemedi'); setLoading(false);
+      }
     });
 
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  const attribution = useMemo<AttribRow[]>(() => {
-    if (prices.length === 0) return [];
-    const monthStart = `${selectedMonth}-01`;
+  const period = useMemo(() => {
+    const startDay = lastDayOf(prevMonth(selectedMonth));
+    const today = dayInTZ(new Date());
+    const open = selectedMonth === today.slice(0, 7);
+    const endDay = open ? today : lastDayOf(selectedMonth);
+    const startAt = snapAt[startDay] || `${startDay}T18:00:00.000Z`;
+    const endAt = open ? `${endDay}T23:59:59.999Z` : (snapAt[endDay] || `${endDay}T18:00:00.000Z`);
+    return { startDay, endDay, startAt, endAt, endMode: open ? 'latest' as const : 'close' as const };
+  }, [selectedMonth, snapAt]);
 
-    // Her holding_id için: önceki ay son fiyatı ve bu ay son fiyatı
-    const startPrice: Record<string, number> = {};
-    const endPrice: Record<string, number> = {};
-    for (const p of prices) {
-      const d = p.recorded_at.slice(0, 10);
-      if (d < monthStart) startPrice[p.holding_id] = Number(p.price);
-      else endPrice[p.holding_id] = Number(p.price);
-    }
+  const attribution = useMemo(() => buildPositionLines({
+    holdings,
+    prices,
+    transactions: trades,
+    startDay: period.startDay,
+    startAt: period.startAt,
+    endDay: period.endDay,
+    endAt: period.endAt,
+    endMode: period.endMode,
+    snapshotAtByDay: snapAt,
+    fx: fxBook,
+  }), [holdings, prices, trades, period, snapAt, fxBook]);
 
-    const rows: AttribRow[] = [];
-    for (const h of holdings) {
-      if (h.asset_type === 'cash') continue;
-      const rawStart = startPrice[h.id];
-      const e = endPrice[h.id];
-      if (!rawStart || !e || rawStart <= 0 || e <= 0) continue;
-      // Split tespiti: start çok yüksek + end ona göre 2x/3x/5x/10x küçükse
-      // start'ı split sonrası eşdeğerine indir, böylece sahte −%50 görünmesin.
-      const splitRatio = detectSplitRatio(rawStart, e);
-      const s = splitRatio ? rawStart / splitRatio : rawStart;
-      if (!fxStart || !fxEnd || !fxStart.eur || !fxEnd.eur) continue;
-      const c = (h.currency || 'TRY').toUpperCase();
-      // pozisyonun € değeri, o günün kuruyla: TL fiyat ÷ EUR/TL; USD fiyat × USD/TL ÷ EUR/TL; EUR fiyat aynen
-      const toEur = (price: number, f: { eur: number; usd: number }) => c === 'TRY' ? price / f.eur : c === 'USD' ? (price * f.usd) / f.eur : price;
-      const held = lotTx.filter(t => String(t.holding_id) === String(h.id)).map(t => ({ date: t.transaction_date, type: t.transaction_type, quantity: t.quantity }));
-      const qty0 = qtyAsOf(Number(h.quantity) || 0, held, lastDayOf(prevMonth(selectedMonth)));
-      const pricePct = ((e - s) / s) * 100;
-      rows.push({
-        symbol: h.symbol, type: h.asset_type, currency: c,
-        qty: qty0, startPrice: s, endPrice: e, pricePct, gainEUR: heldPriceMove(qty0, toEur(s, fxStart), toEur(e, fxEnd)),
-        splitAdjusted: splitRatio || undefined,
-      });
-    }
-    return rows.sort((a, b) => b.gainEUR - a.gainEUR);
-  }, [prices, holdings, selectedMonth, fxStart, fxEnd, lotTx]);
+  const fxEnd = useMemo(() => ({
+    eur: rateOn(fxBook.eur, period.endDay),
+    usd: rateOn(fxBook.usd, period.endDay),
+    rub: rateOn(fxBook.rub, period.endDay),
+    ron: rateOn(fxBook.ron, period.endDay),
+  }), [fxBook, period.endDay]);
 
-  // Nakit akışı € karşılığı (ay sonu kuru). RUB/RON için sabit çapraz yok; kur yoksa 0.
-  const toEurAmt = (amt: number, ccy: string) => {
-    const c = (ccy || 'TRY').toUpperCase(); if (!fxEnd || !fxEnd.eur) return 0;
-    if (c === 'EUR') return amt;
-    if (c === 'TRY') return amt / fxEnd.eur;
-    if (c === 'USD') return fxEnd.usd > 0 ? (amt * fxEnd.usd) / fxEnd.eur : 0;
-    if (c === 'RUB') return fxEnd.rub > 0 ? (amt * fxEnd.rub) / fxEnd.eur : 0;
-    if (c === 'RON') return fxEnd.ron > 0 ? (amt * fxEnd.ron) / fxEnd.eur : 0;
-    return 0;
-  };
-  // Aynı zaman damgasında hem çıkış hem giriş varsa bu bir İÇ TRANSFERdir
-  // (ör. kasadaki ruble → EUR pozisyonu): para portföyden çıkmadı, yer değiştirdi.
-  // Eskiden bunlar "çekilen" olarak sayılıp toplamı kat kat şişiriyordu.
-  const isInternalTransfer = (c: CashTx) => {
-    const kind = (c.transaction_type || c.type) || '';
-    const isDep = kind === 'deposit';
-    return cashTx.some(o => o !== c && o.created_at === c.created_at && (isDep
-      ? String((o.transaction_type || o.type) || '').startsWith('withdraw')
-      : ((o.transaction_type || o.type) === 'deposit')));
-  };
-  const deposits = useMemo(() => {
-    return cashTx
-      .filter(c => (c.transaction_type || c.type) === 'deposit' && !isInternalTransfer(c))
-      .map(c => ({ ...c, eurEquiv: toEurAmt(Number(c.amount), c.currency) }));
-  }, [cashTx, fxEnd]);
-  const withdrawals = useMemo(() => {
-    return cashTx
-      .filter(c => ((c.transaction_type || c.type) === 'withdraw' || (c.transaction_type || c.type) === 'withdrawal') && !isInternalTransfer(c))
-      .map(c => ({ ...c, eurEquiv: toEurAmt(Number(c.amount), c.currency) }));
+  const { deposits, withdrawals } = useMemo(() => {
+    // Nakit akışı € karşılığı (ay sonu kuru). RUB/RON için sabit çapraz yok; kur yoksa 0.
+    const toEurAmt = (amt: number, ccy: string) => {
+      const c = (ccy || 'TRY').toUpperCase(); if (!fxEnd.eur) return 0;
+      if (c === 'EUR') return amt;
+      if (c === 'TRY') return amt / fxEnd.eur;
+      if (c === 'USD') return fxEnd.usd > 0 ? (amt * fxEnd.usd) / fxEnd.eur : 0;
+      if (c === 'RUB') return fxEnd.rub > 0 ? (amt * fxEnd.rub) / fxEnd.eur : 0;
+      if (c === 'RON') return fxEnd.ron > 0 ? (amt * fxEnd.ron) / fxEnd.eur : 0;
+      return 0;
+    };
+    // Aynı zaman damgasında hem çıkış hem giriş varsa bu bir İÇ TRANSFERdir
+    // (ör. kasadaki ruble → EUR pozisyonu): para portföyden çıkmadı, yer değiştirdi.
+    // Eskiden bunlar "çekilen" olarak sayılıp toplamı kat kat şişiriyordu.
+    const isInternalTransfer = (c: CashTx) => {
+      const kind = (c.transaction_type || c.type) || '';
+      const isDep = kind === 'deposit';
+      return cashTx.some(o => o !== c && o.created_at === c.created_at && (isDep
+        ? String((o.transaction_type || o.type) || '').startsWith('withdraw')
+        : ((o.transaction_type || o.type) === 'deposit')));
+    };
+    const withEur = (rows: CashTx[]) => rows.map(c => ({ ...c, eurEquiv: toEurAmt(Number(c.amount), c.currency) }));
+    return {
+      deposits: withEur(cashTx.filter(c => (c.transaction_type || c.type) === 'deposit' && !isInternalTransfer(c))),
+      withdrawals: withEur(cashTx.filter(c => ((c.transaction_type || c.type) === 'withdraw' || (c.transaction_type || c.type) === 'withdrawal') && !isInternalTransfer(c))),
+    };
   }, [cashTx, fxEnd]);
 
   const totalDeposit = deposits.reduce((s, d) => s + d.eurEquiv, 0);
@@ -239,9 +254,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
 
   const winners = attribution.filter(r => r.gainEUR > 0);
   const losers = attribution.filter(r => r.gainEUR < 0);
-  const totalWin = winners.reduce((s, r) => s + r.gainEUR, 0);
-  const totalLoss = losers.reduce((s, r) => s + r.gainEUR, 0);
-  const netAttribution = totalWin + totalLoss;
+  const netAttribution = sumPositionGains(attribution);
 
   // Tip bazında
   const byType: Record<string, number> = {};
@@ -249,6 +262,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
   const typeLabels: Record<string, string> = {
     stock: 'Hisse', crypto: 'Kripto', currency: 'Döviz/Nakit',
     fund: 'Fon', eurobond: 'Eurobond', commodity: 'Emtia',
+    treasury_etf: 'Hazine Bonosu ETF', money_market: 'Para Piyasası',
   };
 
   return (
@@ -311,18 +325,7 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                   <TrendingUp size={12} /> EN ÇOK KAZANDIRAN
                 </p>
                 <div className="space-y-1">
-                  {winners.slice(0, 5).map(r => (
-                    <div key={r.symbol + r.type} className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-slate-700 dark:text-gray-200 flex items-center gap-1">
-                        {r.symbol}
-                        {r.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">1:{r.splitAdjusted} split</span>}
-                      </span>
-                      <div className="text-right">
-                        <span className="font-bold text-green-600">{fmtSignedEUR0(r.gainEUR)}</span>
-                        <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({r.pricePct >= 0 ? '+' : ''}{r.pricePct.toFixed(1)}%)</span>
-                      </div>
-                    </div>
-                  ))}
+                  {winners.slice(0, 5).map(r => <PositionMoveRow key={r.id} row={r} />)}
                 </div>
               </div>
             )}
@@ -334,30 +337,12 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
                   <TrendingDown size={12} /> EN ÇOK KAYBETTİREN
                 </p>
                 <div className="space-y-1">
-                  {[...losers].reverse().slice(0, 5).map(r => (
-                    <div key={r.symbol + r.type} className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-slate-700 dark:text-gray-200 flex items-center gap-1">
-                        {r.symbol}
-                        {r.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">1:{r.splitAdjusted} split</span>}
-                      </span>
-                      <div className="text-right">
-                        <span className="font-bold text-red-600">{fmtSignedEUR0(r.gainEUR)}</span>
-                        <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({r.pricePct.toFixed(1)}%)</span>
-                      </div>
-                    </div>
-                  ))}
+                  {[...losers].reverse().slice(0, 5).map(r => <PositionMoveRow key={r.id} row={r} />)}
                 </div>
               </div>
             )}
 
-            {motorGainEUR !== null && (
-              <div className="text-xs text-slate-500 dark:text-gray-400 pt-2 border-t border-slate-200 dark:border-gray-700">
-                Resmi ay kârı (euro motoru): <span className={`font-bold ${motorGainEUR >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmtSignedEUR0(motorGainEUR)}</span>
-                {Math.abs(motorGainEUR - netAttribution) > 150 && (
-                  <span className="ml-1 text-amber-600 dark:text-amber-400">(pozisyon kırılımı yaklaşıktır: bugünkü adet, ay içi alım/satış, fiyat geçmişi)</span>
-                )}
-              </div>
-            )}
+            <PositionContributionList rows={attribution} totalEUR={netAttribution} officialEUR={motorGainEUR} />
           </div>
 
           {/* SAĞ: Eklenen para */}
@@ -418,6 +403,73 @@ export function MonthlyAttribution({ holdings }: { holdings: Holding[] }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PositionMoveRow({ row }: { row: PositionLine }) {
+  const pos = row.gainEUR >= 0;
+  const pct = `${row.pct >= 0 ? '+' : ''}${row.pct.toFixed(1)}%`;
+  return (
+    <div className="flex items-center justify-between text-sm gap-2">
+      <span className="font-semibold text-slate-700 dark:text-gray-200 flex items-center gap-1 min-w-0">
+        <span className="truncate">{row.symbol}</span>
+        {row.sold && <span className="text-[10px] bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300 px-1.5 py-0.5 rounded shrink-0">satıldı</span>}
+        {row.splitAdjusted && <span className="text-[10px] bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded shrink-0">1:{row.splitAdjusted} split</span>}
+      </span>
+      <div className="text-right shrink-0">
+        <span className={`font-bold ${pos ? 'text-green-600' : 'text-red-600'}`}>{fmtSignedEUR0(row.gainEUR)}</span>
+        <span className="text-xs text-slate-500 dark:text-gray-400 ml-2">({pct})</span>
+      </div>
+    </div>
+  );
+}
+
+export function PositionContributionList({
+  rows,
+  totalEUR,
+  officialEUR,
+}: {
+  rows: PositionLine[];
+  totalEUR: number;
+  officialEUR: number | null;
+}) {
+  const [open, setOpen] = useState(true);
+  const totalPos = totalEUR >= 0;
+  return (
+    <div className="pt-2 border-t border-slate-200 dark:border-gray-700 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold text-slate-700 dark:text-gray-200 uppercase tracking-wider">Tüm pozisyonlar</p>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="text-xs font-semibold text-brand-700 dark:text-brand-300 underline underline-offset-2"
+        >
+          {open ? 'Listeyi gizle' : `Tümünü göster (${rows.length})`}
+        </button>
+      </div>
+      {open && (
+        rows.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-gray-500 italic">Bu ay için hesaplanan pozisyon yok</p>
+        ) : (
+          <div>
+            <div className="max-h-80 overflow-y-auto space-y-1 pr-1">
+              {rows.map(r => <PositionMoveRow key={r.id} row={r} />)}
+            </div>
+            <div className={`mt-2 flex items-center justify-between border-t border-slate-200 dark:border-gray-700 pt-2 text-sm font-extrabold ${totalPos ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+              <span>Toplam</span>
+              <span>{fmtSignedEUR0(totalEUR)}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-gray-400">Bu toplam, yukarıdaki Pozisyon Hareketi rakamıdır.</p>
+          </div>
+        )
+      )}
+      <p className="text-xs text-slate-500 dark:text-gray-400">
+        {APPROX_NOTE}
+        {officialEUR !== null && (
+          <> Resmi ay kârı: <span className={`font-bold ${officialEUR >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmtSignedEUR0(officialEUR)}</span>.</>
+        )}
+      </p>
     </div>
   );
 }

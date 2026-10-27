@@ -1,4 +1,5 @@
-// Aylık kırılım bugünkü adedi başa ve sona yazmaz. Ay başında elde tutulan adedin fiyat farkı kârdır.
+// Ay başı adedi × fiyat farkı. Aylık ekran bunu artık kullanmaz;
+// orası alış/satışlı dökümü (monthlyPositionBreakdown) gösterir.
 
 export interface QtyTx {
   date: string;
