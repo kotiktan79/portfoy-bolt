@@ -16,6 +16,7 @@ const LivePage = lazy(() => import('./pages/LivePage'));
 const ResearchPage = lazy(() => import('./pages/ResearchPage'));
 const ProjectionPage = lazy(() => import('./pages/ProjectionPage'));
 const MeasurePage = lazy(() => import('./pages/MeasurePage'));
+const RomaniaRenovationPage = lazy(() => import('./pages/RomaniaRenovationPage'));
 
 function PageLoader() {
   return (
@@ -63,6 +64,7 @@ function App() {
             <Route path="/research" element={<SafePage><ResearchPage /></SafePage>} />
             <Route path="/projection" element={<SafePage><ProjectionPage /></SafePage>} />
             <Route path="/olcu" element={<SafePage><MeasurePage /></SafePage>} />
+            <Route path="/romanya-ev" element={<SafePage><RomaniaRenovationPage /></SafePage>} />
           </Route>
         </Routes>
       </PortfolioProvider>
