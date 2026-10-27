@@ -35,6 +35,7 @@ describe('computeKasaFx — kasa kur etkisi (ölçüm dışı, yalnız gösterim
   it('kuru olmayan para birimi hesaba KATILMAZ ve bildirilir', () => {
     const k = computeKasaFx([...balances, { currency: 'XYZ', balance: 999 }], rates, 30)!;
     expect(k.missingCcy).toEqual(['XYZ']);
+    expect(k.missingBalances).toEqual([{ currency: 'XYZ', balance: 999 }]);
     expect(k.totalEurNow).toBeCloseTo(11_200, 6);            // XYZ toplama girmedi
   });
 

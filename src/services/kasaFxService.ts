@@ -22,6 +22,8 @@ export interface KasaFx {
   longWindow: KasaWindow;      // ölçülen serinin başından beri (motorun başlangıcıyla aynı gün)
   rows: KasaRow[];             // uzun pencereye göre kırılım, etkisi büyükten küçüğe
   missingCcy: string[];        // kuru bulunamayan birim — hesaba KATILMADI
+  /** Kuru olmadığı için euroya çevrilmeyen bakiyeler. Toplama girmez. */
+  missingBalances: Array<{ currency: string; balance: number }>;
 }
 
 const TTL = 5 * 60 * 1000;
@@ -106,6 +108,10 @@ export function computeKasaFx(balances: KasaBalance[], rateRows: KasaRateRow[], 
     longWindow: { label: 'ölçüm başından', sinceDay: longDay, fxDeltaEUR: now.total - longV.total },
     rows,
     missingCcy: Array.from(new Set(now.missing)).sort(),
+    missingBalances: balances
+      .map(b => ({ currency: String(b.currency || '').toUpperCase(), balance: Number(b.balance) || 0 }))
+      .filter(b => b.balance && now.missing.includes(b.currency))
+      .sort((a, b) => a.currency.localeCompare(b.currency)),
   };
 }
 

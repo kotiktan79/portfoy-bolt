@@ -30,6 +30,7 @@ import { RebalancePlan } from '../components/RebalancePlan';
 import { policySnapshot } from '../lib/policyAllocation';
 import { isClosedHolding } from '../lib/openPosition';
 import { BuyPlanCard } from '../components/BuyPlanCard';
+import { CashDistributionCard } from '../components/CashDistributionCard';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
@@ -213,6 +214,8 @@ export default function HomePage() {
                 totalPnLPct={totalProfitLossPercent}
               />
             )}
+
+            {holdings.length > 0 && <CashDistributionCard holdings={holdings} />}
 
             {/* 💰 Kâr Cüzdanı — ana maaş paneli */}
             {holdings.length > 0 && <KarCuzdani holdings={holdings} />}
