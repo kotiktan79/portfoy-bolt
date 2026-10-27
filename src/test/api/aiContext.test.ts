@@ -116,12 +116,18 @@ describe('buildAiContext — metin motordan türetilir, sabit rakam yok', () => 
     // kapanmış Ağustos havuzu negatif → şu an çekilebilir €0
     expect(ctx.eur.poolEUR).toBeLessThan(0);
     expect(ctx.eur.entitlementEUR).toBe(0);
-    // esnek plan: örnek €1.000 = 760+160+80; trancheEUR artık aylık hız (sabit $2.000 dilim yok)
-    expect(ctx.weekPlan.map(p => p.symbol)).toEqual(['VWCE', 'V3YL', 'XEON']);
-    expect(ctx.weekPlan.map(p => p.sharePct)).toEqual([76, 16, 8]);
+    // Haftalık plan: €1.000. Bu fixture'da güvenli taraf %14 altında → bu hafta XEON.
+    // EUR nakit 30.000 − kenarda 7.000 = 23.000 → yaklaşık 23 hafta.
+    expect(ctx.weekPlan.map(p => p.symbol)).toEqual(['XEON']);
+    expect(ctx.weekPlan.map(p => p.sharePct)).toEqual([100]);
     expect(ctx.weekPlan.reduce((s, p) => s + p.amountEUR, 0)).toBe(1000);
-    expect(ctx.trancheEUR).toBeGreaterThan(1000);
-    expect(ctx.text).toContain('52.000');
+    expect(ctx.trancheEUR).toBe(1000);
+    expect(ctx.text).toContain('7.000');
+    expect(ctx.text).toContain('VWCE');
+    expect(ctx.text).toContain('23.000');
+    expect(ctx.text).not.toContain('€52.000');
+    expect(ctx.text).not.toContain('%76');
+    expect(ctx.text).not.toContain('31 Mart 2027');
     // 'cash' tipi ve sıfır adetli satır dağılıma girmez: hisse 40k / (40k + IB01 + altın 10k + EURO 30k)
     const total = 40000 + 10000 * 41 / 48 + 10000 + 30000;
     expect(ctx.text).toContain(`Hisse: %${(100 * 40000 / total).toFixed(0)}`);

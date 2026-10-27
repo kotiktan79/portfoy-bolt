@@ -250,7 +250,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
       severity: deadMoneyTotal > totalValue * 0.20 ? 'high' : deadMoneyTotal > totalValue * 0.08 ? 'medium' : 'low',
       category: 'dead-money',
       title: `Getirisi olmayan nakit %${(cashTotal / totalValue * 100).toFixed(0)} — hedef %${Math.round(cashTarget * 100)}`,
-      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%${Math.round(INFLATION_EUR * 100)}'ünü yiyor. Esnek plan: VWCE %76 / V3YL %16 / XEON %8.`,
+      detail: `${cashPositions.map(p => `${p.symbol === 'EURO' ? 'EUR' : p.symbol} €${Math.round(p.value / fxRates.eur).toLocaleString('de-DE')}`).join(' + ')} sıfır getiride; hedef üstü €${Math.round(deadMoneyTotal / fxRates.eur).toLocaleString('de-DE')}. Enflasyon her yıl ~%${Math.round(INFLATION_EUR * 100)}'ünü yiyor. Haftalık plan: EUR nakitten €1.000, tamamı VWCE. €7.000 kenarda kalır.`,
       amount: deadMoneyTotal,
       symbols: cashPositions.map(p => p.symbol),
     });

@@ -19,15 +19,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const todayStr = dayInTZ(new Date());   // Bükreş takvimi (uygulama ile aynı ay sınırı)
     const ctx = await buildAiContext(getServiceSupabase(), todayStr);
-    const { eur, weekPlan, anomalies, trancheEUR } = ctx;
+    const { eur, weekPlan, anomalies } = ctx;
 
     const actions = weekPlan.map(p => ({
       urgency: 'this_week',
       type: 'buy',
       symbol: p.symbol,
       market: 'EU',
-      instruction: `${p.instruction} — ≈ €${p.amountEUR.toLocaleString('de-DE')}`,
-      detail: `Sabit haftalık takvim yok. ${p.label}. Örnek tutar €1.000 bu orana bölünür. Ayda yaklaşık €${trancheEUR.toLocaleString('de-DE')} yatırırsan 31 Mart 2027'ye yetişir. Kaynak: önce EURO nakit, sonra USD → EUR.`,
+      instruction: `${p.instruction} — €${p.amountEUR.toLocaleString('de-DE')}`,
+      detail: p.detail,
       amount_eur: p.amountEUR,
       amount_try: 0,
       risk: p.symbol === 'XEON' ? 'low' : 'medium',
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       actions,
       market_outlook: `Servet €${Math.round(eur.wealthEUR).toLocaleString('de-DE')} · son gün ${eur.dayGainEUR >= 0 ? '+' : '−'}€${Math.abs(Math.round(eur.dayGainEUR)).toLocaleString('de-DE')} · bu ay reel ${(mtd?.realGainEUR || 0) >= 0 ? '+' : '−'}€${Math.abs(Math.round(mtd?.realGainEUR || 0)).toLocaleString('de-DE')} · çekilebilir maaş €${Math.round(salary).toLocaleString('de-DE')}. Kâr = euro servet artışı, para giriş/çıkışı ve kur hariç.`,
       top_pick: '',                       // 'Günün Tercihi' yok — işlem çağrışımlı alan boş
-      notice: anomalies.length ? '' : 'Esnek alım planı: VWCE %76 / V3YL %16 / XEON %8. Sabit haftalık takvim yok. Ay sonu maaş hakkı Kâr Cüzdanı\'nda.',
+      notice: anomalies.length ? '' : 'Haftalık plan: EUR nakitten €1.000, tamamı VWCE. €7.000 kenarda kalır. Ay sonu maaş hakkı Kâr Cüzdanı\'nda.',
       portfolio_diagnosis: '',
       news_alerts: anomalies,
       wealth_building_tip: '',            // sabit rakamlı ipucu kaldırıldı (motordan gelmeyen sayı yok); hedef hesabı FIRE sayfasında

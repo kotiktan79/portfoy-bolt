@@ -8,6 +8,8 @@ import {
 import { Holding } from '../lib/supabase';
 import { authorizedHeaders } from '../lib/apiAuth';
 import { formatCurrency } from '../services/priceService';
+import { WeeklyBuySummary } from './BuyPlanCard';
+import { EUR_CASH_RESERVE, WEEKLY_BUY_EUR } from '../lib/buyPlan';
 
 interface DailyActionPlanProps {
   holdings: Holding[];
@@ -69,7 +71,7 @@ interface AIPlan {
 const AI_CACHE_KEY = 'tandor_ai_daily_plan';
 // Politika/prompt değişince BUMP et → eski cache'lenmiş planlar otomatik geçersiz,
 // kullanıcı yeniden çekmek zorunda kalmadan güncel politikayla yeni plan üretilir.
-const AI_PLAN_VERSION = '2026-10-13-flex-buy';   // esnek alım planı — eski haftalık cache geçersiz
+const AI_PLAN_VERSION = '2026-10-27-weekly-vwce';   // haftalık €1.000 VWCE — eski 76/16/8 önbelleği geçersiz
 
 function getCachedAIPlan(): AIPlan | null {
   try {
@@ -150,7 +152,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">{getGreeting()}! Bugünkü Planınız</h3>
             </div>
-            <p className="text-[10px] text-gray-400 mt-0.5">Esnek alım · VWCE %76 / V3YL %16 / XEON %8 · ayrıntı Plan sekmesinde</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">Haftalık €{WEEKLY_BUY_EUR.toLocaleString('de-DE')} · tamamı VWCE · €{EUR_CASH_RESERVE.toLocaleString('de-DE')} EUR nakit kenarda</p>
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded-full ${market.isOpen ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             <Clock size={10} className="inline mr-1" />
@@ -163,20 +165,12 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
       {expanded && (
         <div className="px-4 pb-4 space-y-1.5">
 
-          {/* AI loading or no plan yet */}
-          {!aiPlan && !aiLoading && (
-            <div className="text-center py-4">
-              <p className="text-xs text-gray-400 mb-2">Haftalık plan yüklenmedi</p>
-              <button onClick={fetchAIPlan} className="text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline">
-                Planı Getir
-              </button>
-            </div>
-          )}
+          <WeeklyBuySummary holdings={holdings} />
 
           {aiLoading && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800">
               <Sparkles size={14} className="text-brand-500 animate-pulse" />
-              <span className="text-xs text-brand-700 dark:text-brand-400 font-medium">Bu haftanın planı hazırlanıyor…</span>
+              <span className="text-xs text-brand-700 dark:text-brand-400 font-medium">Notlar yükleniyor…</span>
             </div>
           )}
 
@@ -225,7 +219,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
                 </div>
               )}
 
-              {aiPlan.actions?.map((action, i) => {
+              {aiPlan.actions?.filter(action => !['VWCE', 'V3YL', 'XEON'].includes(String(action.symbol || '').toUpperCase())).map((action, i) => {
                 const marketBadge: Record<string, string> = {
                   BIST: 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400',
                   US: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',

@@ -5,11 +5,12 @@ import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, fmtEUR, fmtSignedEUR, fmtSignedPct } from '../lib/eurEngine.js';
 import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassFor, isHouseMoney, CLASS_LABELS } from '../../src/config/portfolioPolicy.js';
 
-const PLAN_NOTE = 'Esnek plan: VWCE %76 / V3YL %16 / XEON %8. Sabit haftalık takvim yok. Bilgi amaçlı.';
+const PLAN_NOTE = 'Haftalık plan: EUR nakitten €1.000, tamamı VWCE. V3YL ve XEON\'a yeni alım yok. XEON ancak güvenli taraf %14\'ün altına inerse. €7.000 EUR nakit kenarda. Bilgi amaçlı.';
 
 // RİSK MONİTÖRÜ — eşikler EUR (2026-09-19): portföy düşüşü = motorun akış düzeltilmiş EUR kârı (TL nominal değil;
 // TL'de kur artışı 'yükseliş', düşüşü 'çöküş' gibi görünüyordu). Pozisyon tutarları bugünkü kurla EUR.
-// 2026-09-22: uyarılar BİLGİ verir, işlem ÖNERMEZ (tek plan sabit: her dilim V3YL + XEON; satış rotasyonu durduruldu 21.08).
+// 2026-09-22: uyarılar BİLGİ verir, işlem ÖNERMEZ (satış rotasyonu durduruldu 21.08).
+// 2026-10-27: haftalık alım EUR nakitten €1.000, tamamı VWCE. Ayrıntı src/lib/buyPlan.ts.
 // Eski 'stop-loss kontrol et / zararı kes / kısmi satış düşün / nakit artır' metinleri plan diline çevrildi;
 // konsantrasyon uyarısı politikanın sınıf bantlarına bağlandı (tek varlık %25 eşiği V3YL büyüdükçe her sabah plana aykırı uyarı üretiyordu).
 
@@ -158,7 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           type: 'info',
           title: `${CLASS_LABELS[type as keyof typeof CLASS_LABELS] || type} ağırlığı bandın çok üstünde`,
           detail: `%${pct.toFixed(1)} — hedef %${band.target} (bant %${band.min}-${band.max})`,
-          action: PHYSICAL_FIXED_TYPES.has(type) ? 'Fiziki — satılmaz; seyrelme zamanla.' : type === 'currency' ? `Getirisiz nakit — esnek planla VWCE / V3YL / XEON'a gider. ${PLAN_NOTE}` : `Yeni para bu sınıfa gitmez, gerisi büyüdükçe seyrelir. ${PLAN_NOTE}`,
+          action: PHYSICAL_FIXED_TYPES.has(type) ? 'Fiziki — satılmaz; seyrelme zamanla.' : type === 'currency' ? `Getirisiz nakit — haftalık €1.000 EUR nakitten VWCE'ye gider. €7.000 kenarda kalır. ${PLAN_NOTE}` : `Yeni para bu sınıfa gitmez, gerisi büyüdükçe seyrelir. ${PLAN_NOTE}`,
         });
       }
     }

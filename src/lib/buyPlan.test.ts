@@ -1,55 +1,84 @@
 import { describe, it, expect } from 'vitest';
-import { splitBuy, pacePerMonth, sumInvestedEUR, buyProgress, priceDropPct, BUY_TARGET_EUR } from './buyPlan';
+import { TARGET_ALLOCATION } from '../config/portfolioPolicy';
+import {
+  SAFE_TARGET_PCT, WEEKLY_BUY_EUR, EUR_CASH_RESERVE,
+  buildWeeklyPlan, euroCashEUR, vwcePriceEUR, formatWeekCount, weeklyPlanCopy,
+} from './buyPlan';
 
-describe('esnek alım planı', () => {
-  it('€1.000 → €760 VWCE, €160 V3YL, €80 XEON', () => {
-    const s = splitBuy(1000);
-    expect(s.VWCE).toBeCloseTo(760, 5);
-    expect(s.V3YL).toBeCloseTo(160, 5);
-    expect(s.XEON).toBeCloseTo(80, 5);
-    expect(s.dipped).toBe(false);
-    expect(s.VWCE + s.V3YL + s.XEON).toBeCloseTo(1000, 5);
+describe('haftalık alım planı', () => {
+  it('güvenli taraf hedefi politika ile aynı %14', () => {
+    expect(SAFE_TARGET_PCT).toBe(14);
+    expect(SAFE_TARGET_PCT).toBe(TARGET_ALLOCATION.safe.target);
+    expect(WEEKLY_BUY_EUR).toBe(1_000);
+    expect(EUR_CASH_RESERVE).toBe(7_000);
   });
 
-  it('VWCE son 7 günde %10\'dan fazla düştüyse XEON diliminin yarısı VWCE\'ye eklenir', () => {
-    const s = splitBuy(1000, -12);
-    expect(s.dipped).toBe(true);
-    expect(s.VWCE).toBeCloseTo(800, 5);
-    expect(s.V3YL).toBeCloseTo(160, 5);
-    expect(s.XEON).toBeCloseTo(40, 5);
-    expect(splitBuy(1000, -9.9).dipped).toBe(false);
-    expect(splitBuy(1000, null).dipped).toBe(false);
+  it('€1.000 tamamı VWCE; fiyat varsa adet', () => {
+    const p = buildWeeklyPlan({ euroCashEUR: 37_000, safePct: 16, vwcePriceEUR: 125 });
+    expect(p.destination).toBe('VWCE');
+    expect(p.safeShort).toBe(false);
+    expect(p.vwceEUR).toBe(1_000);
+    expect(p.units).toBeCloseTo(8, 5);
+    expect(p.investableEUR).toBe(30_000);
+    expect(p.weeks).toBeCloseTo(30, 5);
+    expect(weeklyPlanCopy(p).unitsLine).toContain('8');
+    expect(weeklyPlanCopy(p).weekLine).toContain('VWCE');
+    expect(weeklyPlanCopy(p).weekLine).not.toContain('XEON');
   });
 
-  it('ilerleme yatırılan alışlardan gelir; plan öncesi ve başka semboller sayılmaz', () => {
-    const invested = sumInvestedEUR([
-      { symbol: 'V3YL', amountEUR: 5_000, date: '2026-09-01' },
-      { symbol: 'VWCE', amountEUR: 7_600, date: '2026-10-20' },
-      { symbol: 'v3yl', amountEUR: 1_600, date: '2026-11-02' },
-      { symbol: 'XEON', amountEUR: 800, date: '2026-11-02' },
-      { symbol: 'AAPL', amountEUR: 9_000, date: '2026-11-02' },
-    ]);
-    expect(invested).toBe(10_000);
-    const p = buyProgress(invested);
-    expect(p.remainingEUR).toBe(BUY_TARGET_EUR - 10_000);
-    expect(p.pct).toBeCloseTo((10_000 / 52_000) * 100, 5);
+  it('güvenli taraf %14 altındaysa bu hafta XEON; VWCE adedi yine yazılır', () => {
+    const p = buildWeeklyPlan({ euroCashEUR: 12_000, safePct: 13.9, vwcePriceEUR: 100 });
+    expect(p.destination).toBe('XEON');
+    expect(p.safeShort).toBe(true);
+    expect(p.vwceEUR).toBe(1_000);
+    expect(p.units).toBeCloseTo(10, 5);
+    const copy = weeklyPlanCopy(p);
+    expect(copy.weekLine).toContain('XEON');
+    expect(copy.unitsLine).toContain('VWCE');
+    expect(copy.holdLine).toContain('V3YL');
   });
 
-  it('hedef tarihe göre aylık hız; tarih geçtiyse nazik bilgi, sıfır bölme yok', () => {
-    const pace = pacePerMonth(52_000, new Date('2026-10-13T00:00:00Z'));
-    expect(pace.pastDue).toBe(false);
-    expect(pace.monthsLeft).toBeGreaterThan(5);
-    expect(pace.perMonthEUR).toBeGreaterThan(0);
-    expect(pace.perMonthEUR).toBeLessThan(52_000);
-
-    const late = pacePerMonth(1_000, new Date('2027-04-02T00:00:00Z'));
-    expect(late.pastDue).toBe(true);
-    expect(late.perMonthEUR).toBe(1_000);
-    expect(Number.isFinite(late.perMonthEUR)).toBe(true);
+  it('tam %14 VWCE kalır; oran yoksa da VWCE', () => {
+    expect(buildWeeklyPlan({ euroCashEUR: 8_000, safePct: 14 }).destination).toBe('VWCE');
+    expect(buildWeeklyPlan({ euroCashEUR: 8_000, safePct: null }).destination).toBe('VWCE');
+    expect(buildWeeklyPlan({ euroCashEUR: 8_000 }).safeShort).toBe(false);
   });
 
-  it('fiyat düşüşü yüzdesi', () => {
-    expect(priceDropPct(100, 89)).toBeCloseTo(-11, 5);
-    expect(priceDropPct(0, 10)).toBeNull();
+  it('€7.000 kenarda kalır; altı boş, üstü haftaya bölünür', () => {
+    const none = buildWeeklyPlan({ euroCashEUR: 7_000, safePct: 20 });
+    expect(none.investableEUR).toBe(0);
+    expect(none.weeks).toBe(0);
+    expect(weeklyPlanCopy(none).cashLine).toContain('yatırılacak tutar yok');
+
+    const under = buildWeeklyPlan({ euroCashEUR: 6_400, safePct: 20 });
+    expect(under.investableEUR).toBe(0);
+
+    const bit = buildWeeklyPlan({ euroCashEUR: 7_400, safePct: 20 });
+    expect(bit.investableEUR).toBe(400);
+    expect(bit.weeks).toBeCloseTo(0.4, 5);
+    expect(formatWeekCount(bit.weeks)).toBe('1 haftadan az');
+    expect(formatWeekCount(23)).toBe('yaklaşık 23 hafta');
+  });
+
+  it('fiyat yoksa adet null, uydurma adet yok', () => {
+    const p = buildWeeklyPlan({ euroCashEUR: 10_000, safePct: 20, vwcePriceEUR: null });
+    expect(p.units).toBeNull();
+    expect(p.priceEUR).toBeNull();
+    expect(weeklyPlanCopy(p).unitsLine).toContain('adet hesaplanamadı');
+  });
+
+  it('EUR nakit: TRY kur satırında adet, EUR birim fiyatta adet × fiyat', () => {
+    expect(euroCashEUR([
+      { symbol: 'EURO', asset_type: 'currency', currency: 'TRY', quantity: 37_550, current_price: 53.46 },
+      { symbol: 'USD', asset_type: 'currency', currency: 'TRY', quantity: 10_000, current_price: 40 },
+      { symbol: 'EUR', asset_type: 'currency', currency: 'EUR', quantity: 100, current_price: 1 },
+    ])).toBeCloseTo(37_650, 5);
+    expect(vwcePriceEUR([
+      { symbol: 'VWCE', currency: 'EUR', quantity: 3, current_price: 140.5 },
+    ])).toBeCloseTo(140.5, 5);
+    expect(vwcePriceEUR([
+      { symbol: 'VWCE', currency: 'TRY', quantity: 3, current_price: 7_000 },
+    ], 50)).toBeCloseTo(140, 5);
+    expect(vwcePriceEUR([])).toBeNull();
   });
 });
