@@ -31,6 +31,7 @@ import { policySnapshot } from '../lib/policyAllocation';
 import { isClosedHolding } from '../lib/openPosition';
 import { BuyPlanCard } from '../components/BuyPlanCard';
 import { CashDistributionCard } from '../components/CashDistributionCard';
+import { BuAyMaasCard } from '../components/BuAyMaasCard';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
@@ -184,6 +185,8 @@ export default function HomePage() {
 
           {/* Dashboard Content - Kiranism grid layout */}
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-4">
+
+            {holdings.length > 0 && <BuAyMaasCard />}
 
             {/* Hero — Tremor modern dashboard */}
             {holdings.length > 0 && (

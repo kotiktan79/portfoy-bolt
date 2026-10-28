@@ -243,11 +243,11 @@ export default function KarCuzdani({ holdings }: Props) {
     } finally { setBusy(false); }
   }
 
-  if (loadError) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Maaş verisi yüklenemedi</p><p className="text-xs text-red-500 mt-1">{loadError}</p><button onClick={loadAll} className="mt-3 text-xs underline text-red-600">Tekrar dene</button></div>;
-  if (loading) return <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6"><p className="text-slate-400 text-sm">Cüzdan yükleniyor...</p></div>;
+  if (loadError) return <div id="kar-cuzdani" className="scroll-mt-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Maaş verisi yüklenemedi</p><p className="text-xs text-red-500 mt-1">{loadError}</p><button onClick={loadAll} className="mt-3 text-xs underline text-red-600">Tekrar dene</button></div>;
+  if (loading) return <div id="kar-cuzdani" className="scroll-mt-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6"><p className="text-slate-400 text-sm">Cüzdan yükleniyor...</p></div>;
 
   return (
-    <div className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 rounded-2xl shadow-sm border-2 border-emerald-200 dark:border-emerald-900 overflow-hidden">
+    <div id="kar-cuzdani" className="scroll-mt-4 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 rounded-2xl shadow-sm border-2 border-emerald-200 dark:border-emerald-900 overflow-hidden">
       <div className="px-5 py-4 border-b border-emerald-200 dark:border-emerald-900 flex items-center justify-between">
         <div className="flex items-center gap-2"><Wallet className="text-emerald-600 dark:text-emerald-400" size={22} /><h3 className="text-lg font-bold text-gray-900 dark:text-white">Kâr Cüzdanı</h3></div>
         <span className="text-[11px] text-slate-500 dark:text-gray-400">euro cetveli</span>
