@@ -5,6 +5,7 @@ import { hasCronAuth, requirePortfolioAccess } from '../lib/auth.js';
 import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
 import { getServiceSupabase } from '../lib/serviceSupabase.js';
 import { dayInTZ } from '../../src/lib/eurPnl.js';
+import { AI_ENABLED, aiDisabledBody, callAnthropicMessages } from '../lib/anthropic.js';
 
 // Vercel function timeout — Claude + web search 30-60s sürebilir
 export const config = {
@@ -37,15 +38,9 @@ Pozisyon notu = "ne oldu / neden" bilgisi; "al/sat/azalt/tut" DEĞİL.
 per_holding_view en fazla 7 pozisyon; risks/notes en fazla 4'er madde.`;
 
 async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-      'anthropic-beta': 'web-search-2025-03-05',
-    },
-    body: JSON.stringify({
+  const response = await callAnthropicMessages(
+    apiKey,
+    {
       model: 'claude-sonnet-5',
       thinking: { type: 'disabled' },
       max_tokens: 3000,
@@ -58,8 +53,9 @@ async function callClaude(apiKey: string, userPrompt: string): Promise<any> {
         },
       ],
       messages: [{ role: 'user', content: userPrompt }],
-    }),
-  });
+    },
+    { 'anthropic-beta': 'web-search-2025-03-05' },
+  );
 
   if (!response.ok) {
     const err = await response.text();
@@ -80,6 +76,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // sunucuya). Zorla yeniden üretim yalnız CRON_SECRET + ?force=true.
   // Günün raporu varsa Claude bir daha çağrılmaz.
   if (await requirePortfolioAccess(req, res)) return;
+
+  // Kapalıyken ne Claude ne de ai_research_reports yazılır.
+  if (!AI_ENABLED) {
+    return res.status(200).json(aiDisabledBody());
+  }
+
   const authorized = hasCronAuth(req);
   const force = authorized && (req.query?.force === 'true' || req.query?.force === '1');
 

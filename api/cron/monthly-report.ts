@@ -6,6 +6,7 @@ import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, monthLabelTR, fmtEUR, fmtSignedEUR } from '../lib/eurEngine.js';
 import { entitlementEUR } from '../../src/lib/eurPnl.js';
+import { AI_ENABLED } from '../../src/lib/aiFeature.js';
 
 // AYLIK RAPOR — TEK ÖLÇÜ EUR (2026-09-19). Her ayın 1'i 07:00 UTC: geçen ayın kârı (servet farkı − dış akış),
 // enflasyon payı, zarar devri ve BU AYIN MAAŞI (= geçen ayın çekilebilir reel kârı × 0,85) ilan edilir.
@@ -70,14 +71,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .sort((a: any, b: any) => b.pnlPct - a.pnlPct)
       .slice(0, 5);
 
-    // Son AI yorum
-    const { data: lastReport } = await supabase
-      .from('daily_reports')
-      .select('portfolio_diagnosis')
-      .not('ai_model', 'is', null)      // risk-monitor'ün kısmi satırını atla
-      .order('report_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // AI kapalıyken eski günlük tanı da e-postaya girmez (boş bölüm / uyarı yok).
+    let diagnosisAi = '';
+    if (AI_ENABLED) {
+      const { data: lastReport } = await supabase
+        .from('daily_reports')
+        .select('portfolio_diagnosis')
+        .not('ai_model', 'is', null)      // risk-monitor'ün kısmi satırını atla
+        .order('report_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      diagnosisAi = lastReport?.portfolio_diagnosis || '';
+    }
 
     const snapshot = {
       monthLabel,
@@ -90,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       monthIncomeBreakdown,
       topGainersThisMonth,
       yearRows: model.months.filter(r => r.month <= reportYM).map(r => ({ month: monthLabelTR(r.month), gainEUR: r.gainEUR, salaryEUR: entitlementEUR(r.carryOutEUR) })),
-      diagnosisAi: lastReport?.portfolio_diagnosis || '',
+      diagnosisAi,
       healthOk: model.health.ok,
     };
     const { subject, html } = buildMonthlyEmail(snapshot);

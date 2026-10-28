@@ -69,5 +69,6 @@ describe('haftalık plan her iki ekranda aynı', () => {
     expect(screen.getByText(/yaklaşık 8 adet/)).toBeTruthy();
     expect(screen.getByText(/Yatırılacak €13\.000/)).toBeTruthy();
     expect(screen.queryByText(/V3YL %16/)).toBeNull();
+    expect(screen.queryByText('AI Sohbet')).toBeNull();
   });
 });

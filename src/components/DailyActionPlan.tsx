@@ -10,6 +10,7 @@ import { authorizedHeaders } from '../lib/apiAuth';
 import { formatCurrency } from '../services/priceService';
 import { WeeklyBuySummary } from './BuyPlanCard';
 import { EUR_CASH_RESERVE, WEEKLY_BUY_EUR } from '../lib/buyPlan';
+import { AI_ENABLED } from '../lib/aiFeature';
 
 interface DailyActionPlanProps {
   holdings: Holding[];
@@ -276,9 +277,11 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
 
           {/* Quick nav */}
           <div className="flex gap-2 pt-2 overflow-x-auto">
-            <button onClick={() => navigate('/ai-advisor')} className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-[11px] font-semibold whitespace-nowrap">
-              <Brain size={11} /> AI Sohbet
-            </button>
+            {AI_ENABLED && (
+              <button onClick={() => navigate('/ai-advisor')} className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-[11px] font-semibold whitespace-nowrap">
+                <Brain size={11} /> AI Sohbet
+              </button>
+            )}
             <button onClick={() => navigate('/performance')} className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">
               <TrendingUp size={11} /> Performans
             </button>

@@ -6,6 +6,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { StaleBadge } from '../components/StaleBadge';
 import { isResearchStale } from '../lib/freshness';
 import { dayInTZ } from '../lib/eurPnl';
+import { AI_DISABLED_MESSAGE, AI_ENABLED } from '../lib/aiFeature';
 
 // 2026-09-22: AI işlem ÖNERMEZ — öneri kartları (TRİM/SAT/AL) ve ai_recommendations okuması kaldırıldı.
 // Rapor = haber/makro özeti + pozisyon başına bilgi notu + riskler/notlar.
@@ -76,6 +77,7 @@ export default function ResearchPage() {
   useEffect(() => { loadLatest(); }, []);
 
   const runNow = async () => {
+    if (!AI_ENABLED) return;
     setRunning(true);
     setError(null);
     try {
@@ -98,8 +100,10 @@ export default function ResearchPage() {
         <PageHeader
           icon={Brain}
           title="AI Araştırma Motoru"
-          subtitle="Haber + makro özeti · EUR ölçüsü · işlem önerisi YOK (plan sabit)"
-          actions={
+          subtitle={AI_ENABLED
+            ? 'Haber + makro özeti · EUR ölçüsü · işlem önerisi YOK (plan sabit)'
+            : AI_DISABLED_MESSAGE}
+          actions={AI_ENABLED ? (
             <button
               onClick={runNow}
               disabled={running}
@@ -108,8 +112,14 @@ export default function ResearchPage() {
               <RefreshCw size={14} className={running ? 'animate-spin' : ''} />
               {running ? 'Çalışıyor...' : 'Şimdi Çalıştır'}
             </button>
-          }
+          ) : undefined}
         />
+
+        {!AI_ENABLED && (
+          <div className="mb-4 p-3 rounded-lg bg-slate-100 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-sm text-slate-700 dark:text-slate-300">
+            {AI_DISABLED_MESSAGE}. Yeni araştırma üretilmez. Kayıtlı özetler aşağıda durur.
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-400">
@@ -127,10 +137,16 @@ export default function ResearchPage() {
           <div className="text-center p-12 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700">
             <Brain className="mx-auto mb-3 text-slate-400" size={48} />
             <p className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Henüz rapor yok</p>
-            <p className="text-sm text-slate-600 dark:text-gray-400 mb-4">Zamanlanmış çalışma yok; butonla günde en fazla bir kez üretilir.</p>
-            <button onClick={runNow} disabled={running} className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold disabled:opacity-50">
-              {running ? 'Çalışıyor...' : 'İlk Raporu Üret'}
-            </button>
+            <p className="text-sm text-slate-600 dark:text-gray-400 mb-4">
+              {AI_ENABLED
+                ? 'Zamanlanmış çalışma yok; butonla günde en fazla bir kez üretilir.'
+                : AI_DISABLED_MESSAGE}
+            </p>
+            {AI_ENABLED && (
+              <button onClick={runNow} disabled={running} className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold disabled:opacity-50">
+                {running ? 'Çalışıyor...' : 'İlk Raporu Üret'}
+              </button>
+            )}
           </div>
         )}
 
@@ -139,7 +155,7 @@ export default function ResearchPage() {
             {/* 22.09 öncesi raporlar eski prompt'la üretildi (trim/sell/buy önerisi, 'Fırsatlar') — DailyReportPage ile aynı kapı */}
             {legacy && (
               <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-sm text-amber-800 dark:text-amber-300">
-                <AlertTriangle size={14} className="inline mr-1" /> Eski format rapor ({report.report_date}) — 22.09 öncesi AI önerileri geçersiz; pozisyon notları ve öneriler gizlendi. "Şimdi Çalıştır" ile yeni rapor üret.
+                <AlertTriangle size={14} className="inline mr-1" /> Eski format rapor ({report.report_date}) — 22.09 öncesi AI önerileri geçersiz; pozisyon notları ve öneriler gizlendi.{AI_ENABLED ? ' "Şimdi Çalıştır" ile yeni rapor üret.' : ''}
               </div>
             )}
             {/* Headline kartı */}

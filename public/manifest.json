@@ -1,7 +1,7 @@
 {
   "name": "Tandor Finans - Akıllı Portföy Yönetimi",
   "short_name": "Tandor Finans",
-  "description": "AI destekli profesyonel portföy takip uygulaması.",
+  "description": "Profesyonel portföy takip uygulaması.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",
@@ -29,11 +29,6 @@
   ],
   "categories": ["finance", "productivity"],
   "shortcuts": [
-    {
-      "name": "AI Danışman",
-      "url": "/ai-advisor",
-      "description": "AI destekli portföy analizi"
-    },
     {
       "name": "İzleme Listesi",
       "url": "/watchlist",

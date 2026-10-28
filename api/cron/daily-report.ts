@@ -7,6 +7,8 @@ import { sendPushToAll } from '../lib/push.js';
 import { monthLabelTR, fmtEUR, fmtSignedEUR, type EurSummary } from '../lib/eurEngine.js';
 import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
 import { dayInTZ } from '../../src/lib/eurPnl.js';
+import { AI_ENABLED, AI_OFF_MODEL } from '../../src/lib/aiFeature.js';
+import { callAnthropicMessages } from '../lib/anthropic.js';
 
 
 function getSupabase() {
@@ -25,10 +27,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const supabase = getSupabase();
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicKey) {
-      return res.status(200).json({ success: false, error: 'ANTHROPIC_API_KEY missing' });
-    }
 
     // ========================================
     // 1. Portföy verilerini topla
@@ -97,16 +95,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const newsData = await fetchMarketNews(log);
 
     // ========================================
-    // 4. Claude AI ile kapsamlı analiz
+    // 4. Claude yorumu — kapalıyken yok. Rakam, kayıt, e-posta ve Telegram yine gider.
     // ========================================
-    log.push('AI analizi başlatılıyor...');
-
     // AI bağlamı = sohbet ve planla AYNI metin (api/lib/aiContext); işlem önerisi yok, rakamlar motorun
     const portfolioContext = aiCtx ? aiCtx.text : `PORTFÖY VERİSİ ALINAMADI — rakam verme, yalnız piyasa özeti yap.\nPozisyon sayısı: ${holdings.length}`;
     const marketContext = buildMarketContext(marketData, newsData);
 
-    const aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
-    log.push('AI analizi tamamlandı');
+    let aiResponse: any = {
+      actions: [],
+      portfolio_diagnosis: '',
+      market_outlook: '',
+      news_alerts: [],
+      wealth_building_tip: '',
+    };
+    if (!AI_ENABLED) {
+      log.push('Yapay zekâ kapalı — yorum bölümü yok');
+    } else {
+      const anthropicKey = process.env.ANTHROPIC_API_KEY;
+      if (!anthropicKey) {
+        log.push('Yapay zekâ anahtarı yok — yorum bölümü yok');
+      } else {
+        try {
+          log.push('AI analizi başlatılıyor...');
+          aiResponse = await callClaudeForDailyReport(anthropicKey, portfolioContext, marketContext);
+          log.push('AI analizi tamamlandı');
+        } catch (e: any) {
+          log.push(`AI yorumu atlandı: ${e?.message || 'hata'}`);
+        }
+      }
+    }
     const weekPlanActions = (aiCtx?.weekPlan || []).map(p => ({
       urgency: 'this_week', type: 'buy', symbol: p.symbol, market: 'EU', platform: 'Revolut',
       instruction: `${p.instruction} — €${p.amountEUR.toLocaleString('de-DE')}`,
@@ -146,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       projected_salary_eur: eur?.mtd ? Math.round(projectedSalaryEUR * 100) / 100 : null,
       eur_rate: eur?.eurRate || null,
       eur_health_ok: eur ? eur.health.ok : null,
-      ai_model: 'claude-sonnet-5',
+      ai_model: AI_ENABLED ? 'claude-sonnet-5' : AI_OFF_MODEL,
       generation_time_ms: Date.now() - startTime,
     };
 
@@ -229,7 +246,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           wealth: eur.wealthEUR, day: eur.dayGainEUR, week: eur.weekGainEUR, mtd: eur.mtd?.gainEUR ?? null,
           salary: salaryEUR, projected_salary: projectedSalaryEUR, carry_in: eur.mtd?.carryInEUR ?? null, health_ok: eur.health.ok,
         } : null,
-        ai_analysis: aiResponse,
+        ai_analysis: AI_ENABLED ? aiResponse : null,
         market_summary: {
           usd_try: marketData.usd_try,
           eur_try: marketData.eur_try,
@@ -531,6 +548,15 @@ ${news.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
 // ================================================
 
 async function callClaudeForDailyReport(apiKey: string, portfolioContext: string, marketContext: string): Promise<any> {
+  if (!AI_ENABLED) {
+    return {
+      actions: [],
+      portfolio_diagnosis: '',
+      market_outlook: '',
+      news_alerts: [],
+      wealth_building_tip: '',
+    };
+  }
   // 2026-09-22: AI KÜÇÜLTÜLDÜ — açıklar, bilgilendirir, anomali bildirir; İŞLEM ÖNERMEZ, MAAŞ HESAPLAMAZ.
   // Kurallar ve bağlam api/lib/aiContext.ts'ten (sohbet ve plan ile aynı kaynak).
   const systemPrompt = `${AI_RULES}
@@ -556,22 +582,14 @@ ${marketContext}
 
 Yukarıdaki verilerle bugünkü brifingi hazırla. İşlem önerme, maaş hesaplama; rakamları açıkla, piyasayı özetle.`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-5',
-      thinking: { type: 'disabled' },
-      // 4000 yetmiyordu: sonnet-5 Türkçe raporu ~7-8K karakter üretiyor, kesilen
-      // çıktı JSON.parse'ı düşürüp tüm raporu ham metin olarak kaydettiriyordu.
-      max_tokens: 3000,   // 2026-09-22: AI küçültüldü (açıklama+özet), aksiyon/JSON şişmesi yok
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
+  const response = await callAnthropicMessages(apiKey, {
+    model: 'claude-sonnet-5',
+    thinking: { type: 'disabled' },
+    // 4000 yetmiyordu: sonnet-5 Türkçe raporu ~7-8K karakter üretiyor, kesilen
+    // çıktı JSON.parse'ı düşürüp tüm raporu ham metin olarak kaydettiriyordu.
+    max_tokens: 3000,   // 2026-09-22: AI küçültüldü (açıklama+özet), aksiyon/JSON şişmesi yok
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   });
 
   if (!response.ok) {

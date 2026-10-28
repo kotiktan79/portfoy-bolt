@@ -1,6 +1,7 @@
 import {
   Home, PieChart, Brain, FileText, TrendingUp, Target, Scale, Hammer,
 } from 'lucide-react';
+import { AI_ENABLED } from '../lib/aiFeature';
 
 interface MobileBottomNavProps {
   onNavigate: (page: string) => void;
@@ -19,10 +20,14 @@ const PRIMARY_TABS = [
 ];
 
 export default function MobileBottomNav({ onNavigate, currentPage = 'home' }: MobileBottomNavProps) {
+  const tabs = PRIMARY_TABS.filter((item) => AI_ENABLED || item.id !== 'research');
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 z-50 safe-area-inset-bottom shadow-lg">
-      <div className="grid grid-cols-8 gap-0.5 px-0.5 pt-1.5 pb-1">
-        {PRIMARY_TABS.map((item) => {
+      <div
+        className="grid gap-0.5 px-0.5 pt-1.5 pb-1"
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+      >
+        {tabs.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
           return (

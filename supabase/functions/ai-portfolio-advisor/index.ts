@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { AI_DISABLED_MESSAGE, AI_ENABLED } from "../../../src/lib/aiFeature.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +38,15 @@ interface AIRequest {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  // Aynı anahtar: src/lib/aiFeature.ts. Kapalıyken Anthropic'e çıkılmaz.
+  // Bu dosya repodaki kaynaktır; paylaşılan Supabase projesine deploy EDİLMEZ.
+  if (!AI_ENABLED) {
+    return new Response(
+      JSON.stringify({ success: true, disabled: true, message: AI_DISABLED_MESSAGE }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 
   try {
