@@ -4,6 +4,7 @@ import { dayInTZ } from '../src/lib/eurPnl.js';
 import { requirePortfolioAccess } from './lib/auth.js';
 import { applyApiCors } from './lib/cors.js';
 import { getServiceSupabase } from './lib/serviceSupabase.js';
+import { AI_ENABLED, aiDisabledBody, callAnthropicMessages } from './lib/anthropic.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   applyApiCors(req, res, 'POST, OPTIONS');
@@ -18,6 +19,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (await requirePortfolioAccess(req, res)) return;
+
+  // Anahtar duruyor olsa bile çağrı yok. Tek anahtar: src/lib/aiFeature.ts
+  if (!AI_ENABLED) {
+    return res.status(200).json(aiDisabledBody());
+  }
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) {
@@ -46,20 +52,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { role: 'user', content: question },
     ];
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        thinking: { type: 'disabled' },
-        max_tokens: 1200,
-        system: systemPrompt,
-        messages,
-      }),
+    const response = await callAnthropicMessages(anthropicKey, {
+      model: 'claude-sonnet-5',
+      thinking: { type: 'disabled' },
+      max_tokens: 1200,
+      system: systemPrompt,
+      messages,
     });
 
     if (!response.ok) {

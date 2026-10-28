@@ -2,6 +2,7 @@
 // Eski sürüm TL/USD nominal portföyü gönderiyordu; sunucu artık onu kullanmıyor → yalnız soru + geçmiş gider.
 import { Holding } from '../lib/supabase';
 import { authorizedHeaders } from '../lib/apiAuth';
+import { AI_DISABLED_MESSAGE, AI_ENABLED } from '../lib/aiFeature';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -13,6 +14,7 @@ export async function askClaude(
   _holdings: Holding[],
   conversationHistory: ConversationMessage[] = [],
 ): Promise<{ response: string; isAI: boolean }> {
+  if (!AI_ENABLED) return { response: AI_DISABLED_MESSAGE, isAI: false };
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',

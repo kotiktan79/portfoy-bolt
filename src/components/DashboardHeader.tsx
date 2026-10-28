@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ConnectionStatus } from '../services/priceService';
 import { useLanguage } from '../contexts/LanguageContext';
+import { AI_ENABLED } from '../lib/aiFeature';
 
 interface DashboardHeaderProps {
   connectionStatus: ConnectionStatus;
@@ -110,8 +111,10 @@ export function DashboardHeader({
   };
 
   const navItems = [
-    { label: 'AI Danışman', onClick: onShowAIAdvisor, icon: Activity },
-    { label: 'Araştırma', onClick: onShowResearch || (() => {}), icon: Brain },
+    ...(AI_ENABLED ? [
+      { label: 'AI Danışman', onClick: onShowAIAdvisor, icon: Activity },
+      { label: 'Araştırma', onClick: onShowResearch || (() => {}), icon: Brain },
+    ] : []),
     { label: 'Performans', onClick: onShowPerformance, icon: TrendingUp },
     { label: 'Dağılım', onClick: onShowAllocation, icon: PieChart },
     { label: 'Hedef', onClick: onShowProjection || (() => {}), icon: Target },
