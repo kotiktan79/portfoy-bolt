@@ -35,6 +35,7 @@ import { BuAyMaasCard } from '../components/BuAyMaasCard';
 import EnflasyonOnayKarti from '../components/EnflasyonOnayKarti';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
+import GununHareketleri from '../components/GununHareketleri';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
 import { getPerformanceReturns } from '../services/performanceReturnService';
@@ -220,6 +221,9 @@ export default function HomePage() {
                 totalPnLPct={totalProfitLossPercent}
               />
             )}
+
+            {/* Bugün en çok yükselen / düşen — euro, taban dünkü kapanış (ek sorgu yok: yukarıdaki canlı kârdan) */}
+            {holdings.length > 0 && <GununHareketleri live={live} baseWealthEUR={lastDay?.wealthEUR} state={eurState} />}
 
             {holdings.length > 0 && <CashDistributionCard holdings={holdings} />}
 
