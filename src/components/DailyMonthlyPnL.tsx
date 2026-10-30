@@ -26,7 +26,7 @@ function Badge({ gain, base }: { gain: number; base: number }) {
 
 export function DailyMonthlyPnL() {
   const [tab, setTab] = useState<Tab>('daily');
-  type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; gapFilled?: boolean; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number; carryResetApplied?: boolean };
+  type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; gapFilled?: boolean; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number; carryResetApplied?: boolean; inflationAwaitingEUR?: number };
   const [daily, setDaily] = useState<EurDaily[]>([]);
   const [weekly, setWeekly] = useState<Period[]>([]);
   const [monthly, setMonthly] = useState<Period[]>([]);
@@ -42,7 +42,7 @@ export function DailyMonthlyPnL() {
       const [d, w, m] = await Promise.all([getEurDaily(), getEurWeeks(), getEurMonths()]).catch((e) => { setErr(e?.message || 'veri yüklenemedi'); return [[], [], []] as const; });
       setDaily([...d].reverse());
       setWeekly([...w].map((x, i, arr) => ({ ...x, gapDays: gap(i > 0 ? arr[i - 1].lastDate : x.firstDate, x.lastDate) })).reverse());
-      setMonthly([...m].map((x: MonthRow) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: x.maxHoleDays || 0, gapFilled: x.gapFilled, inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR, carryResetApplied: x.carryResetApplied })).reverse());
+      setMonthly([...m].map((x: MonthRow) => ({ key: x.month, label: monthLabel(x.month), gainEUR: x.gainEUR, startWealthEUR: x.startWealthEUR, endWealthEUR: x.endWealthEUR, firstDate: x.firstDate, lastDate: x.lastDate, gapDays: x.maxHoleDays || 0, gapFilled: x.gapFilled, inflationEUR: x.inflationEUR, realGainEUR: x.realGainEUR, carryInEUR: x.carryInEUR, salaryEUR: x.salaryEUR, carryResetApplied: x.carryResetApplied, inflationAwaitingEUR: x.inflationAwaitingApprovalEUR })).reverse());
       setLoading(false);
     })();
   }, []);
@@ -64,7 +64,7 @@ export function DailyMonthlyPnL() {
                   <p className="text-sm font-bold text-gray-900 dark:text-white">{r.label}</p>
                   <p className="text-xs text-slate-500 dark:text-gray-400">
                     servet {fmtW(r.startWealthEUR)} → {fmtW(r.endWealthEUR)}
-                    {r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">{(r.inflationEUR ?? 0) > 0 && <>· yıl sonu enflasyon payı −€{Math.round(r.inflationEUR ?? 0).toLocaleString('de-DE')} </>}→ maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
+                    {r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">{(r.inflationEUR ?? 0) > 0 && <>· yıl sonu enflasyon payı −€{Math.round(r.inflationEUR ?? 0).toLocaleString('de-DE')} </>}{(r.inflationAwaitingEUR ?? 0) > 0 && <>· enflasyon payı onay bekliyor: ~€{Math.round(r.inflationAwaitingEUR ?? 0).toLocaleString('de-DE')} </>}→ maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
                     {(r.gapFilled || (r.key.length === 7 && r.gapDays >= 4)) && <span className="ml-1 text-amber-600">⚠ {r.gapFilled ? 'bu ayın snapshot kaydı yok, enflasyon payı yine birikti' : `${r.gapDays} gün snapshot yok`}</span>}
                   </p>
                 </div>

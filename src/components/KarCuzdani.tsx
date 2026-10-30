@@ -9,6 +9,7 @@ import { fetchAll, invalidateEurPnlCache } from '../services/eurPnlService';
 import { getKasaFx, type KasaFx } from '../services/kasaFxService';
 import { planSalary, kasaOutstandingEUR, type SalaryPlanInput } from '../lib/salaryPlan';
 import { ledgerFromTransactions, balanceGap, type LedgerRow } from '../lib/cashLedger';
+import { inflationStatusText } from '../lib/inflationDecision';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
 //   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
@@ -262,7 +263,7 @@ export default function KarCuzdani({ holdings }: Props) {
               <p>{salary.monthLabel}: servet €{fmt(salary.startWealthEUR)} → €{fmt(salary.endWealthEUR)}, dış para hariç kâr <strong>{sgn(salary.profitEUR)}€{fmt(salary.profitEUR)}</strong></p>
               {salary.inflationEUR > 0
                 ? <p>− yıl sonu enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) €{fmt(salary.inflationEUR)} = <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
-                : <p>Enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) yıl sonunda düşülecek{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>}
+                : <p>{salary.inflationDecision ? inflationStatusText(salary) : <>Enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) yıl sonunda yalnız senin onayınla düşülür</>}{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>}
               {poolEur < 0
                 ? <p>→ havuz <strong>−€{fmt(poolEur)} açık</strong> → maaş €0 — bu ay maaş yok, fark yastıktan</p>
                 : <p>→ havuz €{fmt(poolEur)} × 0,85{0.85 * poolEur > MONTHLY_CAP_EUR ? `, aylık tavan €${fmt(MONTHLY_CAP_EUR)}` : ''} = <strong>€{fmt(entitlementEur)}</strong>{entitlementEur === 0 && ' — bu ay maaş yok'}</p>}
@@ -363,7 +364,7 @@ export default function KarCuzdani({ holdings }: Props) {
           )}
           {mtd && (
             <div className="mt-3 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-gray-300">
-              <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)}{mtd.inflationEUR > 0 ? <> · yıl sonu enflasyon payı −€{fmt(mtd.inflationEUR)} = {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}</> : <> · enflasyon payı yıl sonunda düşülecek{(mtd.inflationYearEndEstimateEUR ?? 0) > 0 && <> (tahmini €{fmt(mtd.inflationYearEndEstimateEUR ?? 0)})</>}</>}
+              <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)}{mtd.inflationEUR > 0 ? <> · yıl sonu enflasyon payı −€{fmt(mtd.inflationEUR)} = {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}</> : mtd.inflationDecision ? <> · {inflationStatusText(mtd)}</> : <> · enflasyon payı yıl sonunda senin onayınla düşülecek{(mtd.inflationYearEndEstimateEUR ?? 0) > 0 && <> (tahmini €{fmt(mtd.inflationYearEndEstimateEUR ?? 0)})</>}</>}
               {mtd.carryResetApplied && <> · <span className="text-emerald-700 dark:text-emerald-300 font-semibold">Nisan öncesi kazanılan kâr yastığıyla eski açık sıfırlandı</span></>}
               {mtd.carryInEUR < 0 && <> · devreden açık −€{fmt(mtd.carryInEUR)} → kalan açık €{fmt(Math.min(0, mtd.carryInEUR + mtd.realGainEUR))}</>}
               <br />→ <span className="font-semibold">gelecek ay maaş ön izlemesi: €{fmt(mtd.projectedSalaryEUR)}</span> (ay sonuna kadar değişir)
@@ -377,7 +378,7 @@ export default function KarCuzdani({ holdings }: Props) {
           )}
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
             <AlertCircle size={14} className="text-slate-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Enflasyon payı her ay değil, yıl sonunda (Aralık) bir kez düşülür. Sıfır ayda yastıktan geçin.</p>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Enflasyon payı her ay değil, yıl sonunda (Aralık) bir kez ve yalnız sen onaylarsan düşülür. Sıfır ayda yastıktan geçin.</p>
           </div>
           <div className="mt-2 flex items-center gap-2 text-[11px]">
             <label className="text-slate-500 dark:text-gray-400">Enflasyon %/yıl</label>

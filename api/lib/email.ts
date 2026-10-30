@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { INFLATION_EUR } from '../../src/lib/eurPnl.js';
+import { INFLATION_RULE_TEXT } from '../../src/lib/inflationDecision.js';
 
 // Resend API key Vercel env'den okunur. Yoksa email atılmaz, sessizce geçer.
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
@@ -65,7 +66,7 @@ export interface DailySnapshot {
   wealthEUR: number; wealthTRY: number; eurRate: number;
   dayGainEUR: number; dayGainPct: number;
   weekGainEUR: number; weekGainPct: number;
-  mtdGainEUR: number; mtdInflationEUR: number; mtdRealEUR: number; carryInEUR: number; carryResetApplied?: boolean;
+  mtdGainEUR: number; mtdInflationEUR: number; mtdRealEUR: number; /** yıl sonu enflasyon durumu (onay bekliyor vb.) */ inflationNote?: string | null; carryInEUR: number; carryResetApplied?: boolean;
   salaryEUR: number; salaryMonthLabel: string; salaryBasisLabel: string;   // bu ayın maaşı = geçen ay (basis) çekilebilir × 0,85
   projectedSalaryEUR: number; nextMonthLabel: string;                      // MTD'ye göre gelecek ay ön izleme
   healthOk: boolean;
@@ -127,7 +128,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
           <div>
             <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;">Bu ay reel</div>
             <div style="font-size:14px;font-weight:700;color:${greenIfPos(d.mtdRealEUR)};">${seur(d.mtdRealEUR)}</div>
-            <div style="font-size:11px;color:#94a3b8;">enflasyon payı −${eur(d.mtdInflationEUR)}</div>
+            <div style="font-size:11px;color:#94a3b8;">${d.mtdInflationEUR > 0 ? `enflasyon payı −${eur(d.mtdInflationEUR)}` : (d.inflationNote || INFLATION_RULE_TEXT)}</div>
           </div>
           <div>
             <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;">Devreden açık</div>
@@ -264,6 +265,8 @@ export interface MonthlySnapshot {
   carryInEUR: number; withdrawableEUR: number; carryOutEUR: number;
   salaryEUR: number;
   carryResetApplied?: boolean;    // o ay eski açık Nisan öncesi kâr yastığıyla sıfırlandı
+  /** yıl sonu enflasyon durumu: 'onay bekliyor: ~€X' vb. Yoksa genel kural cümlesi. */
+  inflationNote?: string | null;
   realizedIncomeEUR: number;
   monthIncomeBreakdown: { type: string; amount: number }[];   // EUR
   topGainersThisMonth: { symbol: string; pnlPct: number }[];  // yerel para nominal (kuruluştan)
@@ -309,7 +312,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
   const html = `
     <div style="${styleBase}">
       <h1 style="font-size:18px;margin:0 0 4px;color:#312e81;">Aylık Rapor · ${m.monthLabel}</h1>
-      <p style="font-size:13px;color:#64748b;margin:0 0 16px;">tek ölçü EUR · kâr = servet farkı − dış akış · enflasyon %${Math.round(INFLATION_EUR * 100)}/yıl, yıl sonunda düşülür · zarar devreder</p>
+      <p style="font-size:13px;color:#64748b;margin:0 0 16px;">tek ölçü EUR · kâr = servet farkı − dış akış · enflasyon %${Math.round(INFLATION_EUR * 100)}/yıl, yıl sonunda yalnız onayınla düşülür · zarar devreder</p>
       ${m.healthOk ? '' : `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">⚠️ Kur serisi güncel değil — rakamlar güvenilmez olabilir.</div>`}
 
       ${card(`
@@ -318,7 +321,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
         <div style="font-size:13px;color:#64748b;">Servet ${eur(m.startWealthEUR)} → ${eur(m.endWealthEUR)}</div>
         <div style="margin-top:10px;">
           ${row('Nominal kâr', m.gainEUR)}
-          ${m.inflationEUR > 0 ? row('Yıl sonu enflasyon payı (sermaye koruma)', -m.inflationEUR, true, '#64748b') + row('Enflasyon sonrası kâr', m.realGainEUR) : `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#64748b;">Enflasyon payı yıl sonunda düşülecek</div>`}
+          ${m.inflationEUR > 0 ? row('Yıl sonu enflasyon payı (sermaye koruma)', -m.inflationEUR, true, '#64748b') + row('Enflasyon sonrası kâr', m.realGainEUR) : `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#64748b;">${m.inflationNote || INFLATION_RULE_TEXT}</div>`}
           ${m.carryResetApplied ? `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span style="color:#475569;">Eski açık (Nisan öncesi kâr yastığıyla)</span><span style="font-weight:700;color:#059669;">sıfırlandı</span></div>` : ''}
           ${row('Devreden açık (ay başı)', m.carryInEUR, true, m.carryInEUR < 0 ? '#dc2626' : '#64748b')}
           ${row('Çekilebilir', m.withdrawableEUR, false, '#0f172a')}

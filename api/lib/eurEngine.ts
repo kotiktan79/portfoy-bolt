@@ -3,6 +3,7 @@
 // Satır limiti: PostgREST max_rows=1000 tavanı .range()'i EZER → kur serisi exchange_rates_daily görünümünden okunur,
 // diğer tablolar fetchAll() ile sayfalanır.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { parseInflationDecisions, type InflationDecisions } from '../../src/lib/inflationDecision.js';
 import { buildEurModel, summarizeEur, withdrawnMap, fetchSalaryWithdrawalRows, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, dayInTZ, normalizeInflation, type EurModel, type EurSummary, type MonthRow } from '../../src/lib/eurPnl.js';
 
 export { RELIABLE_FROM, INFLATION_EUR };
@@ -60,9 +61,15 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
   const usdNow = usdRates.length ? Number(usdRates[usdRates.length - 1].rate) : null;
   if (usdNow == null) throw new Error('eurEngine: USD/TRY kuru seriden bulunamadı — ölçüm yapılmadı (sabit yedek kur yasak)');
   let annualInflation = INFLATION_EUR;
+  // Yıl sonu enflasyon kararları (sahip onayı). '*' okunur: inflation_decisions sütunu henüz yoksa sorgu bozulmasın,
+  // karar yok sayılır → hiçbir yıl düşülmez.
+  let inflationDecisions: InflationDecisions = {};
   try {
-    const pol = await supabase.from('portfoy_bolt_salary_policy').select('inflation_annual').eq('id', 1).maybeSingle();
-    if (pol && !pol.error && pol.data) annualInflation = normalizeInflation(pol.data.inflation_annual);
+    const pol = await supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle();
+    if (pol && !pol.error && pol.data) {
+      annualInflation = normalizeInflation(pol.data.inflation_annual);
+      inflationDecisions = parseInflationDecisions(pol.data.inflation_decisions);
+    }
   } catch {
     annualInflation = INFLATION_EUR;
   }
@@ -71,7 +78,7 @@ export async function loadEurModel(supabase: SupabaseClient): Promise<EurModel> 
     // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın
     otherRates: Object.fromEntries(OTHER_CCY.map((c, i) => [c, dailyRows(otherRates[i])])),
     transactions: txs, cashSells, holdings: holds,
-    usdNow, reliableFrom: RELIABLE_FROM, annualInflation, asOf: dayInTZ(new Date()),
+    usdNow, reliableFrom: RELIABLE_FROM, annualInflation, asOf: dayInTZ(new Date()), inflationDecisions,
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
     payouts: (payouts || []).map((r: any) => ({
       date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency,

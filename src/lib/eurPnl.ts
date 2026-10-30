@@ -1,3 +1,4 @@
+import type { InflationDecisions } from './inflationDecision.js';
 // EURO BAZLI KÂR — TEK CETVEL (2026-09-19, standart araştırması + kullanıcı kararı)
 //
 // Dayanak: GIPS 2020 (dönem kârı = servet farkı − dış akış; tek raporlama para birimi),
@@ -180,8 +181,16 @@ export interface MonthRow {
   inflationPendingEUR?: number;
   /** Yıl sonunda düşülmesi beklenen toplam pay: biriken + kalan aylar × (ay sonu servet × aylık oran). */
   inflationYearEndEstimateEUR?: number;
-  /** Bu satırda yıl sonu enflasyon payı düşüldü */
+  /** Bu satırda yıl sonu enflasyon payı düşüldü (yalnız sahip onayladıysa) */
   yearEndInflationApplied?: boolean;
+  /** Yalnız yılın son satırında: o yılın kararı. 'pending' = henüz karar yok, hiçbir şey düşülmedi. */
+  inflationDecision?: 'approved' | 'declined' | 'pending';
+  /** Yalnız yılın son satırında: Σ ay başı servet × gün oranı (son ay tam). Tutar = taban × aylık oran. */
+  inflationYearBaseEUR?: number;
+  /** Yalnız yılın son satırında: ayardaki oranla yılın tam payı (bilgi). */
+  inflationYearAmountEUR?: number;
+  /** Karar yoksa: onay bekleyen pay (düşülmedi). */
+  inflationAwaitingApprovalEUR?: number;
   carryInEUR: number;         // ay başı devreden açık (≤0)
   withdrawableEUR: number;    // max(0, carryIn + realGain)
   carryOutEUR: number;        // ay sonu bakiye: havuz (+, tavanlı) ya da devreden açık (−)
@@ -270,6 +279,8 @@ export interface MonthlyOpts {
   today?: string | null;
   /** Arada snapshot'ı olmayan takvim ayına da tam ay enflasyonu yaz. */
   fillGapMonths?: boolean;
+  /** Yıl → sahibin enflasyon kararı. Karar olmayan yılda HİÇBİR ŞEY düşülmez. */
+  inflationDecisions?: InflationDecisions | null;
 }
 
 export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: MonthlyOpts | number = {}, carryResetFromLegacy: string | null = CARRY_RESET_MONTH): MonthRow[] {
@@ -325,15 +336,18 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
   }
   let carry = 0, didReset = false;
   let pendingInflation = 0;   // bu yıl biriken, henüz düşülmemiş enflasyon payı
+  let pendingBase = 0;        // aynı payın tabanı: Σ ay başı servet × gün oranı (oran değişince tutar yeniden hesaplanır)
+  const decisions = o.inflationDecisions ?? null;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin).
     // Yastık önceki ayları karşıladığı için o aylardan biriken enflasyon payı da sıfırlanır.
-    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; pendingInflation = 0; r.carryResetApplied = true; didReset = true; }
+    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; pendingInflation = 0; pendingBase = 0; r.carryResetApplied = true; didReset = true; }
     const frac = inflationFraction(r.month, o.today);
     r.openMonth = frac < 1;
     r.inflationAccruedEUR = r.startWealthEUR * mRate * frac;
     pendingInflation += r.inflationAccruedEUR;
+    pendingBase += r.startWealthEUR * frac;
     // Yıl sonu: Aralık satırı; Aralık satırı yoksa yılın son satırı (sonraki satır yeni yılda).
     const next = rows[i + 1];
     const yearEnd = r.month.slice(5, 7) === '12' || (!!next && next.month.slice(0, 4) !== r.month.slice(0, 4));
@@ -341,9 +355,25 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
     r.inflationYearEndEstimateEUR = pendingInflation + (yearEnd ? 0 : Math.max(0, 12 - monthNo) * r.endWealthEUR * mRate
       + (1 - frac) * r.startWealthEUR * mRate);
     if (yearEnd) {
-      r.inflationEUR = pendingInflation;
-      r.yearEndInflationApplied = pendingInflation > 0;
+      // SAHİP ONAYI (2026-10-30): yıl sonu payı kendiliğinden DÜŞÜLMEZ. Yalnız onaylanan tutar, bu satırda bir kez.
+      const yearBase = pendingBase + (1 - frac) * r.startWealthEUR;     // açık Aralık'ta bile tam yıl
+      r.inflationYearBaseEUR = yearBase;
+      r.inflationYearAmountEUR = yearBase * mRate;
+      const dec = decisions?.[r.month.slice(0, 4)];
+      if (dec && dec.decision === 'approved') {
+        r.inflationEUR = Math.max(0, Number(dec.amountEUR) || 0);
+        r.inflationDecision = 'approved';
+      } else if (dec && dec.decision === 'declined') {
+        r.inflationEUR = 0;
+        r.inflationDecision = 'declined';
+      } else {
+        r.inflationEUR = 0;
+        r.inflationDecision = 'pending';
+        r.inflationAwaitingApprovalEUR = r.inflationYearAmountEUR;
+      }
+      r.yearEndInflationApplied = r.inflationEUR > 0;
       pendingInflation = 0;
+      pendingBase = 0;
     } else {
       r.inflationEUR = 0;
     }
@@ -475,6 +505,8 @@ export interface EurModelInput {
   asOf?: string | null;
   /** ay → o ay çekilen maaş (EUR); havuzdan düşülür. Yoksa çekim yok sayılır. */
   withdrawnByMonth?: Map<string, number> | null;
+  /** Yıl → sahibin enflasyon kararı (portfoy_bolt_salary_policy.inflation_decisions). Yoksa hiçbir yıl düşülmez. */
+  inflationDecisions?: InflationDecisions | null;
   /** PORTFÖYDEN ÇIKAN temettü/kupon (income_records.destination='kasa'): gün → tutar (kendi para biriminde).
    *  Akış olarak düşülür, yani ödeme günü zarar görünmez. 'profit_taking' DAHİL EDİLMEZ (realize zinciri onu sayıyor). */
   payouts?: Array<{ date: string; amount: number; currency: string | null; amountTRY?: number | null }> | null;
@@ -749,7 +781,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   }
 
   const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
-  const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null, today: inp.asOf ?? null, fillGapMonths: true });
+  const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null, today: inp.asOf ?? null, fillGapMonths: true, inflationDecisions: inp.inflationDecisions ?? null });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
   const health: EurHealth = {
     ok: Boolean(E.lastDay) && E.lastDay >= lastSnapDay && Boolean(U.lastDay) && U.lastDay >= lastSnapDay,

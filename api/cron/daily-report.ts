@@ -7,6 +7,7 @@ import { sendPushToAll } from '../lib/push.js';
 import { monthLabelTR, fmtEUR, fmtSignedEUR, type EurSummary } from '../lib/eurEngine.js';
 import { buildAiContext, AI_RULES } from '../lib/aiContext.js';
 import { dayInTZ } from '../../src/lib/eurPnl.js';
+import { inflationStatusText } from '../../src/lib/inflationDecision.js';
 import { AI_ENABLED, AI_OFF_MODEL } from '../../src/lib/aiFeature.js';
 import { callAnthropicMessages } from '../lib/anthropic.js';
 
@@ -209,6 +210,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         dayGainEUR: eur.dayGainEUR, dayGainPct: eur.dayGainPct,
         weekGainEUR: eur.weekGainEUR, weekGainPct: eur.weekGainPct,
         mtdGainEUR: eur.mtd?.gainEUR || 0, mtdInflationEUR: eur.mtd?.inflationEUR || 0, mtdRealEUR: eur.mtd?.realGainEUR || 0,
+        inflationNote: inflationStatusText(eur.mtd),
         carryInEUR: eur.mtd?.carryInEUR || 0,
         carryResetApplied: !!eur.mtd?.carryResetApplied,
         salaryEUR, salaryMonthLabel: monthLabelTR(todayStr.slice(0, 7)), salaryBasisLabel: eur.lastFull ? monthLabelTR(eur.lastFull.month) : '—',

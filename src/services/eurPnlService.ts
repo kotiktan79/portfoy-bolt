@@ -2,6 +2,7 @@
 // Tüm K/Z ekranları, Kâr Cüzdanı ve maaş buradan okur. Dayanak: lib/eurPnl.ts başlığı.
 import { supabase } from '../lib/supabase';
 import { getCachedUSDRate } from './priceService';
+import { parseInflationDecisions } from '../lib/inflationDecision';
 import { buildEurModel, withdrawnMap, fetchSalaryWithdrawalRows, RELIABLE_FROM, INFLATION_EUR, ROW_CAP, dayInTZ, normalizeInflation, type MonthRow, type EurModel, type EurDaily } from '../lib/eurPnl';
 export type { EurDaily };
 export { RELIABLE_FROM, INFLATION_EUR };
@@ -70,14 +71,16 @@ async function load(): Promise<EurModel> {
   const lastSeriesUsd = Number(usdRates[usdRates.length - 1]?.rate) || null;
   const usdNow = liveUsd ?? lastSeriesUsd;
   if (usdNow == null) throw new Error('eurPnl: USD/TRY kuru ne canlı ne seriden bulunamadı — ölçüm yapılmadı (sabit yedek kur yasak)');
-  const pol = await supabase.from('portfoy_bolt_salary_policy').select('inflation_annual').eq('id', 1).maybeSingle();
+  // '*': inflation_decisions sütunu henüz yoksa da sorgu çalışsın; karar yoksa hiçbir yıl enflasyon düşülmez.
+  const pol = await supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle();
   const annualInflation = !pol.error && pol.data ? normalizeInflation(pol.data.inflation_annual) : INFLATION_EUR;
+  const inflationDecisions = !pol.error && pol.data ? parseInflationDecisions((pol.data as Record<string, unknown>).inflation_decisions) : {};
   const value = buildEurModel({
     snapshots: snaps, eurRates: dailyRows(eurRates), usdRates: dailyRows(usdRates), fxCloses, holdingPrices: priceHistory,
     // TRY/USD/EUR dışı birimler (2026-09-27): bugün böyle pozisyon yok ama açılırsa sessizce TL sanılmasın
     otherRates: Object.fromEntries(OTHER_CCY.map((c, i) => [c, dailyRows(otherRates[i])])),
     transactions: txs, cashSells, holdings: holds,
-    usdNow, reliableFrom: RELIABLE_FROM, annualInflation, asOf: dayInTZ(new Date()),
+    usdNow, reliableFrom: RELIABLE_FROM, annualInflation, asOf: dayInTZ(new Date()), inflationDecisions,
     withdrawnByMonth: withdrawnMap(withdrawals, dailyRows(eurRates), dailyRows(usdRates)),
     payouts: (payouts || []).map((r: any) => ({
       date: String(r.income_date), amount: Number(r.amount) || 0, currency: r.currency,

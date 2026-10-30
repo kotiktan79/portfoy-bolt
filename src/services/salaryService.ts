@@ -28,6 +28,8 @@ export interface DynamicSalary {
   withdrawableEUR: number;
   salaryEUR: number;          // × 0,85
   startWealthEUR: number; endWealthEUR: number;
+  inflationDecision?: 'approved' | 'declined' | 'pending';
+  inflationAwaitingApprovalEUR?: number;   // yıl sonu payı onay bekliyor (düşülmedi)
 }
 export type MonthlySalaryRow = DynamicSalary & { gapDays: number };
 
@@ -49,6 +51,7 @@ const toRow = (r: MonthRow): DynamicSalary => ({
   month: r.month, monthLabel: monthLabel(r.month), carryResetApplied: r.carryResetApplied, profitEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR,
   carryInEUR: r.carryInEUR, withdrawableEUR: r.withdrawableEUR, salaryEUR: r.salaryEUR, startWealthEUR: r.startWealthEUR, endWealthEUR: r.endWealthEUR,
   poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR, entitlementEUR: entitlementEUR(r.carryOutEUR),
+  inflationDecision: r.inflationDecision, inflationAwaitingApprovalEUR: r.inflationAwaitingApprovalEUR,
 });
 
 /** İçinde bulunulan ay, kullanıcının saat diliminde (lib/eurPnl.ymInTZ) */
@@ -99,9 +102,9 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
 }
 
 /** Bu ay şimdiye kadar (MTD): nominal kâr, enflasyon payı, devreden açık ve gelecek ay maaş ön izlemesi. */
-export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; inflationAccruedEUR?: number; inflationPendingEUR?: number; inflationYearEndEstimateEUR?: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean; poolOutEUR?: number; poolSpilloverEUR?: number }
+export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; inflationAccruedEUR?: number; inflationPendingEUR?: number; inflationYearEndEstimateEUR?: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean; poolOutEUR?: number; poolSpilloverEUR?: number; inflationDecision?: 'approved' | 'declined' | 'pending'; inflationAwaitingApprovalEUR?: number }
 export async function getMonthToDate(): Promise<MonthToDate | null> {
   const rows = await getEurMonths();
   const r = rows.find(x => x.month === currentYM()); if (!r) return null;
-  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, inflationAccruedEUR: r.inflationAccruedEUR, inflationPendingEUR: r.inflationPendingEUR, inflationYearEndEstimateEUR: r.inflationYearEndEstimateEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied, poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR };
+  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, inflationAccruedEUR: r.inflationAccruedEUR, inflationPendingEUR: r.inflationPendingEUR, inflationYearEndEstimateEUR: r.inflationYearEndEstimateEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied, poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR, inflationDecision: r.inflationDecision, inflationAwaitingApprovalEUR: r.inflationAwaitingApprovalEUR };
 }

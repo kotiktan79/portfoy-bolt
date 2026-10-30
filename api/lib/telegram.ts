@@ -1,4 +1,5 @@
 import type { DailySnapshot, WeeklySnapshot, MonthlySnapshot } from './email.js';
+import { INFLATION_RULE_TEXT } from '../../src/lib/inflationDecision.js';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
@@ -58,6 +59,7 @@ export function buildDailyTelegram(d: DailySnapshot): string {
     `${arrow(d.dayGainEUR)} Gün: ${seur(d.dayGainEUR)} (${spct(d.dayGainPct)})`,
     `${arrow(d.weekGainEUR)} 7 gün: ${seur(d.weekGainEUR)} (${spct(d.weekGainPct)})`,
     `${arrow(d.mtdGainEUR)} Bu ay: ${seur(d.mtdGainEUR)} nominal · reel ${seur(d.mtdRealEUR)}`,
+    ...(d.inflationNote && d.inflationNote !== INFLATION_RULE_TEXT ? [escapeHtml(d.inflationNote)] : []),
     ``,
     `💸 Çekilebilir maaş: <b>${eur(d.salaryEUR)}</b> (kâr havuzu × 0,85, aylık tavan €1.000)`,
     d.carryInEUR < 0
@@ -99,7 +101,7 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
   const lines = [
     `🗓️ <b>${escapeHtml(m.monthLabel)} kapanışı</b>`,
     `${arrow(m.gainEUR)} Nominal kâr: ${seur(m.gainEUR)} · servet ${eur(m.startWealthEUR)} → ${eur(m.endWealthEUR)}`,
-    m.inflationEUR > 0 ? `Yıl sonu enflasyon payı −${eur(m.inflationEUR)} → ${seur(m.realGainEUR)}` : `Enflasyon payı yıl sonunda düşülecek`,
+    m.inflationEUR > 0 ? `Yıl sonu enflasyon payı −${eur(m.inflationEUR)} → ${seur(m.realGainEUR)}` : (m.inflationNote || INFLATION_RULE_TEXT),
     ...(m.carryResetApplied ? ['Eski açık Nisan öncesi kâr yastığıyla sıfırlandı'] : []),
     `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
     ``,
