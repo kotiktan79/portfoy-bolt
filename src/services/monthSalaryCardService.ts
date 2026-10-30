@@ -6,6 +6,7 @@ import { kasaOutstandingEUR } from '../lib/salaryPlan';
 import { currentYM, getDynamicSalary, getMonthToDate } from './salaryService';
 import { getKasaFx } from './kasaFxService';
 import { withdrawnThisMonthEUR, type MonthSalaryInputs } from '../lib/monthSalaryCard';
+import { inflationStatusText } from '../lib/inflationDecision';
 
 function numOrUndef(v: unknown): number | undefined {
   return v == null || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v);
@@ -39,6 +40,7 @@ export function assembleMonthSalaryInputs(args: {
   usdRates: Array<{ recorded_at: string; rate: number }>;
   monthProfitEUR?: number | null;
   yearEndInflationEUR?: number | null;
+  inflationStatusNote?: string | null;
 }): MonthSalaryInputs {
   const pol = args.policy;
   return {
@@ -56,6 +58,7 @@ export function assembleMonthSalaryInputs(args: {
     withdrawnThisMonthEUR: withdrawnThisMonthEUR(args.withdrawals, args.asOfMonth, args.eurRates, args.usdRates),
     monthProfitEUR: args.monthProfitEUR ?? null,
     yearEndInflationEUR: args.yearEndInflationEUR ?? null,
+    inflationStatusNote: args.inflationStatusNote ?? null,
   };
 }
 
@@ -97,5 +100,7 @@ export async function loadMonthSalaryInputs(now = new Date()): Promise<MonthSala
     // Bu ayın akışa göre kârı (enflasyon düşülmeden) ve yıl sonu enflasyon tahmini — aynı euro motoru
     monthProfitEUR: mtd && mtd.month === asOfMonth ? mtd.gainEUR : null,
     yearEndInflationEUR: mtd?.inflationYearEndEstimateEUR ?? null,
+    // Yıl sonu payı onay bekliyorsa/düşülmemişse o cümle; normal aylarda tahmin notu kalır
+    inflationStatusNote: mtd && mtd.inflationDecision ? inflationStatusText(mtd) : null,
   });
 }

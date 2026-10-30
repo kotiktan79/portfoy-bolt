@@ -6,6 +6,7 @@ import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, monthLabelTR, fmtEUR, fmtSignedEUR } from '../lib/eurEngine.js';
 import { entitlementEUR } from '../../src/lib/eurPnl.js';
+import { inflationStatusText } from '../../src/lib/inflationDecision.js';
 import { AI_ENABLED } from '../../src/lib/aiFeature.js';
 
 // AYLIK RAPOR — TEK ÖLÇÜ EUR (2026-09-19). Her ayın 1'i 07:00 UTC: geçen ayın kârı (servet farkı − dış akış),
@@ -91,6 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       gainEUR: row.gainEUR, inflationEUR: row.inflationEUR, realGainEUR: row.realGainEUR,
       carryInEUR: row.carryInEUR, withdrawableEUR: row.withdrawableEUR, carryOutEUR: row.carryOutEUR,
       salaryEUR: entitlement, carryResetApplied: row.carryResetApplied,
+      inflationNote: inflationStatusText(row),
       realizedIncomeEUR,
       monthIncomeBreakdown,
       topGainersThisMonth,
@@ -107,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await sendPushToAll({
       title: `💸 ${snapshot.salaryMonthLabel} maaşı: ${fmtEUR(entitlement)}`,
-      body: `${monthLabel}: kâr ${fmtSignedEUR(row.gainEUR)}${row.inflationEUR > 0 ? ` · yıl sonu enflasyon −${fmtEUR(row.inflationEUR)}` : ''} · devir ${fmtSignedEUR(row.carryOutEUR)}`,
+      body: `${monthLabel}: kâr ${fmtSignedEUR(row.gainEUR)}${row.inflationEUR > 0 ? ` · yıl sonu enflasyon −${fmtEUR(row.inflationEUR)}` : (row.inflationAwaitingApprovalEUR ?? 0) > 0 ? ` · enflasyon payı onay bekliyor` : ''} · devir ${fmtSignedEUR(row.carryOutEUR)}`,
       url: '/performance',
       tag: 'monthly-report',
     }).catch((e) => console.error('[push] gönderim hatası:', e));

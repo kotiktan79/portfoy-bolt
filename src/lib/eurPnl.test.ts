@@ -243,11 +243,20 @@ describe('enflasyon payı yıl sonunda bir kez düşülür (2026-10-30)', () => 
       { date: '2026-12-31', gainEUR: 800, wealthEUR: 122_300 },
       { date: '2027-01-31', gainEUR: 200, wealthEUR: 122_500 },
     ];
-    const [o, n, d, j] = monthlyRows(daily, 0.03, { carryResetFrom: null });
+    // Onay yoksa hiçbir şey düşülmez, pay onay bekler
+    const [, , pd] = monthlyRows(daily, 0.03, { carryResetFrom: null });
+    expect(pd.inflationEUR).toBe(0); expect(pd.inflationDecision).toBe('pending');
+    expect(pd.realGainEUR).toBe(800);
+    const base = monthlyRows(daily, 0.03, { carryResetFrom: null });
+    const due0 = (base[0].inflationAccruedEUR ?? 0) + (base[1].inflationAccruedEUR ?? 0) + (base[2].inflationAccruedEUR ?? 0);
+    expect(pd.inflationAwaitingApprovalEUR).toBeCloseTo(due0, 6);
+    // Sahip onaylarsa onaylanan tutar Aralık'ta bir kez düşer
+    const approved = { '2026': { year: 2026, decision: 'approved' as const, rate: 0.03, amountEUR: due0, decidedAt: '2026-12-31T10:00:00Z' } };
+    const [o, n, d, j] = monthlyRows(daily, 0.03, { carryResetFrom: null, inflationDecisions: approved });
     const due = (o.inflationAccruedEUR ?? 0) + (n.inflationAccruedEUR ?? 0) + (d.inflationAccruedEUR ?? 0);
     expect(o.inflationEUR).toBe(0); expect(n.inflationEUR).toBe(0);
     expect(o.realGainEUR).toBe(1_000); expect(n.realGainEUR).toBe(500);
-    expect(d.yearEndInflationApplied).toBe(true);
+    expect(d.yearEndInflationApplied).toBe(true); expect(d.inflationDecision).toBe('approved');
     expect(d.inflationEUR).toBeCloseTo(due, 6);
     expect(d.realGainEUR).toBeCloseTo(800 - due, 6);
     expect(d.inflationPendingEUR).toBe(0);
@@ -272,29 +281,38 @@ describe('enflasyon payı yıl sonunda bir kez düşülür (2026-10-30)', () => 
     expect(big[0].salaryEUR).toBe(1_000);
   });
 
-  it('Aralık satırı yoksa yılın son satırında düşülür', () => {
-    const [n, j] = monthlyRows([
+  it('Aralık satırı yoksa yılın son satırında (onaylıysa) düşülür', () => {
+    const data = [
       { date: '2026-11-01', gainEUR: 0, wealthEUR: 100_000 },
       { date: '2026-11-30', gainEUR: 100, wealthEUR: 100_100 },
       { date: '2027-01-31', gainEUR: 100, wealthEUR: 100_200 },
-    ], 0.03, { carryResetFrom: null });
+    ];
+    const [pn] = monthlyRows(data, 0.03, { carryResetFrom: null });
+    expect(pn.inflationEUR).toBe(0); expect(pn.inflationDecision).toBe('pending');
+    const amt = pn.inflationAwaitingApprovalEUR!;
+    expect(amt).toBeCloseTo(pn.inflationAccruedEUR!, 6);
+    const [n, j] = monthlyRows(data, 0.03, { carryResetFrom: null,
+      inflationDecisions: { '2026': { year: 2026, decision: 'approved', rate: 0.03, amountEUR: amt, decidedAt: '2027-01-01T00:00:00Z' } } });
     expect(n.yearEndInflationApplied).toBe(true);
     expect(n.inflationEUR).toBeCloseTo(n.inflationAccruedEUR!, 6);
     expect(j.inflationEUR).toBe(0);
   });
 
   it('zarar devri sıfırlanınca o aylardan biriken pay da sıfırlanır', () => {
-    const [aug, sep, , dec] = monthlyRows([
+    const rowsCR = monthlyRows([
       { date: '2026-08-01', gainEUR: 0, wealthEUR: 100_000 },
       { date: '2026-08-31', gainEUR: -2_000, wealthEUR: 98_000 },
       { date: '2026-09-30', gainEUR: 100, wealthEUR: 98_100 },
       { date: '2026-10-31', gainEUR: 100, wealthEUR: 98_200 },
       { date: '2026-12-31', gainEUR: 100, wealthEUR: 98_300 },
     ], 0.03, { carryResetFrom: '2026-09', fillGapMonths: true });
+    const [aug, sep] = rowsCR; const dec = rowsCR.find(r => r.month === '2026-12')!;
     expect(aug.carryOutEUR).toBe(-2_000);
     expect(sep.carryResetApplied).toBe(true);
     expect(sep.inflationPendingEUR).toBeCloseTo(sep.inflationAccruedEUR!, 6);
-    expect(dec.inflationEUR).toBeLessThan(4 * 98_300 * mRate);   // Ağustos payı dahil değil
+    expect(dec.inflationEUR).toBe(0);                                 // onaysız düşülmez
+    expect(dec.inflationAwaitingApprovalEUR!).toBeGreaterThan(0);
+    expect(dec.inflationAwaitingApprovalEUR!).toBeLessThan(4 * 98_300 * mRate);   // Ağustos payı dahil değil
   });
 });
 

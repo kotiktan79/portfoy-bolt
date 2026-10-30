@@ -7,7 +7,7 @@ import { withdrawnMap } from './eurPnl';
 import { planSalary, SALARY_START_MONTH } from './salaryPlan';
 
 export const SALARY_RULE_LINE = 'Sadece bu kadar çek, fazlasını değil.';
-export const INFLATION_NOTE = 'Enflasyon payı yıl sonunda düşülecek';
+export const INFLATION_NOTE = 'Enflasyon payı yıl sonunda senin onayınla düşülecek';
 
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
@@ -29,6 +29,8 @@ export interface MonthSalaryInputs {
   monthProfitEUR?: number | null;
   /** Yıl sonunda düşülmesi beklenen enflasyon payı (mevcut ayarla tahmin). */
   yearEndInflationEUR?: number | null;
+  /** Yıl sonu payının onay durumu cümlesi ("Enflasyon payı onay bekliyor: ~€X"). Varsa tahmin notunun yerine geçer. */
+  inflationStatusNote?: string | null;
 }
 
 export type MonthSalaryState = 'not_started' | 'open' | 'withdrawn';
@@ -142,7 +144,7 @@ export function buildMonthSalaryCard(inp: MonthSalaryInputs): MonthSalaryCardVie
     withdrawnThisMonthEUR: withdrawn,
     profitLine: monthProfitLine(inp.asOfMonth, inp.monthProfitEUR),
     monthProfitEUR: inp.monthProfitEUR == null || !Number.isFinite(Number(inp.monthProfitEUR)) ? null : Number(inp.monthProfitEUR),
-    inflationNote: inflationNoteLine(inp.yearEndInflationEUR),
+    inflationNote: inp.inflationStatusNote || inflationNoteLine(inp.yearEndInflationEUR),
   };
 
   if (plan.preview) {
