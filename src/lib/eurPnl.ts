@@ -1,4 +1,5 @@
 import type { InflationDecisions } from './inflationDecision.js';
+import { computeDailyMovers, type DailyMover } from './dailyMovers.js';
 // EURO BAZLI KÂR — TEK CETVEL (2026-09-19, standart araştırması + kullanıcı kararı)
 //
 // Dayanak: GIPS 2020 (dönem kârı = servet farkı − dış akış; tek raporlama para birimi),
@@ -868,6 +869,8 @@ export interface LiveGain {
   otherEUR?: number;           // kalan (miktar değişimi, fiyatı bilinmeyen pozisyon, akış artığı)
   /** kayıtsız maliyet/adet düzeltmesi algılandı: bu tutar (EUR) kâra SAYILMADI */
   correctionEUR?: number;
+  /** pozisyon başına € değişim (kur dahil) — 'Bugün en çok yükselen / düşen' paneli. Kapanış fiyatı yoksa tanımsız. */
+  movers?: DailyMover[];
 }
 
 export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | null {
@@ -973,6 +976,10 @@ export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | nul
     out.fxEUR = fxEUR;
     out.parts = parts;
     out.otherEUR = gainEUR - fxEUR - parts.reduce((t, p) => t + p.eurDelta, 0);
+    out.movers = computeDailyMovers({
+      holdings: inp.holdings, closePrices: inp.closePrices,
+      rateNow: fxNow, rateClose: rateLastOf, eurNow: inp.eurNow, eurClose: eurLast,
+    });
   }
   return out;
 }
