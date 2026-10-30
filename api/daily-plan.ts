@@ -39,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mtd = eur.mtd;
     const plan = {
       actions,
-      market_outlook: `Servet €${Math.round(eur.wealthEUR).toLocaleString('de-DE')} · son gün ${eur.dayGainEUR >= 0 ? '+' : '−'}€${Math.abs(Math.round(eur.dayGainEUR)).toLocaleString('de-DE')} · bu ay reel ${(mtd?.realGainEUR || 0) >= 0 ? '+' : '−'}€${Math.abs(Math.round(mtd?.realGainEUR || 0)).toLocaleString('de-DE')} · çekilebilir maaş €${Math.round(salary).toLocaleString('de-DE')}. Kâr = euro servet artışı, para giriş/çıkışı ve kur hariç.`,
+      market_outlook: `Servet €${Math.round(eur.wealthEUR).toLocaleString('de-DE')} · son gün ${eur.dayGainEUR >= 0 ? '+' : '−'}€${Math.abs(Math.round(eur.dayGainEUR)).toLocaleString('de-DE')} · bu ay kâr ${(mtd?.realGainEUR || 0) >= 0 ? '+' : '−'}€${Math.abs(Math.round(mtd?.realGainEUR || 0)).toLocaleString('de-DE')} · çekilebilir maaş €${Math.round(salary).toLocaleString('de-DE')}. Kâr = euro servet artışı, para giriş/çıkışı ve kur hariç.`,
       top_pick: '',                       // 'Günün Tercihi' yok — işlem çağrışımlı alan boş
       notice: anomalies.length ? '' : 'Haftalık plan: EUR nakitten €1.000, tamamı VWCE. €7.000 kenarda kalır. Ay sonu maaş hakkı Kâr Cüzdanı\'nda.',
       portfolio_diagnosis: '',

@@ -309,7 +309,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
   const html = `
     <div style="${styleBase}">
       <h1 style="font-size:18px;margin:0 0 4px;color:#312e81;">Aylık Rapor · ${m.monthLabel}</h1>
-      <p style="font-size:13px;color:#64748b;margin:0 0 16px;">tek ölçü EUR · kâr = servet farkı − dış akış · enflasyon %${Math.round(INFLATION_EUR * 100)}/yıl · zarar devreder</p>
+      <p style="font-size:13px;color:#64748b;margin:0 0 16px;">tek ölçü EUR · kâr = servet farkı − dış akış · enflasyon %${Math.round(INFLATION_EUR * 100)}/yıl, yıl sonunda düşülür · zarar devreder</p>
       ${m.healthOk ? '' : `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">⚠️ Kur serisi güncel değil — rakamlar güvenilmez olabilir.</div>`}
 
       ${card(`
@@ -318,8 +318,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
         <div style="font-size:13px;color:#64748b;">Servet ${eur(m.startWealthEUR)} → ${eur(m.endWealthEUR)}</div>
         <div style="margin-top:10px;">
           ${row('Nominal kâr', m.gainEUR)}
-          ${row('Enflasyon payı (sermaye koruma)', -m.inflationEUR, true, '#64748b')}
-          ${row('Reel kâr', m.realGainEUR)}
+          ${m.inflationEUR > 0 ? row('Yıl sonu enflasyon payı (sermaye koruma)', -m.inflationEUR, true, '#64748b') + row('Enflasyon sonrası kâr', m.realGainEUR) : `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#64748b;">Enflasyon payı yıl sonunda düşülecek</div>`}
           ${m.carryResetApplied ? `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span style="color:#475569;">Eski açık (Nisan öncesi kâr yastığıyla)</span><span style="font-weight:700;color:#059669;">sıfırlandı</span></div>` : ''}
           ${row('Devreden açık (ay başı)', m.carryInEUR, true, m.carryInEUR < 0 ? '#dc2626' : '#64748b')}
           ${row('Çekilebilir', m.withdrawableEUR, false, '#0f172a')}

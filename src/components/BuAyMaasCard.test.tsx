@@ -78,4 +78,18 @@ describe('Bu Ay Maaşın kartı', () => {
     expect(screen.getByText('Bu ay çekebileceğin maaş: €0')).toBeInTheDocument();
     expect(screen.queryByText(/Kârdan|Kasadan|kasadan/)).not.toBeInTheDocument();
   });
+
+  it('ayın tek kâr rakamını ve yıl sonu enflasyon notunu yazar', () => {
+    renderCard({ ...base, monthProfitEUR: -535.4, yearEndInflationEUR: 1_123 });
+    const card = screen.getByRole('region', { name: 'Bu Ay Maaşın' });
+    expect(screen.getByTestId('bu-ay-kar')).toHaveTextContent('Ekim 2026 zararı: −€535');
+    expect(card).toHaveTextContent('Enflasyon payı yıl sonunda düşülecek (tahmini €1.123)');
+    expect(card.textContent).not.toMatch(/reel|−€888/);
+  });
+
+  it('kâr verisi yoksa kâr satırı çıkmaz, not yine görünür', () => {
+    renderCard(base);
+    expect(screen.queryByTestId('bu-ay-kar')).not.toBeInTheDocument();
+    expect(screen.getByText('Enflasyon payı yıl sonunda düşülecek')).toBeInTheDocument();
+  });
 });

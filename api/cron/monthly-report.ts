@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: false, log });
     }
     const entitlement = entitlementEUR(row.carryOutEUR);   // TEK TABAN: ay sonu havuzu × 0,85 (cüzdanla aynı)
-    log.push(`EUR motoru: ${monthLabel} kâr ${fmtSignedEUR(row.gainEUR)}, reel ${fmtSignedEUR(row.realGainEUR)}, havuz ${fmtSignedEUR(row.carryOutEUR)} → maaş ${fmtEUR(entitlement)}, kur ${model.health.ok ? 'güncel' : 'ESKİ'}`);
+    log.push(`EUR motoru: ${monthLabel} kâr ${fmtSignedEUR(row.gainEUR)}, yıl sonu enflasyon −${fmtEUR(row.inflationEUR)}, havuz ${fmtSignedEUR(row.carryOutEUR)} → maaş ${fmtEUR(entitlement)}, kur ${model.health.ok ? 'güncel' : 'ESKİ'}`);
     const eurRateAtEnd = model.daily.filter(d => d.date <= monthEnd).pop()?.eurRate || model.daily[model.daily.length - 1]?.eurRate || 0;
     const toEUR = (tl: number) => (eurRateAtEnd > 0 ? tl / eurRateAtEnd : 0);
 
@@ -107,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await sendPushToAll({
       title: `💸 ${snapshot.salaryMonthLabel} maaşı: ${fmtEUR(entitlement)}`,
-      body: `${monthLabel}: nominal ${fmtSignedEUR(row.gainEUR)} · reel ${fmtSignedEUR(row.realGainEUR)} · devir ${fmtSignedEUR(row.carryOutEUR)}`,
+      body: `${monthLabel}: kâr ${fmtSignedEUR(row.gainEUR)}${row.inflationEUR > 0 ? ` · yıl sonu enflasyon −${fmtEUR(row.inflationEUR)}` : ''} · devir ${fmtSignedEUR(row.carryOutEUR)}`,
       url: '/performance',
       tag: 'monthly-report',
     }).catch((e) => console.error('[push] gönderim hatası:', e));

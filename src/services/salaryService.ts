@@ -1,7 +1,7 @@
 // DİNAMİK MAAŞ — TEK ÖLÇÜ, EUR (2026-09-19 gece, standart araştırması + kullanıcı kararı "tek euro")
 //
-//   bu ayın maaşı = geçen ayın ÇEKİLEBİLİR reel EUR kârı × 0,85
-//   çekilebilir   = max(0, devreden açık + (nominal kâr − enflasyon payı))
+//   bu ayın maaşı = geçen ayın ÇEKİLEBİLİR EUR kârı × 0,85 (aylık tavanla)
+//   çekilebilir   = max(0, devreden bakiye + o ayın kârı); enflasyon payı yıl sonunda (Aralık) bir kez düşülür
 //   nominal kâr   = euro servet artışı − dış akış (lib/eurPnl.ts; 4 bağımsız denetçi ±€40 içinde doğruladı)
 //
 // Dayanak: GIPS (dönem kârı = servet farkı − akış), IAS 21 §9 (fonksiyonel para = harcanan para = EUR),
@@ -99,9 +99,9 @@ export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {
 }
 
 /** Bu ay şimdiye kadar (MTD): nominal kâr, enflasyon payı, devreden açık ve gelecek ay maaş ön izlemesi. */
-export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean; poolOutEUR?: number; poolSpilloverEUR?: number }
+export interface MonthToDate { month: string; monthLabel: string; gainEUR: number; inflationEUR: number; realGainEUR: number; inflationAccruedEUR?: number; inflationPendingEUR?: number; inflationYearEndEstimateEUR?: number; carryInEUR: number; projectedWithdrawableEUR: number; projectedSalaryEUR: number; asOf: string; carryResetApplied?: boolean; poolOutEUR?: number; poolSpilloverEUR?: number }
 export async function getMonthToDate(): Promise<MonthToDate | null> {
   const rows = await getEurMonths();
   const r = rows.find(x => x.month === currentYM()); if (!r) return null;
-  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied, poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR };
+  return { month: r.month, monthLabel: monthLabel(r.month), gainEUR: r.gainEUR, inflationEUR: r.inflationEUR, realGainEUR: r.realGainEUR, inflationAccruedEUR: r.inflationAccruedEUR, inflationPendingEUR: r.inflationPendingEUR, inflationYearEndEstimateEUR: r.inflationYearEndEstimateEUR, carryInEUR: r.carryInEUR, projectedWithdrawableEUR: r.withdrawableEUR, projectedSalaryEUR: r.salaryEUR, asOf: r.lastDate, carryResetApplied: r.carryResetApplied, poolOutEUR: r.carryOutEUR, poolSpilloverEUR: r.poolSpilloverEUR };
 }

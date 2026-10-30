@@ -62,6 +62,14 @@ export function BuAyMaasCard({ inputs }: { inputs?: MonthSalaryInputs }) {
               {view.notice}
             </p>
           )}
+          {view.profitLine && (
+            <p
+              data-testid="bu-ay-kar"
+              className={`text-lg sm:text-xl font-semibold ${(view.monthProfitEUR ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-300'}`}
+            >
+              {view.profitLine}
+            </p>
+          )}
           <p className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white break-words">
             {view.primary}
           </p>
@@ -72,6 +80,9 @@ export function BuAyMaasCard({ inputs }: { inputs?: MonthSalaryInputs }) {
           )}
           <p className="pt-1 text-base text-slate-600 dark:text-gray-300">
             {view.rule}
+          </p>
+          <p className="text-sm text-slate-500 dark:text-gray-400">
+            {view.inflationNote}
           </p>
         </div>
       )}

@@ -16,9 +16,11 @@
 //       (5 bağımsız denetçinin ortak bulgusu, 2026-09-19)
 //     · realize: satışta hasılat = lot maliyeti + realize kâr; hasılat portföyde kalır,
 //       yani gerçek çıkış = Δmaliyet + realize değil → realize geri eklenir
-//   Aylık nominal kâr G = Σ g_t ; enflasyon payı M = W_baş × ((1+π)^(1/12) − 1)
-//   Reel kâr G^r = G − M ; zarar devri: C_m = min(0, C_{m−1} + G^r) ;
-//   çekilebilir D_m = max(0, C_{m−1} + G^r) ; maaş = 0,85 × D_m
+//   Aylık kâr G = Σ g_t (para girişi/çıkışı ve veri düzeltmesi kâr DEĞİLDİR).
+//   Enflasyon payı (kullanıcı kararı 2026-10-30): her ay PEŞİN düşülmez. Ay ay birikir
+//   (M = W_baş × ((1+π)^(1/12) − 1)) ve YIL SONUNDA (Aralık satırında) bir kez düşülür.
+//   Aralık dışı ayda G^r = G ; Aralık'ta G^r = G − (o yılın biriken payı).
+//   Havuz: C_m = C_{m−1} + G^r ; çekilebilir D_m = max(0, C_m) ; maaş = min(tavan, 0,85 × D_m)
 
 export const RELIABLE_FROM = '2026-04-06';   // EUR/USD 'api' kur serisinin başladığı gün — uygulama ve cron TEK kaynak
 export const INFLATION_EUR = 0.03;           // varsayılan yıllık euro enflasyon; portfoy_bolt_salary_policy.inflation_annual ezebilir
@@ -168,8 +170,18 @@ export interface MonthRow {
   carryResetApplied?: boolean;   // bu ayda devreden açık sıfırlandı (yastık kuralı)
   startWealthEUR: number; endWealthEUR: number;
   gainEUR: number;            // nominal
-  inflationEUR: number;       // sermaye koruma payı
-  realGainEUR: number;        // gain − inflation
+  /** Bu ay DÜŞÜLEN enflasyon payı. Yalnız yıl sonu (Aralık) satırında dolu: o yılın biriken payı. Diğer aylarda 0. */
+  inflationEUR: number;
+  /** gain − inflationEUR. Aralık dışında = gainEUR (enflasyon yıl sonuna kadar düşülmez). */
+  realGainEUR: number;
+  /** Bu ayın enflasyon payı (bilgi için; bu ay düşülmez, yıl sonuna birikir). */
+  inflationAccruedEUR?: number;
+  /** Bu yıl şimdiye kadar biriken, henüz düşülmemiş pay (bu ay dahil). Yıl sonu satırında düşüldüğü için 0. */
+  inflationPendingEUR?: number;
+  /** Yıl sonunda düşülmesi beklenen toplam pay: biriken + kalan aylar × (ay sonu servet × aylık oran). */
+  inflationYearEndEstimateEUR?: number;
+  /** Bu satırda yıl sonu enflasyon payı düşüldü */
+  yearEndInflationApplied?: boolean;
   carryInEUR: number;         // ay başı devreden açık (≤0)
   withdrawableEUR: number;    // max(0, carryIn + realGain)
   carryOutEUR: number;        // ay sonu bakiye: havuz (+, tavanlı) ya da devreden açık (−)
@@ -312,12 +324,30 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
     rows = filled;
   }
   let carry = 0, didReset = false;
-  for (const r of rows) {
-    // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin)
-    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; didReset = true; }
+  let pendingInflation = 0;   // bu yıl biriken, henüz düşülmemiş enflasyon payı
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin).
+    // Yastık önceki ayları karşıladığı için o aylardan biriken enflasyon payı da sıfırlanır.
+    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; pendingInflation = 0; r.carryResetApplied = true; didReset = true; }
     const frac = inflationFraction(r.month, o.today);
     r.openMonth = frac < 1;
-    r.inflationEUR = r.startWealthEUR * mRate * frac;
+    r.inflationAccruedEUR = r.startWealthEUR * mRate * frac;
+    pendingInflation += r.inflationAccruedEUR;
+    // Yıl sonu: Aralık satırı; Aralık satırı yoksa yılın son satırı (sonraki satır yeni yılda).
+    const next = rows[i + 1];
+    const yearEnd = r.month.slice(5, 7) === '12' || (!!next && next.month.slice(0, 4) !== r.month.slice(0, 4));
+    const monthNo = Number(r.month.slice(5, 7));
+    r.inflationYearEndEstimateEUR = pendingInflation + (yearEnd ? 0 : Math.max(0, 12 - monthNo) * r.endWealthEUR * mRate
+      + (1 - frac) * r.startWealthEUR * mRate);
+    if (yearEnd) {
+      r.inflationEUR = pendingInflation;
+      r.yearEndInflationApplied = pendingInflation > 0;
+      pendingInflation = 0;
+    } else {
+      r.inflationEUR = 0;
+    }
+    r.inflationPendingEUR = pendingInflation;
     r.realGainEUR = r.gainEUR - r.inflationEUR;
     r.carryInEUR = carry;                                    // havuz (+) ya da devreden açık (−)
     const bal = carry + r.realGainEUR;

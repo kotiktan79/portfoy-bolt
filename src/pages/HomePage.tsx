@@ -42,7 +42,7 @@ import type { LiveGain } from '../lib/eurPnl';
 // Dinamik Maaş kart alt yazısı: sıfırın SEBEBİNİ göster (devreden açık) — hakem/tarama bulgusu
 // Havuz kuralı: hak = kapanmış son ayın havuzu × 0,85 (aylık tavan €1.000)
 const salaryLabel = (d: DynamicSalary) => (d.poolOutEUR ?? 0) < 0
-  ? `${d.monthLabel} sonu havuz −€${Math.round(Math.abs(d.poolOutEUR ?? 0))} açık → maaş yok (${d.monthLabel} reel ${d.realGainEUR >= 0 ? '+' : '−'}€${Math.round(Math.abs(d.realGainEUR))})`
+  ? `${d.monthLabel} sonu havuz −€${Math.round(Math.abs(d.poolOutEUR ?? 0))} açık → maaş yok (${d.monthLabel} kâr ${d.realGainEUR >= 0 ? '+' : '−'}€${Math.round(Math.abs(d.realGainEUR))})`
   : `havuz €${Math.round(d.poolOutEUR ?? 0)} × 0,85 (${d.monthLabel} sonu)`;
 
 
