@@ -64,8 +64,8 @@ export function DailyMonthlyPnL() {
                   <p className="text-sm font-bold text-gray-900 dark:text-white">{r.label}</p>
                   <p className="text-xs text-slate-500 dark:text-gray-400">
                     servet {fmtW(r.startWealthEUR)} → {fmtW(r.endWealthEUR)}
-                    {r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">· reel {fmtEur(r.realGainEUR ?? 0)} → maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
-                    {(r.gapFilled || (r.key.length === 7 && r.gapDays >= 4)) && <span className="ml-1 text-amber-600">⚠ {r.gapFilled ? 'bu ayın snapshot kaydı yok, enflasyon yine düşüldü' : `${r.gapDays} gün snapshot yok`}</span>}
+                    {r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">{(r.inflationEUR ?? 0) > 0 && <>· yıl sonu enflasyon payı −€{Math.round(r.inflationEUR ?? 0).toLocaleString('de-DE')} </>}→ maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
+                    {(r.gapFilled || (r.key.length === 7 && r.gapDays >= 4)) && <span className="ml-1 text-amber-600">⚠ {r.gapFilled ? 'bu ayın snapshot kaydı yok, enflasyon payı yine birikti' : `${r.gapDays} gün snapshot yok`}</span>}
                   </p>
                 </div>
               </div>
@@ -131,7 +131,7 @@ export function DailyMonthlyPnL() {
                       <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posM}/{rows.length} ay kâr</p>
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
-                      Kâr = euro servetin artışı. Kurun euro karşılığı kârdır. Maaş = (kâr − enflasyon payı, varsayılan %3/yıl, açık ay gün oranında, zarar devirli) × 0,85 (Kâr Cüzdanı).
+                      Kâr = euro servetin artışı. Kurun euro karşılığı kârdır. Maaş = (o ayın kârı, zarar devirli) × 0,85 (Kâr Cüzdanı). Enflasyon payı (varsayılan %3/yıl) her ay değil, yıl sonunda bir kez düşülür.
                     </p>
                   </div>
                 );

@@ -189,18 +189,112 @@ describe('eurPnl', () => {
     expect(right.gainEUR).toBeCloseTo(0, 6);                                             // düzeltmeyle 0
   });
 
-  it('(f) aylık: enflasyon payı, zarar devri, maaş', () => {
+  it('(f) aylık: kâr, zarar devri, maaş (enflasyon ay içinde düşülmez)', () => {
     const daily = [
       { date: '2026-06-01', gainEUR: 0, wealthEUR: 150000 }, { date: '2026-06-30', gainEUR: -4000, wealthEUR: 146000 },
       { date: '2026-07-31', gainEUR: 1000, wealthEUR: 147000 }, { date: '2026-08-31', gainEUR: 3500, wealthEUR: 150500 },
     ];
     const rows = monthlyRows(daily, 0.02);
     const [jun, jul, aug] = rows;
-    expect(jun.inflationEUR).toBeCloseTo(150000 * (Math.pow(1.02, 1 / 12) - 1), 4);
-    expect(jun.withdrawableEUR).toBe(0); expect(jun.carryOutEUR).toBeLessThan(-4000);
+    expect(jun.inflationAccruedEUR).toBeCloseTo(150000 * (Math.pow(1.02, 1 / 12) - 1), 4);
+    expect(jun.inflationEUR).toBe(0);                             // ay içinde düşülmez
+    expect(jun.withdrawableEUR).toBe(0); expect(jun.carryOutEUR).toBe(-4000);
     expect(jul.withdrawableEUR).toBe(0);                          // açık henüz kapanmadı
     expect(aug.carryInEUR).toBeCloseTo(jul.carryOutEUR, 6);
     expect(aug.salaryEUR).toBeCloseTo(0.85 * Math.max(0, aug.carryInEUR + aug.realGainEUR), 6);
+  });
+});
+
+describe('enflasyon payı yıl sonunda bir kez düşülür (2026-10-30)', () => {
+  const mRate = Math.pow(1.03, 1 / 12) - 1;
+  // Ekim 2026 ekran örneği: servet €148.074 → €148.061, akışa göre kâr −€535 (+€522 para girişi kâr değildir)
+  const oct = [
+    { date: '2026-09-30', gainEUR: 0, wealthEUR: 148_074 },
+    { date: '2026-10-15', gainEUR: -300, wealthEUR: 148_300 },
+    { date: '2026-10-30', gainEUR: -235, wealthEUR: 148_061 },
+  ];
+
+  it('ay satırı akışa göre düzeltilmiş kârı gösterir, enflasyon düşmez', () => {
+    const rows = monthlyRows(oct, 0.03, { today: '2026-10-30', carryResetFrom: null });
+    const r = rows.find(x => x.month === '2026-10')!;
+    expect(r.gainEUR).toBe(-535);
+    expect(r.realGainEUR).toBe(-535);                 // eski: −535 − €353 pay = −€888
+    expect(r.inflationEUR).toBe(0);
+    expect(r.inflationAccruedEUR).toBeCloseTo(148_074 * mRate * 30 / 31, 4);
+    expect(r.inflationAccruedEUR!).toBeGreaterThan(352); expect(r.inflationAccruedEUR!).toBeLessThan(354);
+    expect(r.yearEndInflationApplied).toBeFalsy();
+    expect(r.inflationYearEndEstimateEUR!).toBeGreaterThan(r.inflationPendingEUR!);
+  });
+
+  it('para girişi kâr sayılmaz: servet artsa da kâr akış hariçtir', () => {
+    const rows = monthlyRows([
+      { date: '2026-10-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-10-02', gainEUR: -100, wealthEUR: 104_900 },   // +€5.000 yatırıldı, piyasa −€100
+    ], 0.03, { carryResetFrom: null });
+    expect(rows[0].gainEUR).toBe(-100);
+    expect(rows[0].realGainEUR).toBe(-100);
+  });
+
+  it('Aralık satırı yılın biriken payını bir kez düşer, Ocak yeniden başlar', () => {
+    const daily = [
+      { date: '2026-10-01', gainEUR: 0, wealthEUR: 120_000 },
+      { date: '2026-10-31', gainEUR: 1_000, wealthEUR: 121_000 },
+      { date: '2026-11-30', gainEUR: 500, wealthEUR: 121_500 },
+      { date: '2026-12-31', gainEUR: 800, wealthEUR: 122_300 },
+      { date: '2027-01-31', gainEUR: 200, wealthEUR: 122_500 },
+    ];
+    const [o, n, d, j] = monthlyRows(daily, 0.03, { carryResetFrom: null });
+    const due = (o.inflationAccruedEUR ?? 0) + (n.inflationAccruedEUR ?? 0) + (d.inflationAccruedEUR ?? 0);
+    expect(o.inflationEUR).toBe(0); expect(n.inflationEUR).toBe(0);
+    expect(o.realGainEUR).toBe(1_000); expect(n.realGainEUR).toBe(500);
+    expect(d.yearEndInflationApplied).toBe(true);
+    expect(d.inflationEUR).toBeCloseTo(due, 6);
+    expect(d.realGainEUR).toBeCloseTo(800 - due, 6);
+    expect(d.inflationPendingEUR).toBe(0);
+    expect(j.inflationEUR).toBe(0);
+    expect(j.inflationPendingEUR).toBeCloseTo(j.inflationAccruedEUR!, 6);
+    // Havuz yıl boyunca nominal kârla büyür, yıl sonu payı bir kez düşer
+    expect(d.carryOutEUR).toBeCloseTo(1_000 + 500 + 800 - due, 6);
+    // Ekim sonundaki tahmin = Ekim payı + Kasım/Aralık × ay sonu servet × oran
+    expect(o.inflationYearEndEstimateEUR).toBeCloseTo(o.inflationAccruedEUR! + 2 * 121_000 * mRate, 6);
+  });
+
+  it('maaş o ayın kârından hesaplanır (tavan aynı)', () => {
+    const rows = monthlyRows([
+      { date: '2026-10-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-10-31', gainEUR: 600, wealthEUR: 100_600 },
+    ], 0.03, { carryResetFrom: null });
+    expect(rows[0].salaryEUR).toBeCloseTo(0.85 * 600, 6);
+    const big = monthlyRows([
+      { date: '2026-10-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-10-31', gainEUR: 5_000, wealthEUR: 105_000 },
+    ], 0.03, { carryResetFrom: null });
+    expect(big[0].salaryEUR).toBe(1_000);
+  });
+
+  it('Aralık satırı yoksa yılın son satırında düşülür', () => {
+    const [n, j] = monthlyRows([
+      { date: '2026-11-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-11-30', gainEUR: 100, wealthEUR: 100_100 },
+      { date: '2027-01-31', gainEUR: 100, wealthEUR: 100_200 },
+    ], 0.03, { carryResetFrom: null });
+    expect(n.yearEndInflationApplied).toBe(true);
+    expect(n.inflationEUR).toBeCloseTo(n.inflationAccruedEUR!, 6);
+    expect(j.inflationEUR).toBe(0);
+  });
+
+  it('zarar devri sıfırlanınca o aylardan biriken pay da sıfırlanır', () => {
+    const [aug, sep, , dec] = monthlyRows([
+      { date: '2026-08-01', gainEUR: 0, wealthEUR: 100_000 },
+      { date: '2026-08-31', gainEUR: -2_000, wealthEUR: 98_000 },
+      { date: '2026-09-30', gainEUR: 100, wealthEUR: 98_100 },
+      { date: '2026-10-31', gainEUR: 100, wealthEUR: 98_200 },
+      { date: '2026-12-31', gainEUR: 100, wealthEUR: 98_300 },
+    ], 0.03, { carryResetFrom: '2026-09', fillGapMonths: true });
+    expect(aug.carryOutEUR).toBe(-2_000);
+    expect(sep.carryResetApplied).toBe(true);
+    expect(sep.inflationPendingEUR).toBeCloseTo(sep.inflationAccruedEUR!, 6);
+    expect(dec.inflationEUR).toBeLessThan(4 * 98_300 * mRate);   // Ağustos payı dahil değil
   });
 });
 

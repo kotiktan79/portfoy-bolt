@@ -225,9 +225,9 @@ export default function DailyReportPage() {
                   <p className="text-lg font-bold text-brand-600">{dynSalary ? `€${formatMoney(dynSalary.entitlementEUR ?? 0)}` : '—'} {dynSalary && <span className="text-xs">/ay</span>}</p>
                   <p className="text-[10px] text-gray-400">{dynSalary
                     ? (dynSalary.withdrawableEUR > 0
-                      ? `${dynSalary.monthLabel} çekilebilir reel kârı €${formatMoney(dynSalary.withdrawableEUR)} × 0,85`
-                      : `${dynSalary.monthLabel}: nominal ${dynSalary.profitEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.profitEUR))}, reel ${dynSalary.realGainEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.realGainEUR))}, devreden açık −€${formatMoney(Math.abs(dynSalary.carryInEUR + dynSalary.realGainEUR))} → çekilebilir €0`)
-                    : 'geçen ayın çekilebilir reel kârı × 0,85'}</p>
+                      ? `${dynSalary.monthLabel} çekilebilir kârı €${formatMoney(dynSalary.withdrawableEUR)} × 0,85`
+                      : `${dynSalary.monthLabel}: kâr ${dynSalary.profitEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.profitEUR))}, yıl sonu enflasyon sonrası ${dynSalary.realGainEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.realGainEUR))}, devreden açık −€${formatMoney(Math.abs(dynSalary.carryInEUR + dynSalary.realGainEUR))} → çekilebilir €0`)
+                    : 'geçen ayın çekilebilir kârı × 0,85'}</p>
                 </div>
               </div>
             </div>
@@ -454,7 +454,7 @@ export default function DailyReportPage() {
                         </div>
                       </div>
                       {row.carryInEUR < 0 && (
-                        <p className="text-[10px] text-amber-600 mt-1">devreden açık −€{formatMoney(Math.abs(row.carryInEUR))} · enflasyon payı €{formatMoney(row.inflationEUR)}</p>
+                        <p className="text-[10px] text-amber-600 mt-1">devreden açık −€{formatMoney(Math.abs(row.carryInEUR))} {row.inflationEUR > 0 && <> · yıl sonu enflasyon payı €{formatMoney(row.inflationEUR)}</>}</p>
                       )}
                     </div>
                   ))}

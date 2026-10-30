@@ -134,7 +134,7 @@ describe('denetim düzeltmeleri', () => {
     expect(withdrawalEUR({ amount_eur: 1000, amount_usd: 1162.79 }, 52, 44)).toBe(1000);
   });
 
-  it('5 — açık ayın enflasyonu gün oranındadır', () => {
+  it('5 — açık ayın enflasyon payı gün oranında birikir', () => {
     const daily = [
       { date: '2026-10-01', gainEUR: 0, wealthEUR: 180_000 },
       { date: '2026-10-02', gainEUR: 50, wealthEUR: 180_050 },
@@ -143,14 +143,17 @@ describe('denetim düzeltmeleri', () => {
     const full = 180_000 * mRate;
     const open = monthlyRows(daily, 0.02, { today: '2026-10-02', carryResetFrom: null })[0];
     expect(open.openMonth).toBe(true);
-    expect(open.inflationEUR).toBeCloseTo(full * (2 / 31), 4);
-    expect(open.realGainEUR).toBeCloseTo(50 - full * (2 / 31), 4);
+    // Pay gün oranında BİRİKİR ama bu ay düşülmez (yıl sonunda düşülür)
+    expect(open.inflationAccruedEUR).toBeCloseTo(full * (2 / 31), 4);
+    expect(open.inflationEUR).toBe(0);
+    expect(open.realGainEUR).toBe(50);
     const closed = monthlyRows(daily, 0.02, { carryResetFrom: null })[0];
-    expect(closed.inflationEUR).toBeCloseTo(full, 4);
+    expect(closed.inflationAccruedEUR).toBeCloseTo(full, 4);
+    expect(closed.inflationEUR).toBe(0);
     expect(closed.openMonth).toBe(false);
   });
 
-  it('6 — snapshot olmayan ay enflasyon alır ve uyarı taşır', () => {
+  it('6 — snapshot olmayan aya da enflasyon payı birikir ve uyarı taşır', () => {
     const m = buildEurModel({
       ...base,
       asOf: '2026-08-15',
@@ -164,7 +167,8 @@ describe('denetim düzeltmeleri', () => {
     expect(july?.gainEUR).toBe(0);
     expect(july?.maxHoleDays).toBe(31);
     const mRate = Math.pow(1.02, 1 / 12) - 1;
-    expect(july?.inflationEUR).toBeCloseTo(180_000 * mRate, 2);
+    expect(july?.inflationAccruedEUR).toBeCloseTo(180_000 * mRate, 2);
+    expect(july?.inflationEUR).toBe(0);
   });
 
   it('7 — boş euro serisi usd ile çarpılmaz', () => {

@@ -3,7 +3,7 @@
 import { supabase } from '../lib/supabase';
 import { makeRateSeries, RELIABLE_FROM, type RateSeries } from '../lib/eurPnl';
 import { kasaOutstandingEUR } from '../lib/salaryPlan';
-import { currentYM, getDynamicSalary } from './salaryService';
+import { currentYM, getDynamicSalary, getMonthToDate } from './salaryService';
 import { getKasaFx } from './kasaFxService';
 import { withdrawnThisMonthEUR, type MonthSalaryInputs } from '../lib/monthSalaryCard';
 
@@ -37,6 +37,8 @@ export function assembleMonthSalaryInputs(args: {
   withdrawals: SalaryWithdrawalRow[];
   eurRates: Array<{ recorded_at: string; rate: number }>;
   usdRates: Array<{ recorded_at: string; rate: number }>;
+  monthProfitEUR?: number | null;
+  yearEndInflationEUR?: number | null;
 }): MonthSalaryInputs {
   const pol = args.policy;
   return {
@@ -52,6 +54,8 @@ export function assembleMonthSalaryInputs(args: {
     kasaStartEUR: pol ? numOrUndef(pol.kasa_start_eur) : undefined,
     salaryStartMonth: pol && pol.salary_start_month ? String(pol.salary_start_month) : undefined,
     withdrawnThisMonthEUR: withdrawnThisMonthEUR(args.withdrawals, args.asOfMonth, args.eurRates, args.usdRates),
+    monthProfitEUR: args.monthProfitEUR ?? null,
+    yearEndInflationEUR: args.yearEndInflationEUR ?? null,
   };
 }
 
@@ -66,7 +70,7 @@ export function salaryRateSeries(rows: Array<{ day: string; rate: number }> | nu
 
 export async function loadMonthSalaryInputs(now = new Date()): Promise<MonthSalaryInputs> {
   const asOfMonth = currentYM(now);
-  const [salary, kasa, policyRes, movesRes, wdRes, eurRes, usdRes] = await Promise.all([
+  const [salary, kasa, policyRes, movesRes, wdRes, eurRes, usdRes, mtd] = await Promise.all([
     getDynamicSalary(),
     getKasaFx(),
     supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle(),
@@ -74,6 +78,7 @@ export async function loadMonthSalaryInputs(now = new Date()): Promise<MonthSala
     supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(200),
     supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
     supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
+    getMonthToDate().catch(() => null),
   ]);
   if (wdRes.error) throw new Error(wdRes.error.message);
   if (!kasa) throw new Error('kasa yok');
@@ -89,5 +94,8 @@ export async function loadMonthSalaryInputs(now = new Date()): Promise<MonthSala
     withdrawals: (wdRes.data || []) as SalaryWithdrawalRow[],
     eurRates: ratePoints(eurRes.data),
     usdRates: ratePoints(usdRes.data),
+    // Bu ayın akışa göre kârı (enflasyon düşülmeden) ve yıl sonu enflasyon tahmini — aynı euro motoru
+    monthProfitEUR: mtd && mtd.month === asOfMonth ? mtd.gainEUR : null,
+    yearEndInflationEUR: mtd?.inflationYearEndEstimateEUR ?? null,
   });
 }

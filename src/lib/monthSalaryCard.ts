@@ -7,6 +7,7 @@ import { withdrawnMap } from './eurPnl';
 import { planSalary, SALARY_START_MONTH } from './salaryPlan';
 
 export const SALARY_RULE_LINE = 'Sadece bu kadar çek, fazlasını değil.';
+export const INFLATION_NOTE = 'Enflasyon payı yıl sonunda düşülecek';
 
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
@@ -24,6 +25,10 @@ export interface MonthSalaryInputs {
   kasaStartEUR?: number;
   refillRatio?: number;
   salaryStartMonth?: string;
+  /** İçinde bulunulan ayın akışa göre düzeltilmiş kârı/zararı (EUR). Para giriş/çıkışı ve düzeltme hariç, enflasyon düşülmez. */
+  monthProfitEUR?: number | null;
+  /** Yıl sonunda düşülmesi beklenen enflasyon payı (mevcut ayarla tahmin). */
+  yearEndInflationEUR?: number | null;
 }
 
 export type MonthSalaryState = 'not_started' | 'open' | 'withdrawn';
@@ -45,6 +50,11 @@ export interface MonthSalaryCardView {
   plannedFromPoolEUR: number;
   plannedFromKasaEUR: number;
   withdrawnThisMonthEUR: number;
+  /** "Ekim 2026 kârı: −€535" — ayın TEK kâr rakamı. Veri yoksa null. */
+  profitLine: string | null;
+  monthProfitEUR: number | null;
+  /** "Enflasyon payı yıl sonunda düşülecek (tahmini €X)". */
+  inflationNote: string;
 }
 
 export function salaryMonthLabel(ym: string): string {
@@ -59,6 +69,24 @@ export function salaryStartPhrase(ym: string): string {
 /** Kâr Cüzdanı fmt() ile aynı: en yakın euro, binlik ayırıcı nokta. */
 export function formatSalaryEUR(n: number): string {
   return `€${Math.round(Math.abs(n)).toLocaleString('de-DE')}`;
+}
+
+/** İşaretli tutar: +€1.234 / −€535 / €0 */
+export function formatSignedEUR(n: number): string {
+  const r = Math.round(n);
+  if (r === 0) return '€0';
+  return `${r > 0 ? '+' : '−'}${formatSalaryEUR(r)}`;
+}
+
+export function monthProfitLine(ym: string, profitEUR: number | null | undefined): string | null {
+  if (profitEUR == null || !Number.isFinite(Number(profitEUR))) return null;
+  const v = Number(profitEUR);
+  return `${salaryMonthLabel(ym)} ${Math.round(v) < 0 ? 'zararı' : 'kârı'}: ${formatSignedEUR(v)}`;
+}
+
+export function inflationNoteLine(yearEndEUR: number | null | undefined): string {
+  const v = Number(yearEndEUR);
+  return Number.isFinite(v) && Math.round(v) > 0 ? `${INFLATION_NOTE} (tahmini ${formatSalaryEUR(v)})` : INFLATION_NOTE;
 }
 
 /** Yalnız sıfır olmayan parça. İkisi de varsa: "Kârdan €A + kasadan €B". */
@@ -112,6 +140,9 @@ export function buildMonthSalaryCard(inp: MonthSalaryInputs): MonthSalaryCardVie
     plannedFromPoolEUR: plan.fromPoolEUR,
     plannedFromKasaEUR: plan.fromKasaEUR,
     withdrawnThisMonthEUR: withdrawn,
+    profitLine: monthProfitLine(inp.asOfMonth, inp.monthProfitEUR),
+    monthProfitEUR: inp.monthProfitEUR == null || !Number.isFinite(Number(inp.monthProfitEUR)) ? null : Number(inp.monthProfitEUR),
+    inflationNote: inflationNoteLine(inp.yearEndInflationEUR),
   };
 
   if (plan.preview) {

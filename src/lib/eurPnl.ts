@@ -16,9 +16,11 @@
 //       (5 bağımsız denetçinin ortak bulgusu, 2026-09-19)
 //     · realize: satışta hasılat = lot maliyeti + realize kâr; hasılat portföyde kalır,
 //       yani gerçek çıkış = Δmaliyet + realize değil → realize geri eklenir
-//   Aylık nominal kâr G = Σ g_t ; enflasyon payı M = W_baş × ((1+π)^(1/12) − 1)
-//   Reel kâr G^r = G − M ; zarar devri: C_m = min(0, C_{m−1} + G^r) ;
-//   çekilebilir D_m = max(0, C_{m−1} + G^r) ; maaş = 0,85 × D_m
+//   Aylık kâr G = Σ g_t (para girişi/çıkışı ve veri düzeltmesi kâr DEĞİLDİR).
+//   Enflasyon payı (kullanıcı kararı 2026-10-30): her ay PEŞİN düşülmez. Ay ay birikir
+//   (M = W_baş × ((1+π)^(1/12) − 1)) ve YIL SONUNDA (Aralık satırında) bir kez düşülür.
+//   Aralık dışı ayda G^r = G ; Aralık'ta G^r = G − (o yılın biriken payı).
+//   Havuz: C_m = C_{m−1} + G^r ; çekilebilir D_m = max(0, C_m) ; maaş = min(tavan, 0,85 × D_m)
 
 export const RELIABLE_FROM = '2026-04-06';   // EUR/USD 'api' kur serisinin başladığı gün — uygulama ve cron TEK kaynak
 export const INFLATION_EUR = 0.03;           // varsayılan yıllık euro enflasyon; portfoy_bolt_salary_policy.inflation_annual ezebilir
@@ -168,8 +170,18 @@ export interface MonthRow {
   carryResetApplied?: boolean;   // bu ayda devreden açık sıfırlandı (yastık kuralı)
   startWealthEUR: number; endWealthEUR: number;
   gainEUR: number;            // nominal
-  inflationEUR: number;       // sermaye koruma payı
-  realGainEUR: number;        // gain − inflation
+  /** Bu ay DÜŞÜLEN enflasyon payı. Yalnız yıl sonu (Aralık) satırında dolu: o yılın biriken payı. Diğer aylarda 0. */
+  inflationEUR: number;
+  /** gain − inflationEUR. Aralık dışında = gainEUR (enflasyon yıl sonuna kadar düşülmez). */
+  realGainEUR: number;
+  /** Bu ayın enflasyon payı (bilgi için; bu ay düşülmez, yıl sonuna birikir). */
+  inflationAccruedEUR?: number;
+  /** Bu yıl şimdiye kadar biriken, henüz düşülmemiş pay (bu ay dahil). Yıl sonu satırında düşüldüğü için 0. */
+  inflationPendingEUR?: number;
+  /** Yıl sonunda düşülmesi beklenen toplam pay: biriken + kalan aylar × (ay sonu servet × aylık oran). */
+  inflationYearEndEstimateEUR?: number;
+  /** Bu satırda yıl sonu enflasyon payı düşüldü */
+  yearEndInflationApplied?: boolean;
   carryInEUR: number;         // ay başı devreden açık (≤0)
   withdrawableEUR: number;    // max(0, carryIn + realGain)
   carryOutEUR: number;        // ay sonu bakiye: havuz (+, tavanlı) ya da devreden açık (−)
@@ -312,12 +324,30 @@ export function monthlyRows(daily: DailyGain[], annualInflation: number, opts: M
     rows = filled;
   }
   let carry = 0, didReset = false;
-  for (const r of rows) {
-    // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin)
-    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; r.carryResetApplied = true; didReset = true; }
+  let pendingInflation = 0;   // bu yıl biriken, henüz düşülmemiş enflasyon payı
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    // devreden açık, CARRY_RESET_MONTH veya sonrasındaki İLK ayda bir kez sıfırlanır (o ay satırı hiç oluşmazsa kural düşmesin).
+    // Yastık önceki ayları karşıladığı için o aylardan biriken enflasyon payı da sıfırlanır.
+    if (carryResetFrom && !didReset && r.month >= carryResetFrom && carry < 0) { carry = 0; pendingInflation = 0; r.carryResetApplied = true; didReset = true; }
     const frac = inflationFraction(r.month, o.today);
     r.openMonth = frac < 1;
-    r.inflationEUR = r.startWealthEUR * mRate * frac;
+    r.inflationAccruedEUR = r.startWealthEUR * mRate * frac;
+    pendingInflation += r.inflationAccruedEUR;
+    // Yıl sonu: Aralık satırı; Aralık satırı yoksa yılın son satırı (sonraki satır yeni yılda).
+    const next = rows[i + 1];
+    const yearEnd = r.month.slice(5, 7) === '12' || (!!next && next.month.slice(0, 4) !== r.month.slice(0, 4));
+    const monthNo = Number(r.month.slice(5, 7));
+    r.inflationYearEndEstimateEUR = pendingInflation + (yearEnd ? 0 : Math.max(0, 12 - monthNo) * r.endWealthEUR * mRate
+      + (1 - frac) * r.startWealthEUR * mRate);
+    if (yearEnd) {
+      r.inflationEUR = pendingInflation;
+      r.yearEndInflationApplied = pendingInflation > 0;
+      pendingInflation = 0;
+    } else {
+      r.inflationEUR = 0;
+    }
+    r.inflationPendingEUR = pendingInflation;
     r.realGainEUR = r.gainEUR - r.inflationEUR;
     r.carryInEUR = carry;                                    // havuz (+) ya da devreden açık (−)
     const bal = carry + r.realGainEUR;
@@ -348,6 +378,8 @@ export interface EurHealth {
   duplicateAdjustments?: number;
   /** EUR serisi boş: usd×1,15 UYDURULMAZ. Son gerçek kur da yoksa ölçüm güvenilmez. */
   missingEurRate?: boolean;
+  /** İşlem kaydı olmadan maliyet/adet değişen günler (veri düzeltmesi): kâra/zarara SAYILMADI */
+  corrections?: Array<{ date: string; flowEUR: number; method: 'prices' | 'fallback' }>;
 }
 export interface EurModel {
   daily: EurDaily[]; months: MonthRow[]; health: EurHealth;
@@ -446,7 +478,30 @@ export interface EurModelInput {
   /** PORTFÖYDEN ÇIKAN temettü/kupon (income_records.destination='kasa'): gün → tutar (kendi para biriminde).
    *  Akış olarak düşülür, yani ödeme günü zarar görünmez. 'profit_taking' DAHİL EDİLMEZ (realize zinciri onu sayıyor). */
   payouts?: Array<{ date: string; amount: number; currency: string | null; amountTRY?: number | null }> | null;
+  /** price_history, TÜM pozisyonlar (holding_id ile). Veri düzeltmesi günlerinde kâr fiyat hareketinden ölçülür.
+   *  Yoksa (eski çağıranlar/testler) o gün eski formülle kalır ve health.corrections'ta method:'fallback' görünür. */
+  holdingPrices?: Array<{ holding_id: string | number | null; price: number | string; recorded_at: string }> | null;
 }
+
+// VERİ DÜZELTMESİ KÂR/ZARAR DEĞİLDİR (kullanıcı kuralı; 2026-10-30 olayı)
+// total_investment = Σ adet × alış fiyatı. İşlem kaydı OLMADAN elle yapılan bir maliyet ya da adet düzeltmesi
+// Δmaliyet'i oynatır; eski formül bunu para girişi/çıkışı sanıyordu. 2026-10-28'de REVOLUT-ROBO maliyeti
+// €7.490,58 → €8.021,00 düzeltildi, servet değişmedi ama +€530 "giriş" sayıldı → Ekim −€535 göründü (gerçek ≈ −€5).
+// Kural: alım/satım içseldir (nakit ↔ varlık; satış hasılatı portföyde kalır) → akış ≈ 0. Gerçek akış yalnız
+// kasaya giden temettü/kupon (payouts). Bir günün açıklanamayan akışı (|Δmaliyet − kurDrift − realize − payout|)
+// CORRECTION_MIN_EUR'yu aşarsa o gün KAYITSIZ DEĞİŞİKLİK günüdür ve o günün kârı TOPLAMLARDAN DEĞİL, FİYATLARDAN
+// ölçülür: Σ adet_{dün} × (fiyat_bugün×kur/€_bugün − fiyat_dün×kur/€_dün) + payout. Böylece:
+//   · yalnız maliyet düzeltmesi (değer değişmez)   → kâr etkisi 0
+//   · kayıtsız adet düzeltmesi / elle para ekleme  → değer etkisi kâra SIZMAZ (akış sayılır), kâr etkisi 0
+//   · içsel hareketler (nakit → ETF, TL hisse → TRY, GPY1PPF alımı) zaten ≈ 0 akış → bu günler ETKİLENMEZ
+// Adet_{dün} bugünkü adetten o günden sonraki işlemler geri sarılarak bulunur. Kayıtsız düzeltmenin kendisi
+// adette kalır ama yalnız (adet farkı × o günkü fiyat değişimi) kadar etki eder — ihmal edilebilir.
+// Fiyat verisi eksikse ya da geri sarılmış portföy snapshot değeriyle %1 içinde tutmuyorsa (silinmiş pozisyon vb.)
+// o gün eski (toplamlar) formülüyle kalır ve health.corrections'ta method:'fallback' olarak görünür. Akışı körlemesine
+// 0 saymak, kayıtsız girilmiş gerçek para yatırmayı kâr yapacağı için yedek olarak SEÇİLMEDİ.
+export const CORRECTION_MIN_EUR = 50;
+/** Geri sarılmış portföy değeri snapshot değerinden bu oranda saparsa fiyat ölçümüne güvenilmez. */
+export const CORRECTION_RECON_TOL = 0.01;
 
 export function buildEurModel(inp: EurModelInput): EurModel {
   const { reliableFrom } = inp;
@@ -605,6 +660,94 @@ export function buildEurModel(inp: EurModelInput): EurModel {
   }
 
   const dailyRaw = dailyEurGains(snaps, eur, realizedByDay, driftByDay, payoutByDay);
+
+  // ---- VERİ DÜZELTMESİ NÖTRLEME (bkz. CORRECTION_MIN_EUR açıklaması) ----
+  const priceRate = (ccy: string, d: string): number | null => {
+    const c = String(ccy || 'TRY').toUpperCase();
+    if (c === 'TRY') return 1;
+    const s2 = seriesFor(c); if (!s2) return null;
+    const r = s2.rateAt(d);
+    return Number.isFinite(r) && r > 0 ? r : null;
+  };
+  // gün → (holding → snapshot anındaki son fiyat). Pencere priceAtSnapshot ile aynı.
+  const hp = inp.holdingPrices || [];
+  const hpByUtcDay = new Map<string, Array<{ id: string; p: number; t: number }>>();
+  for (const r of hp) {
+    if (r.holding_id == null) continue;
+    const t = new Date(r.recorded_at).getTime(); if (!Number.isFinite(t)) continue;
+    const p = Number(r.price); if (!Number.isFinite(p)) continue;
+    const k = new Date(t).toISOString().slice(0, 10);
+    if (!hpByUtcDay.has(k)) hpByUtcDay.set(k, []);
+    hpByUtcDay.get(k)!.push({ id: String(r.holding_id), p, t });
+  }
+  const pricesAt = (s: SnapPoint): Map<string, number> => {
+    const until = (s.createdAt ? new Date(s.createdAt).getTime() : new Date(`${s.date}T18:00:00Z`).getTime()) + SNAPSHOT_FX_GRACE_MS;
+    const best = new Map<string, { p: number; t: number }>();
+    for (const r of hpByUtcDay.get(s.date) || []) {
+      if (r.t > until) continue;
+      const b = best.get(r.id); if (!b || r.t >= b.t) best.set(r.id, { p: r.p, t: r.t });
+    }
+    return new Map(Array.from(best, ([id, v]) => [id, v.p]));
+  };
+  // adet geri sarma: işlemin yansıdığı snapshot günü (yoksa Bükreş günü) > d olanlar geri alınır
+  const qtyMoves = new Map<string, Array<{ k: string; dq: number }>>();
+  for (const t of inp.transactions) {
+    if (t.holding_id == null) continue;
+    const q = Number(t.quantity) || 0; if (!q) continue;
+    const ts = String(t.transaction_date);
+    const k = alignEvent(ts) || eventDay(ts);
+    const dq = t.transaction_type === 'buy' ? q : t.transaction_type === 'sell' ? -q : 0; if (!dq) continue;
+    const id = String(t.holding_id);
+    if (!qtyMoves.has(id)) qtyMoves.set(id, []);
+    qtyMoves.get(id)!.push({ k, dq });
+  }
+  const qtyAt = (h: EurModelInput['holdings'][number], d: string): number => {
+    if (h.created_at && eventDay(String(h.created_at)) > d) return 0;
+    let q = Number(h.quantity) || 0;
+    for (const m of qtyMoves.get(String(h.id)) || []) if (m.k > d) q -= m.dq;
+    return q;
+  };
+  const corrections: NonNullable<EurHealth['corrections']> = [];
+  const priceGainEUR = (prev: SnapPoint, cur: SnapPoint): number | null => {
+    if (!hp.length) return null;
+    const p0 = pricesAt(prev), p1 = pricesAt(cur);
+    if (!p0.size || !p1.size) return null;
+    const e0 = eur.rateAt(prev.date), e1 = eur.rateAt(cur.date);
+    let g = 0, vCur = 0;
+    for (const h of holds) {
+      const id = String(h.id), ccy = String(h.currency || 'TRY').toUpperCase();
+      const q0 = qtyAt(h, prev.date), q1 = qtyAt(h, cur.date);
+      if (!q0 && !q1) continue;
+      const r0 = priceRate(ccy, prev.date), r1 = priceRate(ccy, cur.date);
+      if (r0 == null || r1 == null) return null;
+      const a = p0.get(id), b = p1.get(id);
+      if (q1 && b === undefined) return null;
+      if (b !== undefined) vCur += q1 * b * r1;
+      if (!q0) continue;
+      if (a === undefined || b === undefined) return null;
+      g += q0 * (b * r1 / e1 - a * r0 / e0);
+    }
+    // bugünkü (düzeltme sonrası) adetlerle kurulan değer snapshot'ı tutmalı; tutmuyorsa eksik/silinmiş pozisyon var
+    if (!(cur.totalValue > 0) || Math.abs(vCur - cur.totalValue) > CORRECTION_RECON_TOL * cur.totalValue) return null;
+    return g;
+  };
+  for (let i = 1; i < dailyRaw.length; i++) {
+    const d = dailyRaw[i], e1 = eur.rateAt(d.date);
+    const flowEUR = (d.wealthEUR - dailyRaw[i - 1].wealthEUR) - d.gainEUR;   // = açıklanamayan akış (alım/satım ≈ 0)
+    const payoutEUR = (payoutByDay.get(d.date) || 0) / e1;
+    const unexplained = flowEUR + payoutEUR;                                   // payout gerçek akıştır, düzeltme değil
+    if (!(Math.abs(unexplained) >= CORRECTION_MIN_EUR)) continue;
+    const pg = priceGainEUR(snaps[i - 1], snaps[i]);
+    if (pg != null) {
+      d.gainEUR = pg + payoutEUR;                                              // temettü fiyat düşüşü zarar değil
+      corrections.push({ date: d.date, flowEUR: unexplained, method: 'prices' });
+    } else {
+      // Fiyatla ölçülemiyor: eski (toplamlar) sonucu korunur. Akışı 0 saymak, kayıtsız girilmiş GERÇEK para
+      // yatırmayı kâr yapardı (Nisan–Mayıs 2026'da +€2.500 sahte kâr çıkıyordu) — o daha büyük hata.
+      corrections.push({ date: d.date, flowEUR: unexplained, method: 'fallback' });
+    }
+  }
+
   const daily: EurDaily[] = dailyRaw.map((d, i) => ({ ...d, totalValueTRY: snaps[i].totalValue, eurRate: eur.rateAt(d.date), usdRate: usd.rateAt(d.date) }));
   const months = monthlyRows(daily, inp.annualInflation, { withdrawnByMonth: inp.withdrawnByMonth ?? null, today: inp.asOf ?? null, fillGapMonths: true });
   const lastSnapDay = snapDays[snapDays.length - 1] || '';
@@ -615,6 +758,7 @@ export function buildEurModel(inp: EurModelInput): EurModel {
     ...(unknownCcy.size ? { unknownCcy: Array.from(unknownCcy).sort() } : {}),
     ...(pendingAdjustments ? { pendingAdjustments } : {}),
     ...(duplicateAdjustments ? { duplicateAdjustments } : {}),
+    ...(corrections.length ? { corrections } : {}),
   };
   const lastSnapshot = snaps.length ? snaps[snaps.length - 1] : null;
   // son kapanış günündeki kurlar: USD/EUR + varsa diğerleri (anlık kâr drift'i birim bazında hesaplasın)
@@ -690,6 +834,8 @@ export interface LiveGain {
   unknownCcy?: string[];       // kuru bilinmeyen birim: o pozisyon anlık hesaba KATILMADI
   parts?: LiveGainPart[];      // fiyat hareketinden gelenler, mutlak büyüklüğe göre sıralı
   otherEUR?: number;           // kalan (miktar değişimi, fiyatı bilinmeyen pozisyon, akış artığı)
+  /** kayıtsız maliyet/adet düzeltmesi algılandı: bu tutar (EUR) kâra SAYILMADI */
+  correctionEUR?: number;
 }
 
 export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | null {
@@ -736,10 +882,31 @@ export function liveEurGain(model: EurModel, inp: LiveGainInput): LiveGain | nul
     return d + c.costNative * (now - then);
   }, 0);
   const flowTRY = (I - last.totalInvestment) - drift - (inp.realizedTodayTRY || 0) - (inp.payoutTodayTRY || 0);
-  const gainEUR = V / inp.eurNow - last.totalValue / eurLast - flowTRY / inp.eurNow;
+  let gainEUR = V / inp.eurNow - last.totalValue / eurLast - flowTRY / inp.eurNow;
+  // VERİ DÜZELTMESİ (motorla aynı kural, bkz. CORRECTION_MIN_EUR): son kapanıştan beri işlem kaydı olmadan maliyet/adet
+  // değiştiyse açıklanamayan akış büyür. O zaman kâr toplamlardan değil fiyatlardan ölçülür: Σ adet × (fiyat_now×kur/€_now −
+  // kapanış×kur/€_kapanış). Kapanış fiyatı olmayan (bugün açılmış) pozisyon 0 katkı verir.
+  const unexplainedEUR = (flowTRY + (inp.payoutTodayTRY || 0)) / inp.eurNow;
+  let correctionEUR: number | undefined;
+  if (Math.abs(unexplainedEUR) >= CORRECTION_MIN_EUR && inp.closePrices && inp.closePrices.size) {
+    let pg = 0;
+    for (const h of inp.holdings) {
+      const q = Number(h.quantity) || 0; if (!q) continue;
+      const cur = String(h.currency || 'TRY').toUpperCase();
+      const fNow = fxNow(cur); const fThen = cur === 'TRY' ? 1 : rateLastOf(cur);
+      if (fNow === null || fThen === null) continue;
+      const p0 = inp.closePrices.get(String(h.symbol || ''));
+      if (p0 === undefined || !Number.isFinite(p0) || !p0) continue;
+      const cp = Number(h.current_price) || Number(h.purchase_price) || 0;
+      pg += q * (cp * fNow / inp.eurNow - p0 * fThen / eurLast);
+    }
+    gainEUR = pg + (inp.payoutTodayTRY || 0) / inp.eurNow;
+    correctionEUR = unexplainedEUR;
+  }
   const out: LiveGain = {
     gainEUR, wealthEUR: V / inp.eurNow, sinceDate: last.date, totalValueTRY: V,
     ...(unknownLive.size ? { unknownCcy: Array.from(unknownLive).sort() } : {}),
+    ...(correctionEUR !== undefined ? { correctionEUR } : {}),
   };
 
   // KIRILIM (varsa kapanış fiyatları): kur payı + pozisyon bazında fiyat payı + kalan.

@@ -177,7 +177,7 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
 
   const text = `PORTFÖY (${todayStr}, tek ölçü EUR, kasa hariç):
 Servet: ${fmtEUR(eur.wealthEUR)} (≈ ₺${Math.round(eur.wealthTRY).toLocaleString('tr-TR')}, EUR/TRY ${E.toFixed(2)}) · son snapshot ${eur.asOf}
-Kâr: son gün ${fmtSignedEUR(eur.dayGainEUR)} (%${eur.dayGainPct.toFixed(2)}) · son 7 gün ${fmtSignedEUR(eur.weekGainEUR)} · bu ay (${m ? monthLabelTR(m.month) : '—'}) nominal ${fmtSignedEUR(m?.gainEUR || 0)}, enflasyon payı −${fmtEUR(m?.inflationEUR || 0)}, reel ${fmtSignedEUR(m?.realGainEUR || 0)}
+Kâr: son gün ${fmtSignedEUR(eur.dayGainEUR)} (%${eur.dayGainPct.toFixed(2)}) · son 7 gün ${fmtSignedEUR(eur.weekGainEUR)} · bu ay (${m ? monthLabelTR(m.month) : '—'}) kâr ${fmtSignedEUR(m?.gainEUR || 0)} (enflasyon payı yıl sonunda düşülür; bu ay düşülen −${fmtEUR(m?.inflationEUR || 0)})
 Geçen ay (${lf ? monthLabelTR(lf.month) : '—'}): nominal ${fmtSignedEUR(lf?.gainEUR || 0)}, reel ${fmtSignedEUR(lf?.realGainEUR || 0)}
 Güvenilir seri başından (${sinceStart ? monthLabelTR(sinceStart) : '—'}) bu yana: nominal ${fmtSignedEUR(sinceNominal)}, reel ${fmtSignedEUR(sinceReal)} (öncesi için günlük veri yok — rakam verme)
 ${poolLines}

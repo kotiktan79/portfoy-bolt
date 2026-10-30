@@ -260,11 +260,13 @@ export default function KarCuzdani({ holdings }: Props) {
             <p className={`text-3xl font-bold ${entitlementEur > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-300'}`}>€{fmt(entitlementEur)}<span className="text-sm font-normal text-slate-500 dark:text-gray-400">/ay</span></p>
             <div className="text-xs text-slate-600 dark:text-gray-300 mt-2 space-y-0.5">
               <p>{salary.monthLabel}: servet €{fmt(salary.startWealthEUR)} → €{fmt(salary.endWealthEUR)}, dış para hariç kâr <strong>{sgn(salary.profitEUR)}€{fmt(salary.profitEUR)}</strong></p>
-              <p>− enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) €{fmt(salary.inflationEUR)} = reel <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
+              {salary.inflationEUR > 0
+                ? <p>− yıl sonu enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) €{fmt(salary.inflationEUR)} = <strong>{sgn(salary.realGainEUR)}€{fmt(salary.realGainEUR)}</strong>{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>
+                : <p>Enflasyon payı (%{(inflationAnnual * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}/yıl) yıl sonunda düşülecek{salary.carryInEUR < 0 && <> · devreden açık <strong>−€{fmt(salary.carryInEUR)}</strong></>}</p>}
               {poolEur < 0
                 ? <p>→ havuz <strong>−€{fmt(poolEur)} açık</strong> → maaş €0 — bu ay maaş yok, fark yastıktan</p>
                 : <p>→ havuz €{fmt(poolEur)} × 0,85{0.85 * poolEur > MONTHLY_CAP_EUR ? `, aylık tavan €${fmt(MONTHLY_CAP_EUR)}` : ''} = <strong>€{fmt(entitlementEur)}</strong>{entitlementEur === 0 && ' — bu ay maaş yok'}</p>}
-              {mtd && <p className="text-slate-500 dark:text-gray-400">Bu ay ({mtd.monthLabel}) reel kâr {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)} → ay sonu havuzu {mtdPoolEur < 0 ? `−€${fmt(mtdPoolEur)} açık` : `€${fmt(mtdPoolEur)}`}{mtdPoolEur > 0 && ` → ay kapanınca × 0,85 = €${fmt(mtd.projectedSalaryEUR)} hak`}</p>}
+              {mtd && <p className="text-slate-500 dark:text-gray-400">Bu ay ({mtd.monthLabel}) kâr {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)} → ay sonu havuzu {mtdPoolEur < 0 ? `−€${fmt(mtdPoolEur)} açık` : `€${fmt(mtdPoolEur)}`}{mtdPoolEur > 0 && ` → ay kapanınca × 0,85 = €${fmt(mtd.projectedSalaryEUR)} hak`}</p>}
               {salary.carryResetApplied && <p className="text-emerald-700 dark:text-emerald-300">Bu ayda eski açık, Nisan öncesi kazanılan kâr yastığıyla sıfırlandı.</p>}
             </div>
           </>
@@ -361,7 +363,7 @@ export default function KarCuzdani({ holdings }: Props) {
           )}
           {mtd && (
             <div className="mt-3 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-gray-300">
-              <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)} · enflasyon payı €{fmt(mtd.inflationEUR)} · reel {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}
+              <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)}{mtd.inflationEUR > 0 ? <> · yıl sonu enflasyon payı −€{fmt(mtd.inflationEUR)} = {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}</> : <> · enflasyon payı yıl sonunda düşülecek{(mtd.inflationYearEndEstimateEUR ?? 0) > 0 && <> (tahmini €{fmt(mtd.inflationYearEndEstimateEUR ?? 0)})</>}</>}
               {mtd.carryResetApplied && <> · <span className="text-emerald-700 dark:text-emerald-300 font-semibold">Nisan öncesi kazanılan kâr yastığıyla eski açık sıfırlandı</span></>}
               {mtd.carryInEUR < 0 && <> · devreden açık −€{fmt(mtd.carryInEUR)} → kalan açık €{fmt(Math.min(0, mtd.carryInEUR + mtd.realGainEUR))}</>}
               <br />→ <span className="font-semibold">gelecek ay maaş ön izlemesi: €{fmt(mtd.projectedSalaryEUR)}</span> (ay sonuna kadar değişir)
@@ -369,13 +371,13 @@ export default function KarCuzdani({ holdings }: Props) {
           )}
           {accrual && (
             <p className="text-xs text-slate-500 dark:text-gray-400 mt-3">
-              {accrual.fromLabel}'dan beri {accrual.months} ay: kâr {sgn(accrual.nominalEUR)}€{fmt(accrual.nominalEUR)} − enflasyon €{fmt(accrual.inflationEUR)} = reel {sgn(accrual.realEUR)}€{fmt(accrual.realEUR)}
+              {accrual.fromLabel}'dan beri {accrual.months} ay: kâr {sgn(accrual.nominalEUR)}€{fmt(accrual.nominalEUR)}{accrual.inflationEUR > 0 && <> − yıl sonu enflasyon €{fmt(accrual.inflationEUR)} = {sgn(accrual.realEUR)}€{fmt(accrual.realEUR)}</>}
               {accrual.deficitEUR > 0 && <> · <span className="text-amber-700 dark:text-amber-300">açık −€{fmt(accrual.deficitEUR)}, yeni kâr önce bunu kapatır</span></>}
             </p>
           )}
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
             <AlertCircle size={14} className="text-slate-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Sıfır ayda yastıktan geçin.</p>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Enflasyon payı her ay değil, yıl sonunda (Aralık) bir kez düşülür. Sıfır ayda yastıktan geçin.</p>
           </div>
           <div className="mt-2 flex items-center gap-2 text-[11px]">
             <label className="text-slate-500 dark:text-gray-400">Enflasyon %/yıl</label>
