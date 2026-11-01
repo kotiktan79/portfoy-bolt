@@ -36,3 +36,17 @@ export function openValueNative(h: {
   if (isClosedHolding(h)) return 0;
   return (Number(h.quantity) || 0) * (Number(h.current_price) || 0);
 }
+
+/**
+ * holdings.cost_basis sütununa yazılacak toplam maliyet (yerli para) = adet × ortalama alış.
+ * Uygulama hesaplarda bu sütunu okumaz (openCostNative kullanılır); yine de alım/satım/düzenleme
+ * sonrası sütun bayat ya da boş kalmasın diye her yazımda bununla güncellenir.
+ * Kapalı pozisyonda 0 döner.
+ */
+export function costBasisForWrite(quantity: number | string | null | undefined, purchasePrice: number | string | null | undefined): number {
+  const q = Number(quantity);
+  const p = Number(purchasePrice);
+  if (!Number.isFinite(q) || Math.abs(q) <= QTY_EPSILON || q < 0) return 0;
+  if (!Number.isFinite(p)) return 0;
+  return Number((q * p).toFixed(8));
+}

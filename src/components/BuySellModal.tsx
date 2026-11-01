@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
 import { updateCashBalance } from '../services/cashService';
 import { useToast } from '../hooks/useToast';
+import { costBasisForWrite } from '../lib/openPosition';
 
 interface BuySellModalProps {
   holding: Holding;
@@ -92,6 +93,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
           .update({
             quantity: newQuantity,
             purchase_price: newAvgPrice,
+            cost_basis: costBasisForWrite(newQuantity, newAvgPrice),
             updated_at: new Date().toISOString(),
           })
           .eq('id', holding.id);
@@ -126,6 +128,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
           .from('holdings')
           .update({
             quantity: Math.max(0, newQuantity),
+            cost_basis: costBasisForWrite(Math.max(0, newQuantity), holding.purchase_price),
             total_realized_pnl: newTotalRealized,
             updated_at: new Date().toISOString(),
           })
