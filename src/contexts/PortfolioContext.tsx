@@ -38,7 +38,7 @@ import { startPriceAlertMonitor, stopPriceAlertMonitor } from '../services/price
 import { stopCacheCleanup } from '../services/cacheService';
 import { loadDailyOpenPrices, saveDailyOpenPrices } from '../services/dailyOpenPriceService';
 import { computePortfolioMetrics, computeIntradayChange } from '../lib/portfolioMetrics';
-import { isClosedHolding } from '../lib/openPosition';
+import { isClosedHolding, costBasisForWrite } from '../lib/openPosition';
 import { useToast } from '../hooks/useToast';
 import { TIMING } from '../config';
 
@@ -573,7 +573,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }) => {
     const { data, error } = await supabase
       .from('holdings')
-      .insert([{ currency: 'TRY', ...newHolding }])
+      .insert([{ currency: 'TRY', ...newHolding, cost_basis: costBasisForWrite(newHolding.quantity, newHolding.purchase_price) }])
       .select()
       .maybeSingle();
 
@@ -591,7 +591,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   ) => {
     const { error } = await supabase
       .from('holdings')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...updates, cost_basis: costBasisForWrite(updates.quantity, updates.purchase_price), updated_at: new Date().toISOString() })
       .eq('id', id);
 
     if (error) {
