@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { getEurMonths, invalidateEurPnlCache } from '../services/eurPnlService';
 import { normalizeInflation, INFLATION_EUR, type MonthRow } from '../lib/eurPnl';
 import {
-  addInflationDecision, inflationAmountForRate, parseInflationDecisions, parseRatePercent, pendingInflationYears,
+  addInflationDecision, inflationAmountForRate, mergeKeepingExtras, parseInflationDecisions, parseRatePercent, pendingInflationYears,
   type InflationDecisionKind, type InflationDecisions, type PendingInflationYear,
 } from '../lib/inflationDecision';
 
@@ -94,7 +94,7 @@ export default function EnflasyonOnayKarti() {
       const next = addInflationDecision(parseInflationDecisions(raw.inflation_decisions), d);
       if (!next) { setMessage(`${d.year} için karar zaten verilmiş. Değiştirilmedi.`); return; }
       const { error } = await supabase.from('portfoy_bolt_salary_policy')
-        .update({ inflation_decisions: next, updated_at: new Date().toISOString() }).eq('id', 1);
+        .update({ inflation_decisions: mergeKeepingExtras(raw.inflation_decisions, next), updated_at: new Date().toISOString() }).eq('id', 1);
       if (error) { setMessage('Karar kaydedilemedi. Hiçbir şey düşülmedi.'); return; }
       setDecisions(next);
       invalidateEurPnlCache();

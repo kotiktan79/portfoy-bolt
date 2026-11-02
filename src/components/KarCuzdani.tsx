@@ -9,7 +9,10 @@ import { fetchAll, invalidateEurPnlCache } from '../services/eurPnlService';
 import { getKasaFx, type KasaFx } from '../services/kasaFxService';
 import { planSalary, kasaOutstandingEUR, type SalaryPlanInput } from '../lib/salaryPlan';
 import { ledgerFromTransactions, balanceGap, type LedgerRow } from '../lib/cashLedger';
-import { inflationStatusText } from '../lib/inflationDecision';
+import { inflationStatusText, parseInflationDecisions, type InflationDecisions } from '../lib/inflationDecision';
+import { policySnapshot } from '../lib/policyAllocation';
+import { parseSalaryRule, withSalaryRule, planSpendDown, fixYear, expectedPath, pathMilestones, type SalaryRuleConfig, type SalaryRuleMode } from '../lib/spendDownSalary';
+import HarcaBitirMaasKarti from './HarcaBitirMaasKarti';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
 //   bu ayın maaşı = geçen ayın çekilebilir reel EUR kârı × 0,85 (salaryService → eurPnl)
@@ -98,6 +101,8 @@ export default function KarCuzdani({ holdings }: Props) {
       const inf = normalizeInflation(pol.data.inflation_annual);
       setInflationAnnual(inf);
       setInflationInput(String(Math.round(inf * 1000) / 10));
+      setRuleCfg(parseSalaryRule(pol.data.inflation_decisions));
+      setInflDecisions(parseInflationDecisions(pol.data.inflation_decisions));
       setPolicy({
         floorEUR: n(pol.data.floor_eur),
         capEUR: n(pol.data.cap_eur),
@@ -154,9 +159,53 @@ export default function KarCuzdani({ holdings }: Props) {
   const [policy, setPolicy] = useState<Partial<SalaryPlanInput>>({});
   const [kasaMoves, setKasaMoves] = useState<KasaMove[]>([]);
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
+  const [ruleCfg, setRuleCfg] = useState<SalaryRuleConfig>(() => parseSalaryRule(null));
+  const [inflDecisions, setInflDecisions] = useState<InflationDecisions>({});
+  const [ruleBusy, setRuleBusy] = useState(false);
+  const [ruleMsg, setRuleMsg] = useState<string | null>(null);
+  // HARCA-BİTİR: yatırım portföyü (kasa ve Ev Parası hariç) → yıllık maaş
+  const startMonth = policy.salaryStartMonth || '2027-04';
+  const startYear = Number(startMonth.slice(0, 4));
+  const thisYear = Number(monthKey.slice(0, 4));
+  const ruleYear = Math.max(thisYear, startYear);
+  const investableEur = useMemo(() => holdings.length ? policySnapshot(holdings).totalEUR : 0, [holdings]);
+  const spendDown = investableEur > 0 ? planSpendDown({
+    year: ruleYear, portfolioEUR: investableEur, kasaEUR: kasa?.totalEurNow ?? 0, config: ruleCfg, inflationDecisions: inflDecisions,
+  }) : null;
+  const spendDownPath = spendDown ? pathMilestones(expectedPath({ startYear: ruleYear, portfolioEUR: spendDown.baseEUR, config: ruleCfg, prevEUR: spendDown.prevEUR == null ? null : spendDown.ruleEUR })) : [];
+  const spendMode = ruleCfg.mode === 'spend_down';
+  const salaryStarted = monthKey >= startMonth;
+
+  async function writeRule(next: SalaryRuleConfig, okMsg: string) {
+    setRuleBusy(true); setRuleMsg(null);
+    try {
+      const cur = await supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle();
+      if (cur.error || !cur.data || !('inflation_decisions' in cur.data)) { setRuleMsg('Ayar satırı okunamadı. Değiştirilmedi.'); return; }
+      const { error } = await supabase.from('portfoy_bolt_salary_policy')
+        .update({ inflation_decisions: withSalaryRule(cur.data.inflation_decisions, next), updated_at: new Date().toISOString() }).eq('id', 1);
+      if (error) { setRuleMsg('Kaydedilemedi: ' + error.message); return; }
+      setRuleMsg(okMsg);
+      await loadPolicy();
+    } finally { setRuleBusy(false); }
+  }
+  function switchMode(m: SalaryRuleMode) {
+    const label = m === 'spend_down' ? 'Harca-bitir kuralı' : 'Kâr kuralı';
+    if (!window.confirm(`${label} açılsın mı? Para hareketi yapılmaz, yalnız maaş hesabı değişir.`)) return;
+    void writeRule({ ...ruleCfg, mode: m }, `${label} açıldı.`);
+  }
+  function fixThisYear() {
+    if (!spendDown) return;
+    const next = fixYear(ruleCfg, spendDown);
+    if (!next) { setRuleMsg(`${spendDown.year} maaşı zaten sabit. Değiştirilmedi.`); return; }
+    if (!window.confirm(`${spendDown.year} maaşı €${fmt(spendDown.monthlyEUR)}/ay olarak sabitlensin mi? Yıl içinde değişmez.`)) return;
+    void writeRule(next, `${spendDown.year} maaşı €${fmt(spendDown.monthlyEUR)}/ay olarak sabitlendi.`);
+  }
+
   const entitlementEur = salary?.entitlementEUR ?? 0;
   const mtdPoolEur = mtd?.poolOutEUR ?? 0;               // bu ay şimdiye kadar biriken (ay kapanınca hak olur)
-  const remainingEur = remainingEntitlementEUR(poolEur, withdrawnThisMonthEur);
+  const remainingEur = spendMode
+    ? (salaryStarted && spendDown ? Math.max(0, Math.round((spendDown.fromPortfolioEUR - withdrawnThisMonthEur) * 100) / 100) : 0)
+    : remainingEntitlementEUR(poolEur, withdrawnThisMonthEur);
   const amountEur = Math.min(remainingEur, Math.max(0, parseFloat(amountInput) || remainingEur));
   const salaryView = kasa ? planSalary({
     poolEUR: poolEur,
@@ -254,6 +303,14 @@ export default function KarCuzdani({ holdings }: Props) {
         <span className="text-[11px] text-slate-500 dark:text-gray-400">euro cetveli</span>
       </div>
 
+      <HarcaBitirMaasKarti
+        mode={ruleCfg.mode} config={ruleCfg} plan={spendDown} path={spendDownPath}
+        preview={!salaryStarted} startLabel={trMonth(startMonth)}
+        canFix={spendMode && thisYear >= startYear && !!spendDown && !spendDown.fixed}
+        busy={ruleBusy} message={ruleMsg} onSwitchMode={switchMode} onFixYear={fixThisYear}
+      />
+
+      {!spendMode && (<>
       <div className={`mx-5 mt-4 rounded-xl p-4 border ${entitlementEur > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'}`}>
         <div className="flex items-center gap-2 mb-1"><Gauge size={16} className={entitlementEur > 0 ? 'text-blue-600' : 'text-amber-600'} /><p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-gray-300">Şu An Çekebileceğin Maaş</p></div>
         {salary ? (
@@ -309,6 +366,14 @@ export default function KarCuzdani({ holdings }: Props) {
           {moveMsg && <p className="mt-1 text-[11px] text-slate-500 dark:text-gray-400">{moveMsg}</p>}
         </div>
       )}
+      </>)}
+      {spendMode && salaryStarted && spendDown && spendDown.fromKasaEUR > 0 && (
+        <div className="mx-5 mt-3 text-xs">
+          <p className="font-semibold text-emerald-700 dark:text-emerald-300">Kötü yıl: tabana tamamlamak için bu ay kasadan €{fmt(spendDown.fromKasaEUR)}.</p>
+          <button type="button" onClick={() => recordKasaMove('topup', spendDown.fromKasaEUR)} className="mt-1 px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold">Kasadan €{fmt(spendDown.fromKasaEUR)} aldım</button>
+          {moveMsg && <p className="mt-1 text-[11px] text-slate-500 dark:text-gray-400">{moveMsg}</p>}
+        </div>
+      )}
 
       <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2">
@@ -316,13 +381,13 @@ export default function KarCuzdani({ holdings }: Props) {
             <div><p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(withdrawnThisMonthEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Kalan hak</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Portföy</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(portfolioEur)}</p></div>
-            <div className="col-span-3 mt-1 p-2 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-emerald-200 dark:border-emerald-900">
+            {!spendMode && <div className="col-span-3 mt-1 p-2 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-emerald-200 dark:border-emerald-900">
               <p className="text-slate-500 dark:text-gray-400">Kâr havuzu <span className="text-[10px]">(kapanmış aylardan birikmiş · tavan €{fmt(POOL_CAP_EUR)} · aylık çekim tavanı €{fmt(MONTHLY_CAP_EUR)})</span></p>
               <p className={`font-bold text-base ${poolEur > 0 ? 'text-emerald-600 dark:text-emerald-400' : poolEur < 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
                 {poolEur < 0 ? `−€${fmt(poolEur)} açık` : `€${fmt(poolEur)}`}
                 {(mtd?.poolSpilloverEUR ?? 0) > 0 && <span className="text-[11px] font-normal text-slate-500 dark:text-gray-400"> · tavanı aşan €{fmt(mtd!.poolSpilloverEUR!)} portföyde kaldı</span>}
               </p>
-            </div>
+            </div>}
           </div>
           {kasaErr && !kasa && (
             <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">Kasa kur etkisi okunamadı ({kasaErr}) — panelde görünüyor olabilir, rakamlar ayrışmasın diye burada gizlenmedi.</p>

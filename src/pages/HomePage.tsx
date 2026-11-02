@@ -189,7 +189,7 @@ export default function HomePage() {
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-4">
 
             {holdings.length > 0 && <EnflasyonOnayKarti />}
-            {holdings.length > 0 && <BuAyMaasCard />}
+            {holdings.length > 0 && <BuAyMaasCard holdings={holdings} />}
 
             {/* Hero — Tremor modern dashboard */}
             {holdings.length > 0 && (
