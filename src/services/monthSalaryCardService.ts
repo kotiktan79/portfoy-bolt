@@ -6,7 +6,10 @@ import { kasaOutstandingEUR } from '../lib/salaryPlan';
 import { currentYM, getDynamicSalary, getMonthToDate } from './salaryService';
 import { getKasaFx } from './kasaFxService';
 import { withdrawnThisMonthEUR, type MonthSalaryInputs } from '../lib/monthSalaryCard';
-import { inflationStatusText } from '../lib/inflationDecision';
+import { inflationStatusText, parseInflationDecisions } from '../lib/inflationDecision';
+import { parseSalaryRule, planSpendDown } from '../lib/spendDownSalary';
+import { policySnapshot } from '../lib/policyAllocation';
+import type { Holding } from '../lib/supabase';
 
 function numOrUndef(v: unknown): number | undefined {
   return v == null || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v);
@@ -19,6 +22,7 @@ export interface SalaryPolicyRow {
   kasa_refill_ratio?: unknown;
   kasa_start_eur?: unknown;
   salary_start_month?: unknown;
+  inflation_decisions?: unknown;
 }
 
 export interface SalaryWithdrawalRow {
@@ -41,9 +45,18 @@ export function assembleMonthSalaryInputs(args: {
   monthProfitEUR?: number | null;
   yearEndInflationEUR?: number | null;
   inflationStatusNote?: string | null;
+  /** Kasa ve Ev Parası hariç yatırım portföyü (policySnapshot.totalEUR). Yoksa harca-bitir hesaplanmaz. */
+  investableEUR?: number | null;
 }): MonthSalaryInputs {
   const pol = args.policy;
+  const rule = parseSalaryRule(pol?.inflation_decisions);
+  const startMonth = pol && pol.salary_start_month ? String(pol.salary_start_month) : '2027-04';
+  const ruleYear = Math.max(Number(args.asOfMonth.slice(0, 4)), Number(startMonth.slice(0, 4)));
+  const sd = rule.mode === 'spend_down' && (args.investableEUR ?? 0) > 0
+    ? planSpendDown({ year: ruleYear, portfolioEUR: args.investableEUR!, kasaEUR: args.kasaEUR, config: rule, inflationDecisions: parseInflationDecisions(pol?.inflation_decisions) })
+    : null;
   return {
+    spendDown: sd ? { year: sd.year, monthlyEUR: sd.monthlyEUR, fromPortfolioEUR: sd.fromPortfolioEUR, fromKasaEUR: sd.fromKasaEUR, fixed: sd.fixed } : null,
     asOfMonth: args.asOfMonth,
     poolEUR: args.poolEUR,
     realGainEUR: args.realGainEUR,
@@ -71,7 +84,7 @@ export function salaryRateSeries(rows: Array<{ day: string; rate: number }> | nu
   return makeRateSeries(ratePoints(rows).map(r => ({ date: r.recorded_at, rate: r.rate })), Number.NaN);
 }
 
-export async function loadMonthSalaryInputs(now = new Date()): Promise<MonthSalaryInputs> {
+export async function loadMonthSalaryInputs(now = new Date(), holdings?: Holding[]): Promise<MonthSalaryInputs> {
   const asOfMonth = currentYM(now);
   const [salary, kasa, policyRes, movesRes, wdRes, eurRes, usdRes, mtd] = await Promise.all([
     getDynamicSalary(),
@@ -102,5 +115,6 @@ export async function loadMonthSalaryInputs(now = new Date()): Promise<MonthSala
     yearEndInflationEUR: mtd?.inflationYearEndEstimateEUR ?? null,
     // Yıl sonu payı onay bekliyorsa/düşülmemişse o cümle; normal aylarda tahmin notu kalır
     inflationStatusNote: mtd && mtd.inflationDecision ? inflationStatusText(mtd) : null,
+    investableEUR: holdings && holdings.length ? policySnapshot(holdings).totalEUR : null,
   });
 }

@@ -31,6 +31,8 @@ export interface MonthSalaryInputs {
   yearEndInflationEUR?: number | null;
   /** Yıl sonu payının onay durumu cümlesi ("Enflasyon payı onay bekliyor: ~€X"). Varsa tahmin notunun yerine geçer. */
   inflationStatusNote?: string | null;
+  /** Harca-bitir kuralı açıksa o yılın planı (lib/spendDownSalary). Varsa kâr kuralının yerine geçer. */
+  spendDown?: { year: number; monthlyEUR: number; fromPortfolioEUR: number; fromKasaEUR: number; fixed: boolean } | null;
 }
 
 export type MonthSalaryState = 'not_started' | 'open' | 'withdrawn';
@@ -110,7 +112,16 @@ export function withdrawnThisMonthEUR(
   return withdrawnMap(rows, eurRates, usdRates).get(monthKey) ?? 0;
 }
 
+export function spendDownSourceLine(fromPortfolioEUR: number, fromKasaEUR: number): string | null {
+  const a = Math.round(fromPortfolioEUR);
+  const k = Math.round(fromKasaEUR);
+  if (a === 0 && k === 0) return null;
+  if (a !== 0 && k !== 0) return `Portföyden ${formatSalaryEUR(a)} + kasadan ${formatSalaryEUR(k)}`;
+  return a !== 0 ? `Portföyden ${formatSalaryEUR(a)}` : `Kasadan ${formatSalaryEUR(k)}`;
+}
+
 export function buildMonthSalaryCard(inp: MonthSalaryInputs): MonthSalaryCardView {
+  if (inp.spendDown) return buildSpendDownCard(inp, inp.spendDown);
   const plan = planSalary({
     poolEUR: inp.poolEUR,
     realGainEUR: inp.realGainEUR,
@@ -183,4 +194,35 @@ export function buildMonthSalaryCard(inp: MonthSalaryInputs): MonthSalaryCardVie
     fromPoolEUR: fromPool,
     fromKasaEUR: fromKasa,
   };
+}
+
+function buildSpendDownCard(inp: MonthSalaryInputs, sd: NonNullable<MonthSalaryInputs['spendDown']>): MonthSalaryCardView {
+  const start = inp.salaryStartMonth || SALARY_START_MONTH;
+  const preview = inp.asOfMonth < start;
+  const withdrawn = Math.max(0, Number(inp.withdrawnThisMonthEUR) || 0);
+  const rule = `Harca-bitir kuralı: ${sd.year} maaşı ${formatSalaryEUR(sd.monthlyEUR)}/ay${sd.fixed ? '' : ' (Ocak\'ta sabitlenir)'}. ${SALARY_RULE_LINE}`;
+  // Çekim portföy parçasından düşülür; kasa parçası ayrıca "Kasadan aldım" ile kaydedilir.
+  const fromPort = preview ? sd.fromPortfolioEUR : Math.max(0, sd.fromPortfolioEUR - withdrawn);
+  const fromKasa = sd.fromKasaEUR;
+  const shown = fromPort + fromKasa;
+  const shared = {
+    rule,
+    plannedTotalEUR: sd.monthlyEUR,
+    plannedFromPoolEUR: sd.fromPortfolioEUR,
+    plannedFromKasaEUR: sd.fromKasaEUR,
+    withdrawnThisMonthEUR: withdrawn,
+    profitLine: monthProfitLine(inp.asOfMonth, inp.monthProfitEUR),
+    monthProfitEUR: inp.monthProfitEUR == null || !Number.isFinite(Number(inp.monthProfitEUR)) ? null : Number(inp.monthProfitEUR),
+    inflationNote: inp.inflationStatusNote || INFLATION_NOTE,
+  };
+  if (preview) {
+    return { ...shared, state: 'not_started', notice: salaryStartPhrase(start), primary: `${sd.year} maaşı (ön izleme): ${formatSalaryEUR(sd.monthlyEUR)}`,
+      sourceLine: spendDownSourceLine(sd.fromPortfolioEUR, sd.fromKasaEUR), shownEUR: sd.monthlyEUR, fromPoolEUR: sd.fromPortfolioEUR, fromKasaEUR: sd.fromKasaEUR };
+  }
+  if (sd.monthlyEUR > 0 && Math.round(fromPort) <= 0 && Math.round(fromKasa) <= 0) {
+    return { ...shared, state: 'withdrawn', notice: null, primary: `✅ Bu ayın maaşı çekildi (${formatSalaryEUR(sd.monthlyEUR)})`,
+      sourceLine: null, shownEUR: sd.monthlyEUR, fromPoolEUR: 0, fromKasaEUR: 0 };
+  }
+  return { ...shared, state: 'open', notice: null, primary: `Bu ay çekebileceğin maaş: ${formatSalaryEUR(shown)}`,
+    sourceLine: spendDownSourceLine(fromPort, fromKasa), shownEUR: shown, fromPoolEUR: fromPort, fromKasaEUR: fromKasa };
 }

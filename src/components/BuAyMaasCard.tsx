@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { policySnapshot } from '../lib/policyAllocation';
 import {
   buildMonthSalaryCard,
   type MonthSalaryCardView,
   type MonthSalaryInputs,
 } from '../lib/monthSalaryCard';
 import { loadMonthSalaryInputs } from '../services/monthSalaryCardService';
+import type { Holding } from '../lib/supabase';
 
-export function BuAyMaasCard({ inputs }: { inputs?: MonthSalaryInputs }) {
+export function BuAyMaasCard({ inputs, holdings }: { inputs?: MonthSalaryInputs; holdings?: Holding[] }) {
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>(inputs ? 'ready' : 'loading');
   const [view, setView] = useState<MonthSalaryCardView | null>(inputs ? buildMonthSalaryCard(inputs) : null);
+  // Fiyat yenilemesinde kart her seferinde baştan yüklenmesin: yalnız portföy ~€100 oynayınca
+  const holdingsRef = useRef(holdings);
+  holdingsRef.current = holdings;
+  const investKey = useMemo(() => (holdings && holdings.length ? Math.round(policySnapshot(holdings).totalEUR / 100) : 0), [holdings]);
 
   useEffect(() => {
     if (inputs) {
@@ -18,7 +24,7 @@ export function BuAyMaasCard({ inputs }: { inputs?: MonthSalaryInputs }) {
     }
     let cancel = false;
     setStatus('loading');
-    loadMonthSalaryInputs()
+    loadMonthSalaryInputs(new Date(), holdingsRef.current)
       .then(next => {
         if (cancel) return;
         setView(buildMonthSalaryCard(next));
@@ -28,7 +34,7 @@ export function BuAyMaasCard({ inputs }: { inputs?: MonthSalaryInputs }) {
         if (!cancel) setStatus('error');
       });
     return () => { cancel = true; };
-  }, [inputs]);
+  }, [inputs, investKey]);
 
   return (
     <section

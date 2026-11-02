@@ -107,3 +107,17 @@ export function inflationStatusText(r: {
 }
 
 export const INFLATION_RULE_TEXT = 'Enflasyon payı yıl sonunda yalnız senin onayınla düşülür';
+
+/**
+ * Yazarken yıl anahtarı olmayan alanları (ör. "salary_rule" maaş kuralı ayarı) korur.
+ * parseInflationDecisions yalnız yıl anahtarlarını okur; ham nesneyle birleştirmezsek diğer alanlar silinirdi.
+ */
+export function mergeKeepingExtras(raw: unknown, next: InflationDecisions): Record<string, unknown> {
+  let obj: unknown = raw;
+  if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { obj = {}; } }
+  const extras: Record<string, unknown> = {};
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) if (!/^\d{4}$/.test(k)) extras[k] = v;
+  }
+  return { ...extras, ...next };
+}
