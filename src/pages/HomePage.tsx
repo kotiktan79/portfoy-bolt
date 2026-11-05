@@ -35,6 +35,7 @@ import { BuAyMaasCard } from '../components/BuAyMaasCard';
 import EnflasyonOnayKarti from '../components/EnflasyonOnayKarti';
 import KarCuzdani from '../components/KarCuzdani';
 import HeroDashboard from '../components/HeroDashboard';
+import { DailyNetChangeCard, InvestmentScheduleCard } from '../components/DailyNetAndSchedule';
 import GununHareketleri from '../components/GununHareketleri';
 import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
@@ -192,7 +193,7 @@ export default function HomePage() {
             {holdings.length > 0 && <BuAyMaasCard holdings={holdings} />}
 
             {/* Hero — Tremor modern dashboard */}
-            {holdings.length > 0 && (
+            {holdings.length > 0 && (<>
               <HeroDashboard
                 holdings={holdings}
                 totalCashValue={totalCashValue}
@@ -220,7 +221,11 @@ export default function HomePage() {
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}
               />
-            )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <DailyNetChangeCard holdings={holdings} />
+                <InvestmentScheduleCard holdings={holdings} />
+              </div>
+            </>)}
 
             {/* Bugün en çok yükselen / düşen — euro, taban dünkü kapanış (ek sorgu yok: yukarıdaki canlı kârdan) */}
             {holdings.length > 0 && <GununHareketleri live={live} baseWealthEUR={lastDay?.wealthEUR} state={eurState} />}

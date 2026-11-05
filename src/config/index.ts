@@ -36,3 +36,11 @@ export const ANON_USER_ID = '00000000-0000-0000-0000-000000000001';
 // yalnızca Vercel env'de durur (VAPID_PRIVATE_KEY, bkz. api/lib/push.ts).
 export const VAPID_PUBLIC_KEY =
   'BIOL94D3Hqy48SUowVUoxLdfIXJaVz2_-6OCsaSAQ08QzIfEQgUHlSIabKNXp5NpYgHXa7hpO5BFa3h1HWlB2JY';
+
+// ── Yatırım takvimi (boştaki euroyu haftalık VWCE'ye aktarma planı) ─────────
+export const INVESTMENT_SCHEDULE = {
+  WEEKLY_EUR: 1000,          // haftada €1.000
+  RESERVE_EUR: 7000,         // euro nakitte kalacak yedek
+  START_DATE: '2026-10-22',  // ilk alım
+  SYMBOL: 'VWCE',
+} as const;
