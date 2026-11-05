@@ -5,6 +5,7 @@ import { addTransaction } from '../services/transactionService';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../services/priceService';
 import { updateCashBalance } from '../services/cashService';
+import { cashCurrencyFor, ccySymbol } from '../lib/cashCurrency';
 import { useToast } from '../hooks/useToast';
 import { costBasisForWrite } from '../lib/openPosition';
 
@@ -56,6 +57,9 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
     }
 
     setLoading(true);
+    // Kasa hareketi varlığın kendi para biriminde yazılır (USD tahvil satışı USD kasaya).
+    const cashCcy = cashCurrencyFor(holding.currency);
+    const sym = ccySymbol(cashCcy);
 
     try {
       const transactionData = {
@@ -83,8 +87,8 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
         const totalCost = (holding.purchase_price * holding.quantity) + (prc * qty); // fx-ok: ağırlıklı ortalama aynı currency içinde
         const newAvgPrice = totalCost / newQuantity;
 
-        await updateCashBalance('TRY', totalWithFee, 'buy',
-          `${holding.symbol} alış - ${quantity} adet x ${price} ₺`,
+        await updateCashBalance(cashCcy, totalWithFee, 'buy',
+          `${holding.symbol} alış - ${quantity} adet x ${price} ${sym}`,
           holding.id
         );
 
@@ -104,8 +108,8 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
       } else {
         const realizedProfit = (prc - holding.purchase_price) * qty - feeVal;
 
-        await updateCashBalance('TRY', totalWithFee, 'sell',
-          `${holding.symbol} satış - ${quantity} adet x ${price} ₺ (Kar/Zarar: ${realizedProfit.toFixed(2)} ₺)`,
+        await updateCashBalance(cashCcy, totalWithFee, 'sell',
+          `${holding.symbol} satış - ${quantity} adet x ${price} ${sym} (Kar/Zarar: ${realizedProfit.toFixed(2)} ${sym})`,
           holding.id,
           realizedProfit
         );
@@ -170,7 +174,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
                 {isBuy ? 'Alış İşlemi' : 'Satış İşlemi'}
               </h2>
               <p className="text-sm text-gray-600">
-                {holding.symbol} - {formatCurrency(holding.current_price)} ₺
+                {holding.symbol} - {formatCurrency(holding.current_price)} {ccySymbol(cashCurrencyFor(holding.currency))}
               </p>
             </div>
           </div>
@@ -250,13 +254,13 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Toplam:</span>
               <span className="font-semibold text-gray-900">
-                {formatCurrency(totalAmount)} ₺
+                {formatCurrency(totalAmount)} {ccySymbol(cashCurrencyFor(holding.currency))}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Komisyon:</span>
               <span className="font-semibold text-gray-900">
-                {formatCurrency(parseFloat(fee || '0'))} ₺
+                {formatCurrency(parseFloat(fee || '0'))} {ccySymbol(cashCurrencyFor(holding.currency))}
               </span>
             </div>
             <div className="h-px bg-gray-300 my-2"></div>
@@ -265,7 +269,7 @@ export function BuySellModal({ holding, type, onClose, onComplete }: BuySellModa
                 {isBuy ? 'Ödenecek:' : 'Alınacak:'}
               </span>
               <span className={`text-lg font-bold ${isBuy ? 'text-red-600' : 'text-green-600'}`}>
-                {formatCurrency(totalWithFee)} ₺
+                {formatCurrency(totalWithFee)} {ccySymbol(cashCurrencyFor(holding.currency))}
               </span>
             </div>
           </div>
