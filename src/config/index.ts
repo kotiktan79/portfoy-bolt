@@ -41,6 +41,6 @@ export const VAPID_PUBLIC_KEY =
 export const INVESTMENT_SCHEDULE = {
   WEEKLY_EUR: 1000,          // haftada €1.000
   RESERVE_EUR: 7000,         // euro nakitte kalacak yedek
-  START_DATE: '2026-10-22',  // ilk alım
-  SYMBOL: 'VWCE',
+  START_DATE: '2026-10-14',  // ilk alım haftası
+  SYMBOLS: ['VWCE', 'V3YL', 'XEON'],  // plana sayılan alımlar
 } as const;
