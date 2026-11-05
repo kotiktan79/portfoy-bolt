@@ -38,29 +38,31 @@ export function DailyNetChangeCard({ holdings }: { holdings: Holding[] }) {
 
 export function InvestmentScheduleCard({ holdings }: { holdings: Holding[] }) {
   const [buys, setBuys] = useState<ScheduleBuy[] | null>(null);
-  const vwce = holdings.find(h => h.symbol === INVESTMENT_SCHEDULE.SYMBOL);
+  const ids = holdings.filter(h => (INVESTMENT_SCHEDULE.SYMBOLS as readonly string[]).includes(h.symbol)).map(h => String(h.id));
+  const idsKey = ids.sort().join(',');
   const euroQty = Number(holdings.find(h => h.symbol === 'EURO')?.quantity) || 0;
   const usdQty = Number(holdings.find(h => h.symbol === 'USD')?.quantity) || 0;
   useEffect(() => {
-    if (!vwce) { setBuys([]); return; }
+    if (!ids.length) { setBuys([]); return; }
     let c = false;
     void (async () => {
-      const { data } = await supabase.from('transactions').select('transaction_date,total_amount').eq('holding_id', vwce.id).eq('transaction_type', 'buy').gte('transaction_date', INVESTMENT_SCHEDULE.START_DATE);
+      const { data } = await supabase.from('transactions').select('transaction_date,total_amount').in('holding_id', ids).eq('transaction_type', 'buy').gte('transaction_date', INVESTMENT_SCHEDULE.START_DATE);
       if (!c) setBuys((data || []).map(t => ({ date: String(t.transaction_date), amountEUR: Number(t.total_amount) })));
     })();
     return () => { c = true; };
-  }, [vwce?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
   const s = buys ? investmentSchedule(euroQty, buys, new Date().toISOString().slice(0, 10)) : null;
   return (
     <div className={card}>
       <div className="text-sm font-semibold text-ink-700 dark:text-gold-100">Yatırım takvimi</div>
-      <div className="text-xs text-ink-500 dark:text-gold-200/60">Haftada {eur(INVESTMENT_SCHEDULE.WEEKLY_EUR)} VWCE · {eur(INVESTMENT_SCHEDULE.RESERVE_EUR)} euro yedekte kalır</div>
+      <div className="text-xs text-ink-500 dark:text-gold-200/60">Haftada {eur(INVESTMENT_SCHEDULE.WEEKLY_EUR)} (VWCE, V3YL, XEON) · {eur(INVESTMENT_SCHEDULE.RESERVE_EUR)} euro yedekte kalır</div>
       {s ? (<>
         <div className="mt-3 h-3 w-full rounded-full bg-slate-200 dark:bg-ink-800 overflow-hidden">
           <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, s.pct)}%` }} />
         </div>
         <div className="mt-2 flex flex-wrap justify-between gap-1 text-sm">
-          <span>Yatırıldı: <b>{eur(s.deployedEUR)}</b> ({s.buys} alım)</span>
+          <span>Yatırıldı: <b>{eur(s.deployedEUR)}</b> ({s.buys} alım haftası)</span>
           <span>Kalan: <b>{eur(s.remainingEUR)}</b></span>
         </div>
         <div className="text-xs text-ink-500 dark:text-gold-200/60 mt-1">
