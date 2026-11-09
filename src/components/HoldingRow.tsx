@@ -1,3 +1,4 @@
+import { ManualPriceWarning } from './ManualPriceWarning';
 import { useState, useEffect, memo } from 'react';
 import { Pencil, Trash2, TrendingUp, TrendingDown, Edit3, Lock, Wallet } from 'lucide-react';
 import { Holding } from '../lib/supabase';
@@ -176,6 +177,7 @@ export const HoldingRow = memo(function HoldingRow({ holding, onEdit, onDelete, 
                   <Lock size={12} className="text-brand-600 hidden md:inline" />
                 )}
               </div>
+              <ManualPriceWarning holding={holding} />
               {holding.manual_price && holding.manual_price_updated_at && (
                 <span className="text-[10px] md:text-xs text-brand-600 hidden sm:block">
                   {new Date(holding.manual_price_updated_at).toLocaleDateString('tr-TR', {

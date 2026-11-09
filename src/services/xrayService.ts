@@ -2,7 +2,7 @@ import { Holding } from '../lib/supabase';
 import { INFLATION_EUR } from '../lib/eurPnl';
 import { TARGET_ALLOCATION, PHYSICAL_FIXED_TYPES, allocationClassFor, isHouseMoney, effectiveAssetType, CLASS_LABELS, type AllocationClass } from '../config/portfolioPolicy';
 import { getFxRatesFromHoldings, holdingValueTRY, holdingCostTRY } from '../lib/fx';
-import { isClosedHolding } from '../lib/openPosition';
+import { isHiddenPosition } from '../lib/openPosition';
 
 export interface XRayFinding {
   id: string;
@@ -161,7 +161,7 @@ export function analyzeXRay(holdings: Holding[]): XRayReport {
   const fxRates = getFxRatesFromHoldings(holdings);
 
   const positions = holdings
-    .filter(h => !isClosedHolding(h) && h.asset_type !== 'cash')
+    .filter(h => !isHiddenPosition(h) && h.asset_type !== 'cash')
     .map(h => ({
       ...h,
       value: holdingValueTRY(h, fxRates),

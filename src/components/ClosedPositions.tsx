@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, type Holding } from '../lib/supabase';
 import { assetName } from '../lib/assetNames';
-import { isClosedHolding, salesForHolding, sumRealizedEUR, type ClosedSale } from '../lib/closedPositions';
+import { isHiddenPosition, salesForHolding, sumRealizedEUR, type ClosedSale } from '../lib/closedPositions';
 import { getAllTransactions } from '../services/transactionService';
 
 interface Row {
@@ -11,12 +11,12 @@ interface Row {
 }
 
 export function ClosedPositions({ holdings }: { holdings: Holding[] }) {
-  const closed = holdings.filter(isClosedHolding);
+  const closed = holdings.filter(isHiddenPosition);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const list = holdings.filter(isClosedHolding);
+    const list = holdings.filter(isHiddenPosition);
     if (!list.length) { setRows([]); return; }
     let cancel = false;
     setLoading(true);
