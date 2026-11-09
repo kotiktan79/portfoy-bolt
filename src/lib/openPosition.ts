@@ -50,3 +50,9 @@ export function costBasisForWrite(quantity: number | string | null | undefined, 
   if (!Number.isFinite(p)) return 0;
   return Number((q * p).toFixed(8));
 }
+
+/** Liste/grafik görünürlüğü; hesap motorunun mevcut eşiğine dokunmaz. */
+export function isHiddenPosition(h: { quantity?: number | string | null }): boolean {
+  const q = Number(h.quantity);
+  return !Number.isFinite(q) || Math.abs(q) < 1e-9;
+}

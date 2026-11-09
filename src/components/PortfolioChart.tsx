@@ -33,7 +33,7 @@ export function PortfolioChart({ data, type: initialType = 'area', showControls 
   } as const;
 
   const chartData = data
-    .filter((snapshot) => snapshot.date)
+    .filter((snapshot) => snapshot.date && snapshot.total_value != null && Number.isFinite(Number(snapshot.total_value)))
     .map((snapshot) => {
       try {
         return {

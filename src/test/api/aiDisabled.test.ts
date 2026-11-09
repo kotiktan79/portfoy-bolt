@@ -31,11 +31,17 @@ const gate = vi.hoisted(() => {
       Promise.resolve(result).then(resolve, reject);
     return builder;
   }
-  return { writes, query };
+  return { writes, query, snapshot: true, snapshotError: false };
 });
 
 vi.mock('../../../api/lib/serviceSupabase', () => ({
-  getServiceSupabase: () => ({ from: () => gate.query([]) }),
+  getServiceSupabase: () => ({ from: (table: string) => {
+    if (table === 'portfolio_snapshots') {
+      if (gate.snapshotError) throw new Error('snapshot sorgusu başarısız');
+      return gate.query(gate.snapshot ? [{ snapshot_date: 'today' }] : []);
+    }
+    return gate.query([]);
+  } }),
 }));
 
 vi.mock('../../../api/lib/aiContext', async () => {
@@ -233,6 +239,28 @@ describe('yapay zekâ kapalı', () => {
     expect(tg).not.toContain('Portföy Tanı');
     expect(tg).not.toContain('AI Yorumu');
     expect(tg).not.toContain('Yapay zekâ kapalı');
+  });
+
+  it('bugünün kapanışı yoksa rapor ve bildirim yazmaz', async () => {
+    gate.snapshot = false;
+    try {
+      const res = mockRes();
+      await dailyReportHandler({ method: 'GET', headers: { authorization: 'Bearer cron-s' } } as any, res as any);
+      expect(res.body.skipped).toBe(true);
+      expect(gate.writes).toHaveLength(0);
+      expect(sendEmail).not.toHaveBeenCalled();
+      expect(sendTelegram).not.toHaveBeenCalled();
+    } finally { gate.snapshot = true; }
+  });
+
+  it('kapanış sorgusu başarısızsa rapor yazmaz', async () => {
+    gate.snapshotError = true;
+    try {
+      const res = mockRes();
+      await dailyReportHandler({ method: 'GET', headers: { authorization: 'Bearer cron-s' } } as never, res as never);
+      expect(res.statusCode).toBe(500);
+      expect(gate.writes).toHaveLength(0);
+    } finally { gate.snapshotError = false; }
   });
 
   it('aylık e-posta boş tanıda AI bloğu basmaz, maaşı basar', () => {

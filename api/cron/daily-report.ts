@@ -40,6 +40,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     log.push(`Veri: ${holdings.length} holding`);
     const todayStr = dayInTZ(new Date());   // Bükreş takvimi (chat/daily-plan ile aynı); buildAiContext'in saat mantığı UTC
 
+    const { data: closing, error: closingError } = await supabase
+      .from('portfolio_snapshots').select('snapshot_date')
+      .eq('snapshot_date', todayStr).limit(1);
+    if (closingError) throw closingError;
+    if (!closing?.length) {
+      return res.status(200).json({ success: true, skipped: true, reason: 'Bugünün kapanış kaydı yok', date: todayStr });
+    }
+
     // EUR kâr motoru — uygulamayla AYNI fonksiyon (buildEurModel). Servet, gün/hafta/ay kârı, bu ayın maaşı.
     let eur: EurSummary | null = null;
     let aiCtx: Awaited<ReturnType<typeof buildAiContext>> | null = null;

@@ -3,6 +3,7 @@
 
 export interface CashTxLike {
   currency?: string | null;
+  notes?: string | null;
   transaction_type?: string | null;
   type?: string | null;
   amount?: number | string | null;
@@ -32,8 +33,8 @@ export function ledgerFromTransactions(rows: CashTxLike[]): LedgerRow[] {
     const x = row(c);
     if (kind === 'deposit') { x.deposits += a; x.balance += a; }
     else if (kind === 'withdrawal' || kind === 'withdraw') { x.withdrawals += a; x.balance -= a; }
-    else if (kind === 'buy') { x.buys += a; x.balance -= a; }
-    else if (kind === 'sell') { x.sells += a; x.balance += a; }
+    else if (kind === 'buy') { x.buys += a; x.balance -= a; if (r.notes?.startsWith('Çevirme [')) x.withdrawals += a; }
+    else if (kind === 'sell') { x.sells += a; x.balance += a; if (r.notes?.startsWith('Çevirme [')) x.deposits += a; }
     else if (kind === 'transfer') { x.transfers += a; x.balance += a; }
   }
   return [...m.values()].sort((a, b) => a.currency.localeCompare(b.currency));

@@ -1,4 +1,5 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { isHiddenPosition } from '../lib/openPosition';
 import { Holding } from '../lib/supabase';
 import { CLASS_LABELS } from '../config/portfolioPolicy';
 import { policySnapshot } from '../lib/policyAllocation';
@@ -9,7 +10,7 @@ interface AllocationChartProps {
 }
 
 export function AllocationChart({ holdings }: AllocationChartProps) {
-  const snap = policySnapshot(holdings);
+  const snap = policySnapshot(holdings.filter(h => !isHiddenPosition(h)));
   const totalValue = snap.totalTRY;
   const allocationData = snap.rows
     .filter(r => r.valueEUR > 0)

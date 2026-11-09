@@ -24,8 +24,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const type = req.query.type as string;
-  const symbols = (req.query.symbols as string || '').split(',').filter(Boolean);
+  const query = new URL(req.url || '/', 'http://localhost').searchParams;
+  const type = query.get('type');
+  const symbols = (query.get('symbols') || '').split(',').filter(Boolean);
 
   try {
     switch (type) {
@@ -85,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'fx': {
         // GET /api/price-proxy?type=fx&from=EUR — istemci exchange_rates yazmadan önce çapraz kontrol.
-        const from = ((req.query.from as string) || '').toUpperCase().trim();
+        const from = ((query.get('from')) || '').toUpperCase().trim();
         if (!/^[A-Z]{3}$/.test(from) || from === 'TRY') {
           return res.status(400).json({ success: false, error: 'from 3 harfli para birimi olmalı' });
         }
@@ -130,8 +131,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'benchmark-history': {
         // GET /api/price-proxy?type=benchmark-history&symbol=^XU100&days=30
-        const symbol = (req.query.symbol as string) || '^XU100';
-        const days = Math.max(1, Math.min(3650, parseInt(req.query.days as string) || 30));
+        const symbol = (query.get('symbol')) || '^XU100';
+        const days = Math.max(1, Math.min(3650, parseInt(query.get('days') || '') || 30));
         const range = days <= 7 ? '7d' : days <= 30 ? '1mo' : days <= 90 ? '3mo' : days <= 180 ? '6mo' : days <= 365 ? '1y' : days <= 1825 ? '5y' : 'max';
         const r = await fetch(
           `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`,
@@ -155,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // GET /api/price-proxy?type=tefas&code=IPV
         // GET /api/price-proxy?type=tefas&code=GPY1PPF  (portföy sembolü → GTL)
         // Günlük seri: fonFiyatBilgiGetir; yedek: fonBilgiGetir (bkz. api/lib/fundPrice.ts).
-        const requested = ((req.query.code as string) || '').toUpperCase().trim();
+        const requested = ((query.get('code')) || '').toUpperCase().trim();
         if (!requested) return res.status(400).json({ error: 'code parametresi gerekli' });
 
         const quote = await fetchTefasFundPrice(requested);

@@ -1,3 +1,4 @@
+import { ManualPriceWarning } from './ManualPriceWarning';
 import { useState } from 'react';
 import { Pencil, Trash2, TrendingUp, TrendingDown, Lock, Wallet, Coins, Banknote, PieChart, Package, Gem, LucideIcon } from 'lucide-react';
 import { Holding } from '../lib/supabase';
@@ -103,6 +104,7 @@ export function HoldingCard({ holding, sparklineData, rank, onEdit, onDelete, on
           </div>
         </div>
 
+        <ManualPriceWarning holding={holding} />
         {sparklineData && sparklineData.length > 1 && (
           <div className="mb-3">
             <Sparkline data={sparklineData} width={240} height={36} />

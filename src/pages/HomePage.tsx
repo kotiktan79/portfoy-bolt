@@ -1,3 +1,5 @@
+import { CashLedgerPanel } from '../components/CashLedgerPanel';
+import { ManualPriceSummary } from '../components/ManualPriceWarning';
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BarChart3, PieChart, LayoutGrid, List } from 'lucide-react';
@@ -28,7 +30,7 @@ import { ClosedPositions } from '../components/ClosedPositions';
 import PortfolioXRay from '../components/PortfolioXRay';
 import { RebalancePlan } from '../components/RebalancePlan';
 import { policySnapshot } from '../lib/policyAllocation';
-import { isClosedHolding } from '../lib/openPosition';
+import { isHiddenPosition } from '../lib/openPosition';
 import { BuyPlanCard } from '../components/BuyPlanCard';
 import { CashDistributionCard } from '../components/CashDistributionCard';
 import { BuAyMaasCard } from '../components/BuAyMaasCard';
@@ -87,7 +89,7 @@ export default function HomePage() {
   const { theme, setTheme } = useTheme();
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const houseMoneyEUR = useMemo(() => policySnapshot(holdings).houseMoneyEUR, [holdings]);
-  const closedCount = useMemo(() => holdings.filter(isClosedHolding).length, [holdings]);
+  const closedCount = useMemo(() => holdings.filter(isHiddenPosition).length, [holdings]);
   const openCount = holdings.length - closedCount;
 
   // Modal states
@@ -185,6 +187,7 @@ export default function HomePage() {
               setTheme(themes[(currentIndex + 1) % themes.length]);
             }}
           />
+          <ManualPriceSummary holdings={holdings} />
 
           {/* Dashboard Content - Kiranism grid layout */}
           <div className="px-3 md:px-5 pt-4 pb-2 space-y-4">
@@ -304,20 +307,6 @@ export default function HomePage() {
                     {openCount}
                   </span>
                 )}
-                {closedCount > 0 && (
-                  <button
-                    type="button"
-                    aria-pressed={showClosed}
-                    onClick={() => setShowClosed(v => !v)}
-                    className={`text-[11px] font-medium px-2 py-0.5 rounded-md border transition-colors ${
-                      showClosed
-                        ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-800'
-                        : 'bg-white dark:bg-gray-700 text-slate-500 dark:text-gray-400 border-slate-200 dark:border-gray-600 hover:text-slate-700 dark:hover:text-gray-200'
-                    }`}
-                  >
-                    Kapanan pozisyonları göster ({closedCount})
-                  </button>
-                )}
               </div>
               {holdings.length > 0 && (
                 <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600">
@@ -390,7 +379,7 @@ export default function HomePage() {
                     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {(() => {
                         const topByPnl = [...holdings]
-                          .filter(h => !isClosedHolding(h) && h.purchase_price > 0)
+                          .filter(h => !isHiddenPosition(h) && h.purchase_price > 0)
                           .map(h => ({
                             id: h.id,
                             pnlPct: ((h.current_price - h.purchase_price) / h.purchase_price) * 100,
@@ -442,11 +431,27 @@ export default function HomePage() {
             </div>
           </div>
 
+          {closedCount > 0 && (
+            <div className="mx-4 md:mx-6 mt-3">
+              <button
+                type="button"
+                aria-expanded={showClosed}
+                aria-controls="closed-positions"
+                onClick={() => setShowClosed(v => !v)}
+                className="text-xs font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-gray-300"
+              >
+                {showClosed ? '▾' : '▸'} Kapanmış pozisyonları göster ({closedCount})
+              </button>
+            </div>
+          )}
+
           {showClosed && closedCount > 0 && (
-            <div className="mx-2 md:mx-6 mt-3">
+            <div id="closed-positions" className="mx-2 md:mx-6 mt-3">
               <ClosedPositions holdings={holdings} />
             </div>
           )}
+
+          <CashLedgerPanel />
 
           {/* Analytics Toggle */}
           {holdings.length > 0 && (

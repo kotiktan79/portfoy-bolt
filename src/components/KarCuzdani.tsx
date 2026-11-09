@@ -60,7 +60,7 @@ export default function KarCuzdani({ holdings }: Props) {
     let c = false;
     (async () => {
       const [txs, bals] = await Promise.all([
-        fetchAll<any>('cashGapTx', () => supabase.from('cash_transactions').select('currency,transaction_type,type,amount')),
+        fetchAll<any>('cashGapTx', () => supabase.from('cash_transactions').select('currency,transaction_type,type,amount,notes')),
         fetchAll<any>('cashGapBal', () => supabase.from('cash_balances').select('currency,balance,total_deposits')),
       ]);
       if (c) return;

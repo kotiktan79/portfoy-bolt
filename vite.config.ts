@@ -24,6 +24,9 @@ export default defineConfig({
   plugins: [react(), swBuildId()],
   test: {
     globals: true,
+    // Node 25 native localStorage, jsdom'un Storage nesnesini gölgelemesin.
+    execArgv: process.allowedNodeEnvironmentFlags.has('--no-experimental-webstorage')
+      ? ['--no-experimental-webstorage'] : [],
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],   // api/lib testleri de src/test/api altında (api/ = Vercel fonksiyonları)
