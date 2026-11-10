@@ -36,24 +36,11 @@ import { CashDistributionCard } from '../components/CashDistributionCard';
 import { BuAyMaasCard } from '../components/BuAyMaasCard';
 import EnflasyonOnayKarti from '../components/EnflasyonOnayKarti';
 import KarCuzdani from '../components/KarCuzdani';
-import HeroDashboard from '../components/HeroDashboard';
-import { DailyNetChangeCard, InvestmentScheduleCard } from '../components/DailyNetAndSchedule';
-import GununHareketleri from '../components/GununHareketleri';
-import { getDynamicSalary, DynamicSalary } from '../services/salaryService';
+import { HomeLiveOverview, HomePortfolioTrend } from '../components/HomeLiveOverview';
 import { getInceptionPnl, type InceptionSummary } from '../services/inceptionPnlService';
 import { getPerformanceReturns } from '../services/performanceReturnService';
-import { getEurDaily, getLiveEurGain, type EurDaily } from '../services/eurPnlService';
-import type { LiveGain } from '../lib/eurPnl';
-// Dinamik Maaş kart alt yazısı: sıfırın SEBEBİNİ göster (devreden açık) — hakem/tarama bulgusu
-// Havuz kuralı: hak = kapanmış son ayın havuzu × 0,85 (aylık tavan €1.000)
-const salaryLabel = (d: DynamicSalary) => (d.poolOutEUR ?? 0) < 0
-  ? `${d.monthLabel} sonu havuz −€${Math.round(Math.abs(d.poolOutEUR ?? 0))} açık → maaş yok (${d.monthLabel} kâr ${d.realGainEUR >= 0 ? '+' : '−'}€${Math.round(Math.abs(d.realGainEUR))})`
-  : `havuz €${Math.round(d.poolOutEUR ?? 0)} × 0,85 (${d.monthLabel} sonu)`;
-
-
 // Lazy loaded components (charts, modals - loaded on demand)
 const RebalanceModal = lazy(() => import('../components/RebalanceModal').then(m => ({ default: m.RebalanceModal })));
-const PortfolioChart = lazy(() => import('../components/PortfolioChart').then(m => ({ default: m.PortfolioChart })));
 const AllocationChart = lazy(() => import('../components/AllocationChart').then(m => ({ default: m.AllocationChart })));
 const TransactionHistory = lazy(() => import('../components/TransactionHistory').then(m => ({ default: m.TransactionHistory })));
 const PriceAlertModal = lazy(() => import('../components/PriceAlertModal').then(m => ({ default: m.PriceAlertModal })));
@@ -107,44 +94,15 @@ export default function HomePage() {
     return (localStorage.getItem('tandor_holdings_view') as 'table' | 'grid') || 'table';
   });
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
-  const [dynamic, setDynamic] = useState<DynamicSalary | null>(null);
   const [inception, setInception] = useState<InceptionSummary | null>(null);
   const [inceptionMwr, setInceptionMwr] = useState<number | null>(null);
-  const [lastDay, setLastDay] = useState<EurDaily | null>(null);
-  const [prevDay, setPrevDay] = useState<EurDaily | null>(null);
-  const [eurState, setEurState] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [live, setLive] = useState<LiveGain | null>(null);
-  const [eurSeries, setEurSeries] = useState<EurDaily[]>([]);
-  // ANLIK kâr: fiyatlar (holdings) her tazelendiğinde yeniden — motorla aynı formül, canlı fiyatla
-  useEffect(() => {
-    if (!holdings.length) return;
-    let cancelled = false;
-    getLiveEurGain(holdings).then(g => { if (!cancelled) setLive(g); }).catch(() => {});
-    getEurDaily().then(d => { if (cancelled) return; setEurSeries(d); setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [holdings]);
-  // Trend grafiği: son 30 günün EURO serveti; 'yatırılan para' = servet − pencere içinde birikmiş kâr (kur şişmesi yok)
-  const eurChartData = useMemo(() => {
-    const w = eurSeries.slice(-30); let cum = 0;
-    return w.map((d, i) => { if (i > 0) cum += d.gainEUR; const base = d.wealthEUR - cum; return { date: d.date, total_value: d.wealthEUR, total_investment: base, total_pnl: cum, pnl_percentage: base > 0 ? (100 * cum) / base : 0 }; });
-  }, [eurSeries]);
-
   useEffect(() => {
     // Motor verisi tek durumda izlenir: yüklenirken '…', hata olursa '—' + 'veri yüklenemedi' (asla sahte €0)
     Promise.all([
       getInceptionPnl().then(setInception),
       getPerformanceReturns(null, null).then(r => setInceptionMwr(r.inception?.dietzPct ?? null)).catch(() => setInceptionMwr(null)),
-      getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }),
-    ]).then(() => setEurState('ok')).catch(() => setEurState('error'));
+    ]).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (loading) return;
-    let cancelled = false;
-    getDynamicSalary(holdings).then(s => { if (!cancelled) setDynamic(s); })
-      .catch(() => { if (!cancelled) setDynamic(null); });
-    return () => { cancelled = true; };
-  }, [holdings, loading]);
 
   const {
     totalInvestment, totalCurrentValue,
@@ -204,7 +162,7 @@ export default function HomePage() {
 
             {/* Hero — Tremor modern dashboard */}
             {holdings.length > 0 && (<>
-              <HeroDashboard
+              <HomeLiveOverview
                 holdings={holdings}
                 totalCashValue={totalCashValue}
                 dailyChange={livePnlData?.daily.change}
@@ -213,32 +171,13 @@ export default function HomePage() {
                 intradayChange={livePnlData?.intraday.period === 'yok' ? undefined : livePnlData?.intraday.change}
                 intradayChangePct={livePnlData?.intraday.period === 'yok' ? undefined : livePnlData?.intraday.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
-                dynamicSafeMaxUSD={dynamic?.entitlementEUR}
-                dynamicSalaryLabel={dynamic?.spendDown ? `${dynamic.spendDown.year} maaşı · portföyden €${Math.round(dynamic.spendDown.fromPortfolioEUR)} + kasadan €${Math.round(dynamic.spendDown.fromKasaEUR)}` : dynamic ? salaryLabel(dynamic) : undefined}
                 inceptionGainEUR={inception?.totalGainEUR}
                 inceptionGainPct={inception?.totalGainPct}
                 inceptionMwrPct={inceptionMwr}
-                todayGainEUR={lastDay?.gainEUR}
-                prevWealthEUR={prevDay?.wealthEUR}
-                liveGainEUR={live?.gainEUR}
-                liveSince={live?.sinceDate}
-                liveParts={live?.parts}
-                liveFxEUR={live?.fxEUR}
-                liveOtherEUR={live?.otherEUR}
-                closeWealthEUR={lastDay?.wealthEUR}
-                eurState={eurState}
-                todayDate={lastDay?.date}
                 totalPnLTRY={totalProfitLoss}
                 totalPnLPct={totalProfitLossPercent}
               />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <DailyNetChangeCard holdings={holdings} />
-                <InvestmentScheduleCard holdings={holdings} />
-              </div>
             </>)}
-
-            {/* Bugün en çok yükselen / düşen — euro, taban dünkü kapanış (ek sorgu yok: yukarıdaki canlı kârdan) */}
-            {holdings.length > 0 && <GununHareketleri live={live} baseWealthEUR={lastDay?.wealthEUR} state={eurState} />}
 
             {holdings.length > 0 && <CashDistributionCard holdings={holdings} />}
 
@@ -253,31 +192,7 @@ export default function HomePage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Left: Performance chart (2/3) */}
                 <div className="lg:col-span-2">
-                  <div className="card-secondary p-5 h-full">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="t-h3">Portföy Trendi</h3>
-                        <p className="t-caption">{eurChartData.length > 1 ? 'Euro servet, son 30 gün — çizgiler arası = kâr' : 'Son dönemdeki değer değişimi (₺, nominal)'}</p>
-                      </div>
-                      <button
-                        onClick={() => navigate('/performance')}
-                        className="text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline"
-                      >
-                        Detay →
-                      </button>
-                    </div>
-                    <div className="h-72 md:h-64">
-                      <Suspense fallback={<ChartLoader />}>
-                        {(eurChartData.length > 1 || historicalData.length > 0) ? (
-                          <PortfolioChart data={eurChartData.length > 1 ? eurChartData : historicalData} unit={eurChartData.length > 1 ? 'EUR' : 'TRY'} type="area" />
-                        ) : (
-                          <div className="flex items-center justify-center h-full text-slate-300 dark:text-gray-600 text-sm">
-                            Veri bekleniyor...
-                          </div>
-                        )}
-                      </Suspense>
-                    </div>
-                  </div>
+                  <HomePortfolioTrend historicalData={historicalData} />
                 </div>
 
                 {/* Right rail: Tab'lı tek kart — X-Ray, Gelir, Çekim, Maaş, Temettü */}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { DailyNetChangeCard } from './DailyNetAndSchedule';
 import { salaryHoldings } from '../test/helpers/salaryFixture';
 
@@ -25,4 +25,24 @@ describe('günlük net değişim kaynağı', () => {
     expect(await screen.findByText('+€0,00')).toBeInTheDocument();
     expect(screen.getByText(/Tahmini/)).toBeInTheDocument();
   });
+  it('dakikalık yenileme beklerken veya hata verince önceki tutar ve DOM korunur', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-09T19:00:00Z'));
+    let resolve!: (value: typeof basis) => void;
+    const pending = new Promise<typeof basis>(r => { resolve = r; });
+    vi.mocked(loadDailyChangeBasis).mockReset().mockResolvedValueOnce(basis).mockReturnValueOnce(pending).mockRejectedValueOnce(new Error('offline'));
+    const { rerender } = render(<DailyNetChangeCard holdings={salaryHoldings} />);
+    await act(async () => {});
+    const amount = screen.getByText('−€372,87');
+    rerender(<DailyNetChangeCard holdings={salaryHoldings.map(h => ({ ...h, current_price: h.current_price + 1 }))} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(59_999); });
+    expect(loadDailyChangeBasis).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText('−€372,87')).toBe(amount);
+    expect(screen.queryByText('hesaplanıyor…')).toBeNull();
+    await act(async () => { resolve(structuredClone(basis)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(screen.getByText('−€372,87')).toBe(amount);
+    expect(screen.queryByText('Günlük değişim okunamadı.')).toBeNull();
+  });
+
 });

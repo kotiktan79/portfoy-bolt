@@ -1,3 +1,4 @@
+import { keepHoldings, keepPrevious } from '../lib/refreshData';
 import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback, ReactNode } from 'react';
 import { supabase, Holding, AssetType } from '../lib/supabase';
 import { holdingValueTRY, holdingCostTRY, getFxRatesFromHoldings, FxRates } from '../lib/fx';
@@ -204,6 +205,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       if (now - last < WS_THROTTLE_MS) return;
       lastWsUpdateTimeRef.current[update.symbol] = now;
 
+      const current = holdingsRef.current.find(h => h.symbol === update.symbol);
+      if (!current || (current.current_price === update.price && current.updated_at?.slice(0, 10) === new Date().toISOString().slice(0, 10))) return;
       setLastUpdate(`${update.symbol}: ${formatCurrency(update.price)} ₺ (${update.source})`);
 
       setHoldings(prev =>
@@ -272,7 +275,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: false });
 
       if (data) {
-        setHoldings(data);
+        setHoldings(previous => keepHoldings(previous, data));
 
         // DB'deki son gerçek fiyatlar fallback havuzunu besler — API kesintisinde
         // ekran bayat-ama-gerçek fiyat gösterir, uydurma sabit değil.
@@ -383,13 +386,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       });
 
       const results = await Promise.allSettled(updates);
-      setHoldings(prev => prev.map(h => {
+      setHoldings(prev => keepHoldings(prev, prev.map(h => {
         const idx = holdingsToUpdate.findIndex(hu => hu.id === h.id);
         if (idx === -1) return h;
         const result = results[idx];
         if (result.status === 'fulfilled') return result.value;
         return h; // keep original on failure
-      }));
+      })));
 
       // Build the latest holdings snapshot for PnL calculation
       const updatedForPnl = holdingsToUpdate.map((h, idx) => {
@@ -412,7 +415,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       // the client no longer persists them. PnL is read straight from the stored
       // snapshots, so we just refresh from the DB here — no recompute needed.
       const data = await getPnLData();
-      setPnlData(data);
+      setPnlData(previous => keepPrevious(previous, data));
     } catch (error) {
       console.error('Error calculating PnL:', error instanceof Error ? error.message : '');
     }
@@ -481,22 +484,22 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    setLivePnlData({
+    setLivePnlData(previous => keepPrevious(previous, {
       daily: { period: 'Günlük', value: currentTotalValue, change: dailyChange, percentage: dailyPct },
       weekly: { period: 'Haftalık', value: currentTotalValue, change: weeklyChange, percentage: weeklyPct },
       monthly: { period: 'Aylık', value: currentTotalValue, change: monthlyChange, percentage: monthlyPct },
       // ANLIK: canlı fiyatlarla gün açılışından bu yana. pnlData bunu EZMEZ.
       intraday: { period: 'Anlık', value: currentTotalValue, change: safeIntradayChange, percentage: safeIntradayPct },
-    });
+    }));
   }
 
   async function loadPnLData() {
     try {
       const data = await getPnLData();
-      setPnlData(data);
+      setPnlData(previous => keepPrevious(previous, data));
       // İlk yükleme: canlı fiyat henüz gelmedi → intraday 0 değil NULL anlamına gelsin diye
       // change/percentage 0 ama period 'yok' ile işaretli; ekran bunu basmaz, '—' gösterir.
-      setLivePnlData({ ...data, intraday: { period: 'yok', value: 0, change: 0, percentage: 0 } });
+      setLivePnlData(previous => keepPrevious(previous, { ...data, intraday: previous?.intraday ?? { period: 'yok', value: 0, change: 0, percentage: 0 } }));
     } catch (error) {
       console.error('Error loading PnL data:', error instanceof Error ? error.message : '');
     }
@@ -504,7 +507,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   async function loadHistoricalData() {
     const data = await getHistoricalSnapshots(30);
-    setHistoricalData(data);
+    setHistoricalData(previous => keepPrevious(previous, data));
   }
 
   async function checkNotificationPermission() {
@@ -665,7 +668,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       .from('holdings')
       .select('*')
       .order('created_at', { ascending: false });
-    if (data) setHoldings(data);
+    if (data) setHoldings(previous => keepHoldings(previous, data));
   }, []);
 
   const handleRefresh = useCallback(async () => {

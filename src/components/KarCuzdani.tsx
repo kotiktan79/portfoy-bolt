@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Wallet, Gauge, AlertCircle } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
-import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
-import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR, withdrawalEUR, remainingEntitlementEUR, makeRateSeries, normalizeInflation, INFLATION_EUR, RELIABLE_FROM, type RateSeries } from '../lib/eurPnl';
+import { useSilentRefresh } from '../hooks/useSilentRefresh';
+import { loadWalletView } from '../services/walletViewService';
+import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR, withdrawalEUR, remainingEntitlementEUR, makeRateSeries, INFLATION_EUR } from '../lib/eurPnl';
 import { currentYM } from '../services/salaryService';
 import { invalidateEurPnlCache } from '../services/eurPnlService';
-import { getKasaFx, type KasaFx } from '../services/kasaFxService';
 import { planSalary, kasaOutstandingEUR, type SalaryPlanInput } from '../lib/salaryPlan';
 import { inflationStatusText } from '../lib/inflationDecision';
 import { parseSalaryRule, withSalaryRule, fixYear, expectedPath, pathMilestones, type SalaryRuleConfig, type SalaryRuleMode } from '../lib/spendDownSalary';
@@ -18,8 +18,6 @@ import HarcaBitirMaasKarti from './HarcaBitirMaasKarti';
 // Çekim: EURO pozisyonundan düşülür. Yeni kayıt amount_eur yazar (USD kolonları yalnız eski satırlar için).
 // Taban €700: havuzdan gelen (%85, tavan €1.000) yetmezse fark kasadan önerilir; kasa €15.000 altına inecekse önerilmez.
 
-interface SalaryWithdrawal { id: string; withdrawn_at: string; amount_usd: number; amount_eur?: number | null; note: string | null; source_symbol: string | null; source_quantity_deducted: number | null }
-interface KasaMove { kind: string; amount_eur: number | null }
 interface Props { holdings: Holding[] }
 const fmt = (n: number) => Math.round(Math.abs(n)).toLocaleString('de-DE');
 const sgn = (n: number) => (n >= 0 ? '+' : '−');
@@ -30,76 +28,27 @@ const trMonth = (ym: string) => {
 };
 
 export default function KarCuzdani({ holdings }: Props) {
-  const [salary, setSalary] = useState<DynamicSalary | null>(null);
-  const [accrual, setAccrual] = useState<SalaryAccrual | null>(null);
-  const [mtd, setMtd] = useState<MonthToDate | null>(null);
-  const [withdrawals, setWithdrawals] = useState<SalaryWithdrawal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { data, loading, error: loadError, refresh: loadAll } = useSilentRefresh(() => loadWalletView(holdings));
+  const salary = data?.salary ?? null;
+  const accrual = data?.accrual ?? null;
+  const mtd = data?.mtd ?? null;
+  const withdrawals = data?.withdrawals ?? [];
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [sourceSymbol, setSourceSymbol] = useState<string>('EURO');
   const [amountInput, setAmountInput] = useState<string>('');
   const [inflationAnnual, setInflationAnnual] = useState(INFLATION_EUR);
   const [inflationInput, setInflationInput] = useState('3');
   const [inflationMsg, setInflationMsg] = useState<string | null>(null);
-  const [histFx, setHistFx] = useState<{ eur: RateSeries; usd: RateSeries } | null>(null);
-
-
-  // KASA (ölçüm dışı) — kur etkisi görünür olsun; maaş/havuz rakamlarına DOKUNMAZ (2026-09-27)
+  const histFx = useMemo(() => data ? {
+    eur: makeRateSeries(data.eurRates.map(r => ({ date: String(r.day), rate: Number(r.rate) })), Number.NaN),
+    usd: makeRateSeries(data.usdRates.map(r => ({ date: String(r.day), rate: Number(r.rate) })), Number.NaN),
+  } : null, [data]);
+  // Aynı ayar tekrar gelince kullanıcının yazdığı enflasyon girdisini silme.
   useEffect(() => {
-    let c = false;
-    getKasaFx()
-      .then(k => { if (!c) { setKasa(k); setKasaErr(k ? null : 'veri yok'); } })
-      .catch(e => { if (!c) setKasaErr(e?.message || 'okunamadı'); });   // sessizce kaybolmasın: panelde satır duruyor
-    return () => { c = true; };
-  }, []);
-
-  useEffect(() => { loadAll(); loadPolicy(); }, [holdings]);
-  async function loadPolicy() {
-    const [pol, mov] = await Promise.all([
-      supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('portfoy_bolt_kasa_salary_moves').select('kind,amount_eur'),
-    ]);
-    if (!pol.error && pol.data) {
-      const n = (v: unknown) => (v == null || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
-      const inf = normalizeInflation(pol.data.inflation_annual);
-      setInflationAnnual(inf);
-      setInflationInput(String(Math.round(inf * 1000) / 10));
-      setRuleCfg(parseSalaryRule(pol.data.inflation_decisions));
-      setPolicy({
-        floorEUR: n(pol.data.floor_eur),
-        capEUR: n(pol.data.cap_eur),
-        kasaMinEUR: n(pol.data.kasa_floor_eur),
-        refillRatio: n(pol.data.kasa_refill_ratio),
-        kasaStartEUR: n(pol.data.kasa_start_eur),
-        salaryStartMonth: pol.data.salary_start_month || undefined,
-      });
-    }
-    if (!mov.error) setKasaMoves(mov.data || []);
-  }
-  async function loadAll() {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const [s, a, w, m] = await Promise.all([
-        getDynamicSalary(holdings), getSalaryAccrual(),
-        supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(200),
-        getMonthToDate(),
-      ]);
-      if (w.error) throw new Error(`salary_withdrawals: ${w.error.message}`);   // 'çekilen €0' sahte olgusu yasak
-      const [er, ur] = await Promise.all([
-        supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'EUR').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
-        supabase.from('exchange_rates_daily').select('day,rate').eq('from_currency', 'USD').eq('to_currency', 'TRY').eq('source', 'api').gte('day', RELIABLE_FROM),
-      ]);
-      const pts = (rows: Array<{ day: string; rate: number }> | null) => (rows || []).map(r => ({ date: String(r.day), rate: Number(r.rate) }));
-      setHistFx({ eur: makeRateSeries(pts(er.data), Number.NaN), usd: makeRateSeries(pts(ur.data), Number.NaN) });
-      setSalary(s); setAccrual(a); setMtd(m); setWithdrawals(w.data || []);
-    } catch (e: unknown) {
-      setLoadError(e instanceof Error ? e.message : 'veri yüklenemedi');   // motor hatası: rakam gösterme
-    } finally {
-      setLoading(false);
-    }
-  }
+    if (data?.inflationAnnual == null) return;
+    setInflationAnnual(data.inflationAnnual);
+    setInflationInput(String(Math.round(data.inflationAnnual * 1000) / 10));
+  }, [data?.inflationAnnual]);
 
   const fx = useMemo(() => getFxRatesFromHoldings(holdings), [holdings]);
   const eurRate = fx.eur > 0 ? fx.eur : 0;
@@ -117,12 +66,12 @@ export default function KarCuzdani({ holdings }: Props) {
   // TEK TABAN: çekim hakkı KAPANMIŞ son ayın havuzundan (motor hesaplıyor; bitmemiş ayın kârı geri dönebilir).
   // Havuz zaten çekilenler düşülmüş bakiyedir → burada SADECE bu ay çekilenler düşülür (çift sayım yok).
   const poolEur = salary?.poolOutEUR ?? 0;
-  const [kasa, setKasa] = useState<KasaFx | null>(null);
-  const [kasaErr, setKasaErr] = useState<string | null>(null);
-  const [policy, setPolicy] = useState<Partial<SalaryPlanInput>>({});
-  const [kasaMoves, setKasaMoves] = useState<KasaMove[]>([]);
+  const kasa = data?.kasa ?? null;
+  const kasaErr = kasa ? null : 'veri yok';
+  const policy: Partial<SalaryPlanInput> = data?.policy ?? {};
+  const kasaMoves = data?.kasaMoves ?? [];
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
-  const [ruleCfg, setRuleCfg] = useState<SalaryRuleConfig>(() => parseSalaryRule(null));
+  const ruleCfg = data?.ruleCfg ?? parseSalaryRule(null);
   const [ruleBusy, setRuleBusy] = useState(false);
   const [ruleMsg, setRuleMsg] = useState<string | null>(null);
   // HARCA-BİTİR: yatırım portföyü (kasa ve Ev Parası hariç) → yıllık maaş
@@ -144,7 +93,6 @@ export default function KarCuzdani({ holdings }: Props) {
         .update({ inflation_decisions: withSalaryRule(cur.data.inflation_decisions, next), updated_at: new Date().toISOString() }).eq('id', 1);
       if (error) { setRuleMsg('Kaydedilemedi: ' + error.message); return; }
       setRuleMsg(okMsg);
-      await loadPolicy();
       await loadAll();
     } finally { setRuleBusy(false); }
   }
@@ -202,7 +150,7 @@ export default function KarCuzdani({ holdings }: Props) {
     });
     if (error) { setMoveMsg('Kayıt yazılamadı. SQL dosyasını çalıştırdıysan tekrar dene: ' + error.message); return; }
     setMoveMsg(kind === 'topup' ? 'Kasadan tamamlama kayda geçti. Kasadaki parayı da kendin güncelle.' : 'Kasa doldurma kayda geçti.');
-    await loadPolicy();
+    await loadAll();
   }
 
   const cashSources = useMemo(() => holdings
