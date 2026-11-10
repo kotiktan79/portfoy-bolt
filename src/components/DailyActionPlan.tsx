@@ -153,7 +153,7 @@ export function DailyActionPlan({ holdings }: DailyActionPlanProps) {
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">{getGreeting()}! Bugünkü Planınız</h3>
             </div>
-            <p className="text-[10px] text-gray-400 mt-0.5">Haftalık €{WEEKLY_BUY_EUR.toLocaleString('de-DE')} · tamamı VWCE · €{EUR_CASH_RESERVE.toLocaleString('de-DE')} EUR nakit kenarda</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">Haftada en fazla €{WEEKLY_BUY_EUR.toLocaleString('de-DE')} · nakit yedeğe göre alım · €{EUR_CASH_RESERVE.toLocaleString('de-DE')} EUR nakit kenarda</p>
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded-full ${market.isOpen ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             <Clock size={10} className="inline mr-1" />

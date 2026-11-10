@@ -15,7 +15,7 @@ export interface DailyBreakdown {
 
 const isFxCash = (h: Holding, s: string) => h.asset_type === 'currency' && (h.symbol === s || (s === 'EURO' && h.symbol === 'EUR'));
 
-export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, number>, snapshotTRY: number): DailyBreakdown | null {
+export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, number>, snapshotTRY: number, prevEurRate?: number): DailyBreakdown | null {
   const now = getFxRatesFromHoldings(holdings);
   if (!(now.eur > 0) || !(snapshotTRY > 0)) return null;
   const pick = (sym: string, cur: number) => {
@@ -23,7 +23,7 @@ export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, n
     const p = h ? Number(prevPrices[String(h.id)]) : NaN;
     return p > 1 ? p : cur;
   };
-  const prev: FxRates = { usd: pick('USD', now.usd), eur: pick('EURO', now.eur), gbp: now.gbp };
+  const prev: FxRates = { usd: pick('USD', now.usd), eur: prevEurRate ?? pick('EURO', now.eur), gbp: now.gbp };
   const pos = holdings.filter(h => h.asset_type !== 'cash' && !isClosedHolding(h));
   let nowTRY = 0, prevSumTRY = 0, fxTRY = 0;
   const rows: BreakdownRow[] = [];
@@ -35,11 +35,11 @@ export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, n
     const pP = noPrev ? pN : raw;
     nowTRY += fxToTRY(q * pN, h.currency, now);
     prevSumTRY += fxToTRY(q * pP, h.currency, prev);
-    fxTRY += fxToTRY(q * pP, h.currency, now) - fxToTRY(q * pP, h.currency, prev);
+    fxTRY += fxToTRY(q * pP, h.currency, now) / now.eur - fxToTRY(q * pP, h.currency, prev) / prev.eur;
     rows.push({ id: String(h.id), symbol: h.symbol, eur: fxToTRY(q * (pN - pP), h.currency, now) / now.eur, ...(noPrev ? { noPrev } : {}) });
   }
   rows.sort((a, b) => Math.abs(b.eur) - Math.abs(a.eur));
-  return { rows, fxEUR: fxTRY / now.eur, gapEUR: (prevSumTRY - snapshotTRY) / now.eur, totalEUR: (nowTRY - snapshotTRY) / now.eur };
+  return { rows, fxEUR: fxTRY, gapEUR: (prevSumTRY - snapshotTRY) / prev.eur, totalEUR: nowTRY / now.eur - snapshotTRY / prev.eur };
 }
 
 /** İlk n satır + kalanların toplamı. */

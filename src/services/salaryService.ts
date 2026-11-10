@@ -8,6 +8,9 @@
 // IAS 29 (TL hiperenflasyonist), CF 8.7 (enflasyonu aşan kısım kârdır). Zarar devri: ana paraya dokunulmaz.
 // Başka formül EKLEMEYİN. Değiştirmek gerekirse önce kullanıcıya tek cümleyle sorun.
 
+import { readActiveSalary } from './activeSalaryService';
+import type { Holding } from '../lib/supabase';
+import type { SpendDownPlan, SalaryRuleConfig } from '../lib/spendDownSalary';
 import { supabase } from '../lib/supabase';
 import { getEurMonths, monthLabel, RELIABLE_FROM, INFLATION_EUR } from './eurPnlService';
 import { ymInTZ, prevYMOf, dayInTZ, entitlementEUR, withdrawalEUR, makeRateSeries, type MonthRow } from '../lib/eurPnl';
@@ -16,6 +19,9 @@ export const ACCRUAL_START_MONTH = RELIABLE_FROM.slice(0, 7);
 export { INFLATION_EUR };
 
 export interface DynamicSalary {
+  spendDown?: SpendDownPlan | null;
+  salaryRule?: SalaryRuleConfig;
+  salaryStartMonth?: string;
   month: string; monthLabel: string;
   carryResetApplied?: boolean;    // o ayda eski açık sıfırlandı (Nisan öncesi kâr yastığı)
   poolOutEUR?: number;            // ay sonu havuz bakiyesi (+) ya da açık (−)
@@ -67,12 +73,19 @@ export async function getMonthlySalarySeries(months = 12): Promise<MonthlySalary
   })).slice(-months).reverse();
 }
 
-export async function getDynamicSalary(): Promise<DynamicSalary | null> {
-  // KESİN önceki takvim ayı (cron summarizeEur.lastFull ile aynı kural); o ayda snapshot yoksa maaş yok
-  const rows = await getEurMonths();
-  const p = prevYM();
-  const r = rows.find(x => x.month === p);
-  return r ? toRow(r) : null;
+export async function getDynamicSalary(holdings?: Holding[], now = new Date()): Promise<DynamicSalary | null> {
+  const active = await readActiveSalary(supabase, currentYM(now), holdings?.length ? holdings : undefined);
+  const rows = await getEurMonths().catch(error => { if (active.plan) return []; throw error; });
+  const r = rows.find(x => x.month === prevYM(now));
+  const legacy = r ? toRow(r) : null;
+  if (!active.plan) return legacy;
+  const plan = active.plan;
+  return {
+    ...(legacy ?? { month: currentYM(now), monthLabel: monthLabel(currentYM(now)), profitEUR: 0, inflationEUR: 0,
+      realGainEUR: 0, carryInEUR: 0, withdrawableEUR: 0, salaryEUR: 0, startWealthEUR: 0, endWealthEUR: 0 }),
+    entitlementEUR: plan.monthlyEUR, salaryEUR: plan.monthlyEUR,
+    spendDown: plan, salaryRule: active.config, salaryStartMonth: active.salaryStartMonth,
+  };
 }
 
 export async function getSalaryAccrual(): Promise<SalaryAccrual | null> {

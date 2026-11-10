@@ -1,3 +1,4 @@
+import { readActiveSalary, type ActiveSalary } from '../../src/services/activeSalaryService.js';
 // AI KATMANI — TEK BAĞLAM, TEK KURAL (2026-09-22, kullanıcı kararı: "küçült, işlem önerisi yok")
 // Sohbet (api/chat.ts), günlük rapor (api/cron/daily-report.ts), plan (api/daily-plan.ts) ve araştırma
 // (api/cron/ai-research.ts) buradan beslenir. Rakamlar EUR motorundan (api/lib/eurEngine = uygulamayla aynı
@@ -6,14 +7,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadEurModel, fetchAll, fmtEUR, fmtSignedEUR, monthLabelTR, type EurSummary } from './eurEngine.js';
 import { TARGET_ALLOCATION, allocationClassFor, isHouseMoney, CLASS_LABELS, type AllocationClass } from '../../src/config/portfolioPolicy.js';
 import { POOL_CAP_EUR, MONTHLY_CAP_EUR, SALARY_SAFETY, INFLATION_EUR, summarizeEur } from '../../src/lib/eurPnl.js';
-import { WEEKLY_BUY_EUR, buildWeeklyPlan, euroCashEUR, vwcePriceEUR, weeklyPlanCopy } from '../../src/lib/buyPlan.js';
+import { buildWeeklyPlan, euroCashEUR, vwcePriceEUR, instrumentPriceEUR, weeklyPlanCopy } from '../../src/lib/buyPlan.js';
 
 export const AI_RULES = `ROLÜN: portföy AÇIKLAYICISI ve bilgi kaynağısın — portföy YÖNETİCİSİ değilsin.
 YAPACAKLARIN: rakamları açıkla (neden bu ay eksi/artı, hangi varlık ne yaptı), piyasa/haber özetini Türkçe ver,
 aşağıdaki ANOMALİLER listesini aynen bildir (kendin anomali üretme), kullanıcının sorusunu somut rakamla yanıtla.
 YAPMAYACAKLARIN (KESİN):
-- Alım/satım/trim/rebalans/"şunu artır, bunu azalt" ÖNERME. Haftalık alım planı sabittir ve aşağıda yazar; sen onu tekrar edersin, değiştirmezsin.
-  Kullanıcı "ne alayım?" derse cevap: her hafta EUR nakitten €1.000, tamamı VWCE. V3YL ve XEON'a yeni alım yok. XEON ancak güvenli taraf %14 hedefinin altına inerse. €7.000 EUR nakit kenarda kalır. Başka araç önerme. IB01 yeni alınmaz.
+- Alım/satım/trim/rebalans/"şunu artır, bunu azalt" ÖNERME. Haftalık alım planı aşağıda yazar; sen onu tekrar edersin, değiştirmezsin.
+  Kullanıcı "ne alayım?" derse cevap: aşağıdaki haftalık planı aynen aktar; alım nakit yedek sonrası kullanılabilir tutarı aşmaz. V3YL ve XEON'a yeni alım yok. XEON ancak güvenli taraf %14 hedefinin altına inerse. €7.000 EUR nakit kenarda kalır. Başka araç önerme. IB01 yeni alınmaz.
 - Maaş/kâr HESAPLAMA. Rakamlar motorun; sen aynen kullanırsın. "Güvenli/dengeli maaş", "$ hedef", "SWR ile" gibi kendi formülün YOK.
   "aylık tavan kadar maaş için ne gerekir?" gibi hedef hesabı sorulursa: uygulamadaki "Hedefe Ulaşma Planı" (FIRE) sayfasına yönlendir, kendi tahminini verme.
 - TL fiyat kârını euro kârı gibi sunma. Tek ölçü EUR: TL ve USD'nin euro karşısındaki kur hareketi kâra dahildir.
@@ -21,7 +22,7 @@ YAPMAYACAKLARIN (KESİN):
 - Uydurma; verisi olmayan konuda "elimde veri yok" de. Türkçe, kısa, somut.`;
 
 export interface WeekPlanRow { symbol: string; label: string; sharePct: number; amountEUR: number; instruction: string; detail: string; units: number | null }
-export interface AiContext { text: string; eur: EurSummary; weekPlan: WeekPlanRow[]; anomalies: string[]; trancheEUR: number }
+export interface AiContext { text: string; eur: EurSummary; weekPlan: WeekPlanRow[]; anomalies: string[]; trancheEUR: number; salary: ActiveSalary }
 
 type H = {
   id: string | number; symbol: string; asset_type: string; currency: string | null;
@@ -114,19 +115,20 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
     euroCashEUR: euroCashEUR(holdings),
     safePct,
     vwcePriceEUR: vwcePriceEUR(holdings, E),
+    xeonPriceEUR: instrumentPriceEUR(holdings, 'XEON', E),
   });
   const copy = weeklyPlanCopy(plan);
   const labels: Record<string, string> = { VWCE: 'Küresel hisse ETF', XEON: 'Para piyasası' };
-  const weekPlan: WeekPlanRow[] = [{
+  const weekPlan: WeekPlanRow[] = plan.buyEUR > 0 ? [{
     symbol: plan.destination,
     label: labels[plan.destination],
     sharePct: 100,
-    amountEUR: WEEKLY_BUY_EUR,
-    units: plan.destination === 'VWCE' ? plan.units : null,
+    amountEUR: plan.buyEUR,
+    units: plan.units,
     instruction: copy.weekLine,
     detail: `${copy.unitsLine} ${copy.cashLine} ${copy.holdLine}`,
-  }];
-  const trancheEUR = WEEKLY_BUY_EUR;
+  }] : [];
+  const trancheEUR = plan.buyEUR;
   const cashEUR = byClass.currency || 0;
   const kasa = (cashRes.data || []).map((c: { currency: string; balance: number }) => `${c.currency} ${Math.round(Number(c.balance)).toLocaleString('tr-TR')}`).join(', ');
 
@@ -164,7 +166,12 @@ export async function buildAiContext(supabase: SupabaseClient, todayStr: string,
   const nextYM = (() => { const y = Number(todayStr.slice(0, 4)), mo = Number(todayStr.slice(5, 7)); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; })();
   // Havuz/maaş cümleleri Telegram (api/lib/telegram.ts) ve Kâr Cüzdanı ile AYNI mantık: devreden, sıfırlama, ön izleme
   const carryIn = m?.carryInEUR ?? eur.poolEUR;
-  const poolLines = [
+  const salary = await readActiveSalary(supabase, todayStr.slice(0, 7), holdings as unknown as import('../../src/lib/supabase.js').Holding[]);
+  const poolLines = salary.plan ? [
+    `${salary.plan.year} DİNAMİK MAAŞ: ${fmtEUR(salary.plan.monthlyEUR)}/ay · portföyden ${fmtEUR(salary.plan.fromPortfolioEUR)} + kasadan ${fmtEUR(salary.plan.fromKasaEUR)}`,
+    `Maaş başlangıcı ${salary.salaryStartMonth}. ${salary.plan.fixed ? 'Yılın maaşı sabit.' : 'Maaş ön izlemesi; henüz sabitlenmedi.'}`,
+    ...(salary.plan.noRealRaise ? ['Geçen yıl portföy düştü, bu yıl reel artış yok'] : []),
+  ].join('\n') : [
     `KÂR HAVUZU (kapanmış aylardan): ${fmtSignedEUR(eur.poolEUR)} · ŞU AN ÇEKİLEBİLİR MAAŞ: ${fmtEUR(eur.entitlementEUR)} (havuz × ${String(SALARY_SAFETY).replace('.', ',')}, aylık tavan ${fmtEUR(MONTHLY_CAP_EUR)}, havuz tavanı ${fmtEUR(POOL_CAP_EUR)})`,
     m?.carryResetApplied
       ? `Bu ay (${monthLabelTR(m.month)}) devreden açık SIFIRLANDI (Nisan 2026 öncesi kâr yastığı kuralı, kullanıcı kararı 2026-09-20): eski açık devretmez, maaş bu aydan itibaren yeni kârdan.`
@@ -195,5 +202,5 @@ ${top}
 
 ANOMALİLER: ${anomalies.length ? anomalies.join(' | ') : 'yok'}`;
 
-  return { text, eur, weekPlan, anomalies, trancheEUR };
+  return { text, eur, weekPlan, anomalies, trancheEUR, salary };
 }

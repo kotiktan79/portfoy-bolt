@@ -11,7 +11,8 @@
 //
 // Saf fonksiyonlar: ekran ve test aynı hesabı kullanır. Para hareketi yapmaz, DB yazmaz.
 
-import type { InflationDecisions } from './inflationDecision';
+import { dayInTZ } from './eurPnl.js';
+import { parseInflationDecisions, type InflationDecisions } from './inflationDecision.js';
 
 export const SPEND_DOWN_DEFAULTS = {
   endYear: 2068,          // 90 yaş (Tan ~1978 doğumlu, 2026'da 48)
@@ -33,6 +34,9 @@ export interface SpendDownYearRecord {
   yearsLeft: number;
   indexApplied: number;
   fixedAt: string;
+  /** Sabitleme anındaki tabansız tutar; eski JSON kayıtlarında olmayabilir. */
+  ruleEUR?: number;
+  noRealRaise?: boolean;
 }
 
 export interface SalaryRuleConfig {
@@ -73,6 +77,8 @@ export function parseSalaryRule(rawDecisions: unknown): SalaryRuleConfig {
         yearsLeft: finite(y.yearsLeft) ?? 0,
         indexApplied: finite(y.indexApplied) ?? 1,
         fixedAt: typeof y.fixedAt === 'string' ? y.fixedAt : '',
+        ruleEUR: finite(y.ruleEUR) ?? undefined,
+        noRealRaise: y.noRealRaise === true,
       };
     }
   }
@@ -134,6 +140,8 @@ export interface SpendDownInput {
   kasaEUR: number;
   config: SalaryRuleConfig;
   inflationDecisions?: InflationDecisions | null;
+  /** Önceki sabitlemeden bu yılın başına kadar portföyden çekilen maaş. */
+  withdrawnSinceLastFixEUR?: number;
 }
 
 export interface SpendDownPlan {
@@ -158,6 +166,7 @@ export interface SpendDownPlan {
   /** Bu yıl zaten sabitlendi mi (Ocak kaydı). */
   fixed: boolean;
   firstYear: boolean;
+  noRealRaise: boolean;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -174,7 +183,7 @@ export function planSpendDown(inp: SpendDownInput): SpendDownPlan {
   const base = Math.max(0, Number(inp.portfolioEUR) || 0) + (cfg.includeKasa ? kasa : 0);
   const n = yearsLeft(inp.year, cfg.endYear);
   const fixedRec = cfg.years[String(inp.year)];
-  const target = annuityTargetMonthlyEUR(base, n, cfg.realRate, cfg.bufferEUR);
+  const target = fixedRec?.targetEUR ?? r2(annuityTargetMonthlyEUR(base, n, cfg.realRate, cfg.bufferEUR));
 
   const last = lastRecord(cfg, inp.year);
   let index = 1;
@@ -182,9 +191,15 @@ export function planSpendDown(inp: SpendDownInput): SpendDownPlan {
   if (last) {
     // Aradaki her yılın onaylı enflasyonu (atlanan yıl varsa da)
     for (let y = last.year; y < inp.year; y++) index *= approvedIndexFor(y, inp.inflationDecisions);
+    if (fixedRec) index = fixedRec.indexApplied;
     prev = last.rec.monthlyEUR * index;
   }
-  const rule = prev == null ? target : prev + cfg.smoothing * (target - prev);
+  // Çekim kadar azalan sermaye zarar değildir. Gerçek çekimler verilmezse yıllık maaş planı kullanılır.
+  const withdrawn = Math.max(0, inp.withdrawnSinceLastFixEUR ?? (last ? last.rec.monthlyEUR * 12 * (inp.year - last.year) : 0));
+  const comparisonBase = fixedRec?.portfolioEUR ?? base;
+  const noRealRaise = fixedRec?.noRealRaise === true || !!(last && comparisonBase + withdrawn < last.rec.portfolioEUR - 0.005);
+  const smoothed = prev == null ? target : prev + cfg.smoothing * (target - prev);
+  const rule = fixedRec?.ruleEUR ?? (noRealRaise && prev != null ? Math.min(smoothed, prev) : smoothed);
   let monthly = Math.max(rule, cfg.floorEUR);
   const floorApplied = rule < cfg.floorEUR;
   let capApplied = false;
@@ -193,13 +208,13 @@ export function planSpendDown(inp: SpendDownInput): SpendDownPlan {
 
   let shown = monthly;
   if (fixedRec) shown = fixedRec.monthlyEUR;
-  const ruleForKasa = fixedRec ? Math.min(fixedRec.targetEUR, shown) : Math.max(0, rule);
-  const gap = Math.max(0, cfg.floorEUR - Math.max(0, ruleForKasa));
+  const ruleForKasa = Math.max(0, rule);
+  const gap = Math.max(0, cfg.floorEUR - r2(Math.max(0, ruleForKasa)));
   const fromKasa = Math.min(gap, kasa, shown);
 
   return {
     year: inp.year,
-    baseEUR: r2(base),
+    baseEUR: r2(fixedRec?.portfolioEUR ?? base),
     yearsLeft: n,
     endYear: cfg.endYear,
     targetEUR: r2(target),
@@ -214,6 +229,7 @@ export function planSpendDown(inp: SpendDownInput): SpendDownPlan {
     fromPortfolioEUR: r2(shown - fromKasa),
     fixed: !!fixedRec,
     firstYear: prev == null,
+    noRealRaise,
   };
 }
 
@@ -231,6 +247,8 @@ export function fixYear(cfg: SalaryRuleConfig, plan: SpendDownPlan, now: Date = 
         yearsLeft: plan.yearsLeft,
         indexApplied: plan.indexApplied,
         fixedAt: now.toISOString(),
+        ruleEUR: plan.ruleEUR,
+        noRealRaise: plan.noRealRaise,
       },
     },
   };
@@ -248,18 +266,18 @@ export function expectedPath(args: {
   const cfg = args.config;
   const birth = args.birthYear ?? cfg.endYear - 90;
   let P = Math.max(0, args.portfolioEUR);
-  let prev: number | null = args.prevEUR ?? null;
+  let config = { ...cfg, years: { ...cfg.years } };
+  if (args.prevEUR != null && !lastRecord(config, args.startYear)) {
+    config.years[String(args.startYear - 1)] = { monthlyEUR: args.prevEUR, targetEUR: args.prevEUR,
+      portfolioEUR: P, yearsLeft: yearsLeft(args.startYear - 1, cfg.endYear), indexApplied: 1, fixedAt: '' };
+  }
   const rows: ExpectedPathRow[] = [];
   for (let y = args.startYear; y <= cfg.endYear; y++) {
-    const n = yearsLeft(y, cfg.endYear);
-    if (n <= 0) { rows.push({ year: y, age: y - birth, startEUR: r2(P), monthlyEUR: 0 }); break; }
-    const target = annuityTargetMonthlyEUR(P, n, cfg.realRate, cfg.bufferEUR);
-    const rule = prev == null ? target : prev + cfg.smoothing * (target - prev);
-    let m = Math.max(rule, cfg.floorEUR);
-    if (cfg.capEUR != null) m = Math.min(m, Math.max(cfg.floorEUR, cfg.capEUR));
-    rows.push({ year: y, age: y - birth, startEUR: r2(P), monthlyEUR: r2(m) });
-    P = Math.max(0, (P - 12 * m) * (1 + cfg.realRate));
-    prev = rule;
+    if (yearsLeft(y, cfg.endYear) <= 0) { rows.push({ year: y, age: y - birth, startEUR: r2(P), monthlyEUR: 0 }); break; }
+    const plan = planSpendDown({ year: y, portfolioEUR: P, kasaEUR: 0, config });
+    rows.push({ year: y, age: y - birth, startEUR: r2(P), monthlyEUR: plan.monthlyEUR });
+    config = fixYear(config, plan) ?? config;
+    P = Math.max(0, (P - 12 * plan.monthlyEUR) * (1 + cfg.realRate));
   }
   return rows;
 }
@@ -279,8 +297,28 @@ export function explainSpendDown(p: SpendDownPlan, cfg: SalaryRuleConfig): strin
     `Hedef: bu parayı yılda %${pct} reel getiriyle ${p.yearsLeft} yıla bölüp 90 yaşta ${e(cfg.bufferEUR)} bırakan maaş = ${e(p.targetEUR)}/ay`,
   ];
   if (p.prevEUR == null) lines.push(`İlk yıl: maaş = hedef = ${e(p.ruleEUR)}`);
-  else lines.push(`Geçen yıl ${e(p.prevEUR)}${p.indexApplied !== 1 ? ' (onaylı enflasyonla)' : ''} → yarı yolu: ${e(p.prevEUR)} + ½ × (${e(p.targetEUR)} − ${e(p.prevEUR)}) = ${e(p.ruleEUR)}`);
+  else lines.push(`Geçen yıl ${e(p.prevEUR)}${p.indexApplied !== 1 ? ' (onaylı enflasyonla)' : ''} → yarı yolu: ${e(p.prevEUR)} + ½ × (${e(p.targetEUR)} − ${e(p.prevEUR)}) = ${e(p.prevEUR + cfg.smoothing * (p.targetEUR - p.prevEUR))}`);
+  if (p.noRealRaise) lines.push('Geçen yıl portföy düştü, bu yıl reel artış yok');
   if (p.floorApplied) lines.push(`Taban ${e(cfg.floorEUR)} devrede: maaş ${e(cfg.floorEUR)}${p.fromKasaEUR > 0 ? `, farkın ${e(p.fromKasaEUR)}'su kasadan` : ''}`);
   if (p.capApplied && cfg.capEUR != null) lines.push(`Tavan ${e(cfg.capEUR)} devrede`);
   return lines;
+}
+
+/** Ekran ve sunucu aynı yıl/başlangıç kuralını kullanır. Aktif modda sıfır sermaye de tabanla hesaplanır. */
+export function salaryPlanForMonth(args: {
+  month: string; salaryStartMonth?: string | null; portfolioEUR: number; kasaEUR: number;
+  inflationDecisions: unknown; withdrawals?: Array<{ withdrawn_at: string; amount_eur?: number | string | null }>;
+}): SpendDownPlan | null {
+  const config = parseSalaryRule(args.inflationDecisions);
+  if (config.mode !== 'spend_down') return null;
+  const year = Math.max(Number(args.month.slice(0, 4)), Number((args.salaryStartMonth || '2027-04').slice(0, 4)));
+  const last = lastRecord(config, year);
+  const withdrawn = args.withdrawals && last ? args.withdrawals.filter(w => {
+    const day = dayInTZ(String(w.withdrawn_at));
+    return day >= `${last.year}-01-01` && day < `${year}-01-01`;
+  }).reduce((sum, w) => sum + Math.max(0, Number(w.amount_eur) || 0), 0) : undefined;
+  // Parse burada, böylece JSON içindeki salary_rule ve yıllık enflasyon kararları karışmaz.
+  const decisions = parseInflationDecisions(args.inflationDecisions);
+  return planSpendDown({ year, portfolioEUR: args.portfolioEUR, kasaEUR: args.kasaEUR, config,
+    inflationDecisions: decisions as InflationDecisions, withdrawnSinceLastFixEUR: withdrawn });
 }

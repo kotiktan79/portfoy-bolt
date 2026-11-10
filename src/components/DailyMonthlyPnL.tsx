@@ -1,3 +1,4 @@
+import { getDynamicSalary, type DynamicSalary } from '../services/salaryService';
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Calendar, BarChart2, CalendarDays } from 'lucide-react';
 import { getEurDaily, getEurWeeks, getEurMonths, monthLabel, type EurDaily } from '../services/eurPnlService';
@@ -26,6 +27,9 @@ function Badge({ gain, base }: { gain: number; base: number }) {
 
 export function DailyMonthlyPnL() {
   const [tab, setTab] = useState<Tab>('daily');
+  const [salary, setSalary] = useState<DynamicSalary | null>(null);
+  const [salaryReady, setSalaryReady] = useState(false);
+  useEffect(() => { getDynamicSalary().then(s => { setSalary(s); setSalaryReady(true); }).catch(() => {}); }, []);
   type Period = { key: string; label: string; gainEUR: number; startWealthEUR: number; endWealthEUR: number; firstDate: string; lastDate: string; gapDays: number; gapFilled?: boolean; inflationEUR?: number; realGainEUR?: number; carryInEUR?: number; salaryEUR?: number; carryResetApplied?: boolean; inflationAwaitingEUR?: number };
   const [daily, setDaily] = useState<EurDaily[]>([]);
   const [weekly, setWeekly] = useState<Period[]>([]);
@@ -64,7 +68,7 @@ export function DailyMonthlyPnL() {
                   <p className="text-sm font-bold text-gray-900 dark:text-white">{r.label}</p>
                   <p className="text-xs text-slate-500 dark:text-gray-400">
                     servet {fmtW(r.startWealthEUR)} → {fmtW(r.endWealthEUR)}
-                    {r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">{(r.inflationEUR ?? 0) > 0 && <>· yıl sonu enflasyon payı −€{Math.round(r.inflationEUR ?? 0).toLocaleString('de-DE')} </>}{(r.inflationAwaitingEUR ?? 0) > 0 && <>· enflasyon payı onay bekliyor: ~€{Math.round(r.inflationAwaitingEUR ?? 0).toLocaleString('de-DE')} </>}→ maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
+                    {salaryReady && salary?.spendDown == null && r.salaryEUR !== undefined && <span className="ml-1 text-slate-400">{(r.inflationEUR ?? 0) > 0 && <>· yıl sonu enflasyon payı −€{Math.round(r.inflationEUR ?? 0).toLocaleString('de-DE')} </>}{(r.inflationAwaitingEUR ?? 0) > 0 && <>· enflasyon payı onay bekliyor: ~€{Math.round(r.inflationAwaitingEUR ?? 0).toLocaleString('de-DE')} </>}→ maaş €{Math.round(r.salaryEUR).toLocaleString('de-DE')}</span>}
                     {(r.gapFilled || (r.key.length === 7 && r.gapDays >= 4)) && <span className="ml-1 text-amber-600">⚠ {r.gapFilled ? 'bu ayın snapshot kaydı yok, enflasyon payı yine birikti' : `${r.gapDays} gün snapshot yok`}</span>}
                   </p>
                 </div>
@@ -131,7 +135,7 @@ export function DailyMonthlyPnL() {
                       <p className="text-sm font-semibold text-slate-700 dark:text-gray-300">{posM}/{rows.length} ay kâr</p>
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-2">
-                      Kâr = euro servetin artışı. Kurun euro karşılığı kârdır. Maaş = (o ayın kârı, zarar devirli) × 0,85 (Kâr Cüzdanı). Enflasyon payı (varsayılan %3/yıl) her ay değil, yıl sonunda bir kez düşülür.
+                      Kâr = euro servetin artışı. Kurun euro karşılığı kârdır. {salary?.spendDown ? `${salary.spendDown.year} maaşı €${Math.round(salary.spendDown.monthlyEUR).toLocaleString('tr-TR')}/ay; yıllık plan kullanılır.` : 'Maaş = (o ayın kârı, zarar devirli) × 0,85 (Kâr Cüzdanı).'} Enflasyon payı (varsayılan %3/yıl) her ay değil, yıl sonunda bir kez düşülür.
                     </p>
                   </div>
                 );

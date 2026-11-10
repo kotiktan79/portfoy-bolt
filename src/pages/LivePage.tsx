@@ -283,7 +283,7 @@ export default function LivePage() {
             { label: 'Pasif Gelir', icon: Wallet, color: 'blue',
               value: passiveYearlyUSD / 12, fmt: (n: number) => `$${fmtUSD(n)}`, sub: '/ay tahmini' },
             { label: 'Dinamik Maaş', icon: Gauge, color: 'gold',
-              value: dynamic?.entitlementEUR ?? 0, fmt: (n: number) => dynamic ? `€${fmtUSD(n)}` : '—', sub: dynamic ? ((dynamic.poolOutEUR ?? 0) < 0 ? `havuz −€${Math.round(Math.abs(dynamic.poolOutEUR ?? 0))} açık → maaş yok` : `havuz €${Math.round(dynamic.poolOutEUR ?? 0)} × 0,85 (${dynamic.monthLabel} sonu)`) : '/ay' },
+              value: dynamic?.entitlementEUR ?? 0, fmt: (n: number) => dynamic ? `€${fmtUSD(n)}` : '—', sub: dynamic?.spendDown ? `${dynamic.spendDown.year} maaşı · kasadan €${Math.round(dynamic.spendDown.fromKasaEUR)}` : dynamic ? ((dynamic.poolOutEUR ?? 0) < 0 ? `havuz −€${Math.round(Math.abs(dynamic.poolOutEUR ?? 0))} açık → maaş yok` : `havuz €${Math.round(dynamic.poolOutEUR ?? 0)} × 0,85 (${dynamic.monthLabel} sonu)`) : '/ay' },
           ].map((card) => {
             const Icon = card.icon;
             const colors: Record<string, { text: string; border: string; bg: string; ic: string }> = {

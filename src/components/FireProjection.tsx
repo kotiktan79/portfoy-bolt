@@ -1,3 +1,5 @@
+import { getDynamicSalary, type DynamicSalary } from '../services/salaryService';
+import { SpendDownProjection } from './SpendDownProjection';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Target, TrendingUp, Flag, Wallet } from 'lucide-react';
 import {
@@ -162,6 +164,16 @@ function coverageBox(coverage: SalaryCoverage): string {
 }
 
 export default function FireProjection() {
+  const [activeSalary, setActiveSalary] = useState<DynamicSalary | null>(null);
+  const [salaryReady, setSalaryReady] = useState(false);
+  const [salaryError, setSalaryError] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getDynamicSalary().then(value => { if (!cancelled) setActiveSalary(value); })
+      .catch(() => { if (!cancelled) setSalaryError(true); })
+      .finally(() => { if (!cancelled) setSalaryReady(true); });
+    return () => { cancelled = true; };
+  }, []);
   const { isDark } = useDarkMode();
   const chrome = chartChrome(isDark);
 
@@ -319,6 +331,10 @@ export default function FireProjection() {
     { key: 'annualInflationPct', label: 'Enflasyon (uygulama ayarı)', suffix: '%', step: '0.5' },
     { key: 'monthlyContribution', label: 'Aylık dış katkı', suffix: '€', step: '100' },
   ];
+
+  if (!salaryReady) return <p>Maaş bakılıyor…</p>;
+  if (salaryError) return <p>Maaş ayarı okunamadı.</p>;
+  if (activeSalary?.spendDown && activeSalary.salaryRule) return <SpendDownProjection plan={activeSalary.spendDown} config={activeSalary.salaryRule} />;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">

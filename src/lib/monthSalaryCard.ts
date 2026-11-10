@@ -44,6 +44,7 @@ export interface MonthSalaryCardView {
   /** Büyük satır. */
   primary: string;
   sourceLine: string | null;
+  remainingLine?: string | null;
   rule: string;
   /** Ekranda yazılan tutar (çekildiyse o ayın maaşı). */
   shownEUR: number;
@@ -204,9 +205,9 @@ function buildSpendDownCard(inp: MonthSalaryInputs, sd: NonNullable<MonthSalaryI
   // Çekim portföy parçasından düşülür; kasa parçası ayrıca "Kasadan aldım" ile kaydedilir.
   const fromPort = preview ? sd.fromPortfolioEUR : Math.max(0, sd.fromPortfolioEUR - withdrawn);
   const fromKasa = sd.fromKasaEUR;
-  const shown = fromPort + fromKasa;
   const shared = {
     rule,
+    remainingLine: !preview && withdrawn > 0 ? `Bu ay portföyden kalan çekim: ${formatSalaryEUR(fromPort)}` : null,
     plannedTotalEUR: sd.monthlyEUR,
     plannedFromPoolEUR: sd.fromPortfolioEUR,
     plannedFromKasaEUR: sd.fromKasaEUR,
@@ -223,6 +224,6 @@ function buildSpendDownCard(inp: MonthSalaryInputs, sd: NonNullable<MonthSalaryI
     return { ...shared, state: 'withdrawn', notice: null, primary: `✅ Bu ayın maaşı çekildi (${formatSalaryEUR(sd.monthlyEUR)})`,
       sourceLine: null, shownEUR: sd.monthlyEUR, fromPoolEUR: 0, fromKasaEUR: 0 };
   }
-  return { ...shared, state: 'open', notice: null, primary: `Bu ay çekebileceğin maaş: ${formatSalaryEUR(shown)}`,
-    sourceLine: spendDownSourceLine(fromPort, fromKasa), shownEUR: shown, fromPoolEUR: fromPort, fromKasaEUR: fromKasa };
+  return { ...shared, state: 'open', notice: null, primary: `${sd.year} maaşı: ${formatSalaryEUR(sd.monthlyEUR)}/ay`,
+    sourceLine: spendDownSourceLine(sd.fromPortfolioEUR, sd.fromKasaEUR), shownEUR: sd.monthlyEUR, fromPoolEUR: fromPort, fromKasaEUR: fromKasa };
 }

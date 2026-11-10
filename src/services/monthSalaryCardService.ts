@@ -6,9 +6,9 @@ import { kasaOutstandingEUR } from '../lib/salaryPlan';
 import { currentYM, getDynamicSalary, getMonthToDate } from './salaryService';
 import { getKasaFx } from './kasaFxService';
 import { withdrawnThisMonthEUR, type MonthSalaryInputs } from '../lib/monthSalaryCard';
-import { inflationStatusText, parseInflationDecisions } from '../lib/inflationDecision';
-import { parseSalaryRule, planSpendDown } from '../lib/spendDownSalary';
-import { policySnapshot } from '../lib/policyAllocation';
+import { inflationStatusText } from '../lib/inflationDecision';
+import { parseSalaryRule, salaryPlanForMonth } from '../lib/spendDownSalary';
+import { salaryCapitalEUR } from '../lib/salaryCapital';
 import type { Holding } from '../lib/supabase';
 
 function numOrUndef(v: unknown): number | undefined {
@@ -51,10 +51,9 @@ export function assembleMonthSalaryInputs(args: {
   const pol = args.policy;
   const rule = parseSalaryRule(pol?.inflation_decisions);
   const startMonth = pol && pol.salary_start_month ? String(pol.salary_start_month) : '2027-04';
-  const ruleYear = Math.max(Number(args.asOfMonth.slice(0, 4)), Number(startMonth.slice(0, 4)));
-  const sd = rule.mode === 'spend_down' && (args.investableEUR ?? 0) > 0
-    ? planSpendDown({ year: ruleYear, portfolioEUR: args.investableEUR!, kasaEUR: args.kasaEUR, config: rule, inflationDecisions: parseInflationDecisions(pol?.inflation_decisions) })
-    : null;
+  const sd = rule.mode === 'spend_down' && args.investableEUR != null
+    ? salaryPlanForMonth({ month: args.asOfMonth, salaryStartMonth: startMonth, portfolioEUR: args.investableEUR,
+      kasaEUR: args.kasaEUR, inflationDecisions: pol?.inflation_decisions, withdrawals: args.withdrawals }) : null;
   return {
     spendDown: sd ? { year: sd.year, monthlyEUR: sd.monthlyEUR, fromPortfolioEUR: sd.fromPortfolioEUR, fromKasaEUR: sd.fromKasaEUR, fixed: sd.fixed } : null,
     asOfMonth: args.asOfMonth,
@@ -87,7 +86,7 @@ export function salaryRateSeries(rows: Array<{ day: string; rate: number }> | nu
 export async function loadMonthSalaryInputs(now = new Date(), holdings?: Holding[]): Promise<MonthSalaryInputs> {
   const asOfMonth = currentYM(now);
   const [salary, kasa, policyRes, movesRes, wdRes, eurRes, usdRes, mtd] = await Promise.all([
-    getDynamicSalary(),
+    getDynamicSalary(holdings, now),
     getKasaFx(),
     supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle(),
     supabase.from('portfoy_bolt_kasa_salary_moves').select('kind,amount_eur'),
@@ -97,14 +96,14 @@ export async function loadMonthSalaryInputs(now = new Date(), holdings?: Holding
     getMonthToDate().catch(() => null),
   ]);
   if (wdRes.error) throw new Error(wdRes.error.message);
-  if (!kasa) throw new Error('kasa yok');
+  if (!kasa && !salary?.spendDown) throw new Error('kasa yok');
   const policy = !policyRes.error && policyRes.data ? policyRes.data as SalaryPolicyRow : null;
   const moves = !movesRes.error && movesRes.data ? movesRes.data : [];
-  return assembleMonthSalaryInputs({
+  const assembled = assembleMonthSalaryInputs({
     asOfMonth,
     poolEUR: salary?.poolOutEUR ?? 0,
     realGainEUR: salary?.realGainEUR ?? 0,
-    kasaEUR: kasa.totalEurNow,
+    kasaEUR: kasa?.totalEurNow ?? 0,
     policy,
     moves,
     withdrawals: (wdRes.data || []) as SalaryWithdrawalRow[],
@@ -115,6 +114,7 @@ export async function loadMonthSalaryInputs(now = new Date(), holdings?: Holding
     yearEndInflationEUR: mtd?.inflationYearEndEstimateEUR ?? null,
     // Yıl sonu payı onay bekliyorsa/düşülmemişse o cümle; normal aylarda tahmin notu kalır
     inflationStatusNote: mtd && mtd.inflationDecision ? inflationStatusText(mtd) : null,
-    investableEUR: holdings && holdings.length ? policySnapshot(holdings).totalEUR : null,
+    investableEUR: holdings && holdings.length ? salaryCapitalEUR(holdings) : null,
   });
+  return { ...assembled, spendDown: salary?.spendDown ?? assembled.spendDown };
 }

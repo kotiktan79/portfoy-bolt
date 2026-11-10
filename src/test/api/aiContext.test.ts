@@ -61,6 +61,8 @@ function fakeSupabase(tables: Record<string, Row[]>) {
       gt: (c: string, v: any) => { filtered = filtered.filter(r => r[c] > v); return q; },
       gte: (c: string, v: any) => { filtered = filtered.filter(r => String(r[c]) >= String(v)); return q; },
       order: () => q,
+      maybeSingle: async () => ({ data: filtered[0] ?? null, error: null }),
+      limit: (n: number) => { to = n - 1; return q; },
       range: (a: number, b: number) => { from = a; to = b; return q; },
       then: (res: (v: any) => void) => res({ data: head ? null : filtered.slice(from, to + 1), error: null, count: count ? filtered.length : null }),
     };

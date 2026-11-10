@@ -12,7 +12,7 @@ interface ChatMessage { role: 'user' | 'ai'; content: string; suggestions?: stri
 // Sohbet geçmişi anahtarı sürümlendi: eski öneri/sinyal mesajları /api/chat'e geçmiş olarak gitmesin.
 const CHAT_KEY = 'ai_chat_history_v2';
 const CHAT_SUGGESTIONS = ['Bu hafta ne alıyorum?', 'Bu ay neden eksi/artı?', 'Maaşım neden bu kadar?'];
-const OFFLINE_MSG = 'AI şu an ulaşılamıyor. Haftalık plan: EUR nakitten €1.000, tamamı VWCE. €7.000 EUR nakit kenarda kalır. V3YL ve XEON\'a yeni alım yok. Ayrıntı Plan sekmesinde, maaş rakamı Kâr Cüzdanı\'nda. Biraz sonra tekrar deneyin.';
+const OFFLINE_MSG = 'AI şu an ulaşılamıyor. Haftalık tutar ve araç nakit yedeğe göre hesaplanır. Ayrıntı Plan sekmesinde, maaş rakamı Kâr Cüzdanı\'nda. Biraz sonra tekrar deneyin.';
 
 export default function AIAdvisor() {
   const [holdings, setHoldings] = useState<any[]>([]);

@@ -20,11 +20,11 @@ describe('dailyBreakdown', () => {
     expect(b.rows.find(r => r.symbol === 'ALTIN')!.eur).toBeCloseTo(600 / 56.4, 6);
     expect(b.rows.find(r => r.symbol === 'VWCE')!.eur).toBeCloseTo(10, 6); // 10×1 €
     expect(b.rows.find(r => r.symbol === 'XEON')).toMatchObject({ eur: 0, noPrev: true });
-    expect(b.fxEUR).toBeCloseTo((10 * 169 * 0.2 + 150 * 0.2 + 2 * 274 * 0.1) / 56.4, 6);
+    expect(b.fxEUR).toBeCloseTo((prevTRY + 10 * 169 * 0.2 + 150 * 0.2 + 2 * 274 * 0.1) / 56.4 - prevTRY / 56.2, 6);
   });
   it('snapshot farklıysa fark satırı görünür', () => {
     const b = dailyBreakdown(hs, prev, prevTRY - 564)!;
-    expect(b.gapEUR).toBeCloseTo(10, 6);
+    expect(b.gapEUR).toBeCloseTo(564 / 56.2, 6);
     expect(b.rows.reduce((s, r) => s + r.eur, 0) + b.fxEUR + b.gapEUR).toBeCloseTo(b.totalEUR, 8);
   });
   it('kur/snapshot yoksa null', () => { expect(dailyBreakdown(hs, prev, 0)).toBeNull(); });

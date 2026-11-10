@@ -63,7 +63,8 @@ describe('Nakit Dağılımı kartı', () => {
 
     await waitFor(() => expect(screen.getByText('€72.823')).toBeInTheDocument());
     expect(screen.getByText('Dolar %56, Euro %36, Ruble %8')).toBeInTheDocument();
-    expect(screen.getByText('Euro nakitten €7.000 kenarda; kalan ~€19.501 haftada €1.000 VWCE\'ye gidiyor (~20 hafta)')).toBeInTheDocument();
+    expect(screen.getByText(/Yatırılacak €19\.501/)).toBeInTheDocument();
+    expect(screen.getByText(/tamamı XEON/)).toBeInTheDocument();
     expect(screen.getByText('Ev Parası (Türkiye) ₺39.792 · €796 — toplama dahil değil')).toBeInTheDocument();
     expect(screen.getAllByText('Portföy').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Kasa').length).toBeGreaterThanOrEqual(2);

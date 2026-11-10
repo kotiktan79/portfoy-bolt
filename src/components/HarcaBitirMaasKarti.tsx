@@ -78,7 +78,7 @@ export default function HarcaBitirMaasKarti(p: Props) {
                   ))}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-gray-400">Gerçek yıllar farklı olur: iyi yıllarda maaş yavaşça artar, kötü yıllarda yavaşça düşer (taban {e(p.config.floorEUR)}). 1971–2026 gerçek piyasa verisiyle test: 165 başlangıcın hiçbirinde para 90'dan önce bitmedi, tipik maaş €480–660. Rastgele karıştırılmış senaryoların ~%23'ünde ise 80'lerde bitiyor; kasa ve taban bu yüzden var.</p>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-gray-400">Bu tablo sabit reel getiri varsayımıyla hesaplanır. Gerçek getiri değişir; maaş ve kalan para garanti değildir.</p>
             </div>
           )}
         </>

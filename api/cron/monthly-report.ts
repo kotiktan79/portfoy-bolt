@@ -1,3 +1,4 @@
+import { readActiveSalary } from '../../src/services/activeSalaryService.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sendEmail, buildMonthlyEmail } from '../lib/email.js';
 import { getServiceSupabase } from '../lib/serviceSupabase.js';
@@ -5,7 +6,7 @@ import { sendTelegram, buildMonthlyTelegram } from '../lib/telegram.js';
 import { requireCronAuth } from '../lib/auth.js';
 import { sendPushToAll } from '../lib/push.js';
 import { loadEurModel, monthLabelTR, fmtEUR, fmtSignedEUR } from '../lib/eurEngine.js';
-import { entitlementEUR } from '../../src/lib/eurPnl.js';
+import { dayInTZ, entitlementEUR } from '../../src/lib/eurPnl.js';
 import { inflationStatusText } from '../../src/lib/inflationDecision.js';
 import { AI_ENABLED } from '../../src/lib/aiFeature.js';
 
@@ -29,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Ay sınırları UTC (snapshot_date UTC günüdür; yerel TZ'ye bağlı kaymasın)
     const now = new Date();
-    const thisYM = now.toISOString().slice(0, 7);
+    const thisYM = dayInTZ(now).slice(0, 7);
     const y = now.getUTCFullYear(), m0 = now.getUTCMonth();               // 0-based, bu ay
     const prevFirst = new Date(Date.UTC(y, m0 - 1, 1));
     const prevLast = new Date(Date.UTC(y, m0, 0));
@@ -44,7 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`EUR motorunda ${reportYM} satırı yok, rapor atlandı.`);
       return res.status(200).json({ success: false, log });
     }
-    const entitlement = entitlementEUR(row.carryOutEUR);   // TEK TABAN: ay sonu havuzu × 0,85 (cüzdanla aynı)
+    const activeSalary = await readActiveSalary(supabase, thisYM);
+    const entitlement = activeSalary.plan?.monthlyEUR ?? entitlementEUR(row.carryOutEUR);   // TEK TABAN: ay sonu havuzu × 0,85 (cüzdanla aynı)
     log.push(`EUR motoru: ${monthLabel} kâr ${fmtSignedEUR(row.gainEUR)}, yıl sonu enflasyon −${fmtEUR(row.inflationEUR)}, havuz ${fmtSignedEUR(row.carryOutEUR)} → maaş ${fmtEUR(entitlement)}, kur ${model.health.ok ? 'güncel' : 'ESKİ'}`);
     const eurRateAtEnd = model.daily.filter(d => d.date <= monthEnd).pop()?.eurRate || model.daily[model.daily.length - 1]?.eurRate || 0;
     const toEUR = (tl: number) => (eurRateAtEnd > 0 ? tl / eurRateAtEnd : 0);
@@ -91,6 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       startWealthEUR: row.startWealthEUR, endWealthEUR: row.endWealthEUR,
       gainEUR: row.gainEUR, inflationEUR: row.inflationEUR, realGainEUR: row.realGainEUR,
       carryInEUR: row.carryInEUR, withdrawableEUR: row.withdrawableEUR, carryOutEUR: row.carryOutEUR,
+      spendDown: activeSalary.config.mode === 'spend_down',
       salaryEUR: entitlement, carryResetApplied: row.carryResetApplied,
       inflationNote: inflationStatusText(row),
       realizedIncomeEUR,

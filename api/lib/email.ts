@@ -61,6 +61,7 @@ const seur = (n: number, dec = 0) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${eur(n
 const spct = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;   // tek hassasiyet: eurEngine.fmtSignedPct ile aynı
 
 export interface DailySnapshot {
+  spendDown?: boolean;
   date: string;
   asOf: string;                 // rakamların snapshot günü
   wealthEUR: number; wealthTRY: number; eurRate: number;
@@ -122,7 +123,7 @@ export function buildDailyEmail(d: DailySnapshot): { subject: string; html: stri
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Dinamik Maaş — ${d.salaryMonthLabel}</div>
         <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;">
           <div style="font-size:24px;font-weight:800;color:${d.salaryEUR > 0 ? '#059669' : '#64748b'};">${eur(d.salaryEUR)}</div>
-          <div style="font-size:12px;color:#64748b;">= kâr havuzu × 0,85 (aylık tavan €1.000) · havuz ${d.salaryBasisLabel} sonu itibarıyla</div>
+          <div style="font-size:12px;color:#64748b;">${d.spendDown ? 'Yıllık maaş planı · Kâr Cüzdanı ile aynı hesap' : `= kâr havuzu × 0,85 (aylık tavan €1.000) · havuz ${d.salaryBasisLabel} sonu itibarıyla`}</div>
         </div>
         <div style="display:flex;gap:18px;margin-top:12px;">
           <div>
@@ -258,6 +259,7 @@ export function buildWeeklyEmail(w: WeeklySnapshot): { subject: string; html: st
 // MONTHLY EMAIL — EUR (ayın 1'i: geçen ayın kârı + bu ayın maaşı ilanı)
 // ============================================================
 export interface MonthlySnapshot {
+  spendDown?: boolean;
   monthLabel: string;              // raporlanan (geçen) ay
   salaryMonthLabel: string;        // maaşın ödeneceği (bu) ay
   startWealthEUR: number; endWealthEUR: number;
@@ -300,7 +302,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
       <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:12px;">
         <span style="color:#475569;">${r.month}</span>
         <span style="font-weight:700;color:${greenIfPos(r.gainEUR)};">${seur(r.gainEUR)}</span>
-        <span style="color:#64748b;">maaş ${eur(r.salaryEUR)}</span>
+        <span style="color:#64748b;">${m.spendDown ? 'Eski kâr hesabı' : `maaş ${eur(r.salaryEUR)}`}</span>
       </div>`).join('');
 
   const row = (label: string, v: number, signed = true, color?: string) => `
@@ -333,7 +335,7 @@ export function buildMonthlyEmail(m: MonthlySnapshot): { subject: string; html: 
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;">${m.salaryMonthLabel} Maaşı</div>
         <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;">
           <div style="font-size:28px;font-weight:800;color:${m.salaryEUR > 0 ? '#059669' : '#64748b'};">${eur(m.salaryEUR)}</div>
-          <div style="font-size:13px;color:#64748b;">= ay sonu havuzu ${seur(m.carryOutEUR)} × 0,85 (aylık tavan €1.000)</div>
+          <div style="font-size:13px;color:#64748b;">${m.spendDown ? 'Yıllık maaş planı · Kâr Cüzdanı ile aynı hesap' : `= ay sonu havuzu ${seur(m.carryOutEUR)} × 0,85 (aylık tavan €1.000)`}</div>
         </div>
         ${m.salaryEUR === 0 ? `<div style="font-size:12px;color:#7f1d1d;margin-top:6px;">Bu ay maaş yok: açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.</div>` : ''}
       `)}
