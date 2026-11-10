@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CashBalance } from '../lib/supabase';
-import { convertCash, ledgerDifference, readCashLedger } from '../services/cashConversionService';
+import { convertCash, readCashLedger } from '../services/cashConversionService';
 
 export function CashLedgerPanel({ initialBalances }: { initialBalances?: CashBalance[] }) {
   const [balances, setBalances] = useState<CashBalance[]>(initialBalances || []);
@@ -19,13 +19,11 @@ export function CashLedgerPanel({ initialBalances }: { initialBalances?: CashBal
   }, [initialBalances]);
   return <section className="card-secondary p-4 m-4">
     <h3 className="text-sm font-semibold">Kasa defteri</h3>
-    {balances.map(b => {
-      const diff = ledgerDifference(b);
-      return <div key={b.id} className="text-xs mt-2">
+    {balances.map(b => (
+      <div key={b.id} className="text-xs mt-2">
         {b.currency}: {Number(b.balance).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-        {Math.abs(diff) >= 0.005 && <span className="ml-2 text-amber-700 dark:text-amber-300">defter uyuşmuyor: fark {diff.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {b.currency}</span>}
-      </div>;
-    })}
+      </div>
+    ))}
     {balances.length >= 2 && <details className="mt-3 text-sm">
       <summary className="cursor-pointer">Döviz çevir</summary>
       <form className="flex flex-wrap gap-2 mt-2" onSubmit={async e => {
