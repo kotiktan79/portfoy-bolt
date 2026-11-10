@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { salaryHoldings, salaryTables, salaryRule, fakeReadClient } from '../test/helpers/salaryFixture';
 import { readActiveSalary } from '../services/activeSalaryService';
@@ -63,6 +63,8 @@ describe('aynı maaşın bütün girişleri', () => {
     await waitFor(() => expect(screen.getByTestId('month').textContent).toContain('€400'));
     await waitFor(() => expect(screen.getByTestId('income').textContent).toContain('€400'));
     const wallet = screen.getByTestId('wallet');
+    const header = within(wallet).getByRole('button', { name: /Kâr Cüzdanı/ });
+    if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header);
     await waitFor(() => expect(within(wallet).getByTestId('harca-bitir').textContent).toContain('€400'));
     for (const id of ['wallet', 'month', 'income', 'goal']) {
       expect(screen.getByTestId(id).textContent).not.toMatch(/× 0,85|Taban €700|tavan €1.000|defter uyuşmuyor|bakiye farkı|yatırma farkı|Kasa defteri ile kayıtlı bakiye/);

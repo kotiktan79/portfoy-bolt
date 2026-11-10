@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Wallet, Gauge, AlertCircle } from 'lucide-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { Wallet, Gauge, AlertCircle, ChevronDown } from 'lucide-react';
 import { supabase, Holding } from '../lib/supabase';
 import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { useSilentRefresh } from '../hooks/useSilentRefresh';
@@ -19,6 +19,7 @@ import HarcaBitirMaasKarti from './HarcaBitirMaasKarti';
 // Taban €700: havuzdan gelen (%85, tavan €1.000) yetmezse fark kasadan önerilir; kasa €15.000 altına inecekse önerilmez.
 
 interface Props { holdings: Holding[] }
+const EXPANDED_KEY = 'portfoy_bolt_wallet_expanded';
 const fmt = (n: number) => Math.round(Math.abs(n)).toLocaleString('de-DE');
 const sgn = (n: number) => (n >= 0 ? '+' : '−');
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -28,6 +29,15 @@ const trMonth = (ym: string) => {
 };
 
 export default function KarCuzdani({ holdings }: Props) {
+  const [expanded, setExpanded] = useState(() => {
+    try { return localStorage.getItem(EXPANDED_KEY) === 'true'; } catch { return false; }
+  });
+  const contentId = useId();
+  const toggleExpanded = () => {
+    const next = !expanded;
+    setExpanded(next);
+    try { localStorage.setItem(EXPANDED_KEY, String(next)); } catch { /* Depolama kapalıysa bu oturumda çalışır. */ }
+  };
   const { data, loading, error: loadError, refresh: loadAll } = useSilentRefresh(() => loadWalletView(holdings));
   const salary = data?.salary ?? null;
   const accrual = data?.accrual ?? null;
@@ -201,15 +211,22 @@ export default function KarCuzdani({ holdings }: Props) {
     } finally { setBusy(false); }
   }
 
-  if (loadError) return <div id="kar-cuzdani" className="scroll-mt-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-900 p-6"><p className="text-sm font-semibold text-red-600">Maaş verisi yüklenemedi</p><p className="text-xs text-red-500 mt-1">{loadError}</p><button onClick={loadAll} className="mt-3 text-xs underline text-red-600">Tekrar dene</button></div>;
-  if (loading) return <div id="kar-cuzdani" className="scroll-mt-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6"><p className="text-slate-400 text-sm">Cüzdan yükleniyor...</p></div>;
 
   return (
     <div id="kar-cuzdani" className="scroll-mt-4 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 rounded-2xl shadow-sm border-2 border-emerald-200 dark:border-emerald-900 overflow-hidden">
-      <div className="px-5 py-4 border-b border-emerald-200 dark:border-emerald-900 flex items-center justify-between">
-        <div className="flex items-center gap-2"><Wallet className="text-emerald-600 dark:text-emerald-400" size={22} /><h3 className="text-lg font-bold text-gray-900 dark:text-white">Kâr Cüzdanı</h3></div>
-        <span className="text-[11px] text-slate-500 dark:text-gray-400">euro cetveli</span>
-      </div>
+      <h3>
+        <button type="button" onClick={toggleExpanded} aria-expanded={expanded} aria-controls={contentId}
+          className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600">
+          <span className="flex items-center gap-2"><Wallet className="text-emerald-600 dark:text-emerald-400 shrink-0" size={22} /><span className="text-lg font-bold text-gray-900 dark:text-white">Kâr Cüzdanı</span></span>
+          <span className="flex items-center gap-2 text-xs text-slate-600 dark:text-gray-300">
+            <span>{loading ? 'Yükleniyor…' : loadError ? 'Veri okunamadı' : `Kalan çekim hakkı: €${fmt(remainingEur)}`}</span>
+            <ChevronDown aria-hidden="true" size={18} className={`shrink-0 ${expanded ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+      </h3>
+      <div id={contentId} hidden={!expanded} className="border-t border-emerald-200 dark:border-emerald-900">
+      {loadError ? <div className="p-6"><p className="text-sm font-semibold text-red-600">Maaş verisi yüklenemedi</p><p className="text-xs text-red-500 mt-1">{loadError}</p><button onClick={loadAll} className="mt-3 text-xs underline text-red-600">Tekrar dene</button></div>
+        : loading ? <p className="p-6 text-slate-400 text-sm">Cüzdan yükleniyor...</p> : <>
 
       <HarcaBitirMaasKarti
         mode={salary?.salaryRule?.mode ?? ruleCfg.mode} config={salary?.salaryRule ?? ruleCfg} plan={spendDown} path={spendDownPath}
@@ -398,6 +415,8 @@ export default function KarCuzdani({ holdings }: Props) {
           </div>
         </div>
       )}
+      </>}
+      </div>
     </div>
   );
 }

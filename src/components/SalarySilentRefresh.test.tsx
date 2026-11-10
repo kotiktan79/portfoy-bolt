@@ -19,10 +19,50 @@ const wallet = {
   kasaMoves: [], eurRates: [{ day: '2028-01-10', rate: 50 }], usdRates: [{ day: '2028-01-10', rate: 45 }], kasa: null,
 } as Awaited<ReturnType<typeof loadWalletView>>;
 function pending<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2028-01-10T12:00:00Z')); vi.resetAllMocks(); });
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2028-01-10T12:00:00Z')); vi.resetAllMocks(); localStorage.clear(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('maaş ekranları sessiz yenilenir', () => {
+  it('cüzdan ilk kullanımda kapalıdır; başlık kısa özeti gösterir ve yenileme kartı açmaz', async () => {
+    vi.mocked(loadWalletView).mockResolvedValue(wallet);
+    render(<KarCuzdani holdings={salaryHoldings} />);
+    const header = screen.getByRole('button', { name: /Kâr Cüzdanı/ });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    await act(async () => {});
+    const content = document.getElementById(header.getAttribute('aria-controls')!)!;
+    expect(content).not.toBeVisible();
+    expect(header).toHaveTextContent(`Kalan çekim hakkı: €${Math.round(plan.fromPortfolioEUR).toLocaleString('de-DE')}`);
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(loadWalletView).toHaveBeenCalledTimes(2);
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(content).not.toBeVisible();
+  });
+
+  it('başlık açar/kapatır; tercih yeniden açılışta ve arka plan yenilemesinde korunur', async () => {
+    vi.mocked(loadWalletView).mockResolvedValue(wallet);
+    const first = render(<KarCuzdani holdings={salaryHoldings} />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: /Kâr Cüzdanı/ }));
+    expect(screen.getByRole('spinbutton')).toBeVisible();
+    expect(localStorage.getItem('portfoy_bolt_wallet_expanded')).toBe('true');
+    first.unmount();
+    const second = render(<KarCuzdani holdings={salaryHoldings} />);
+    await act(async () => {});
+    const header = screen.getByRole('button', { name: /Kâr Cüzdanı/ });
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(header);
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(localStorage.getItem('portfoy_bolt_wallet_expanded')).toBe('false');
+    second.unmount();
+    render(<KarCuzdani holdings={salaryHoldings} />);
+    await act(async () => {});
+    expect(screen.getByRole('button', { name: /Kâr Cüzdanı/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+  });
+
   it('ay kartı holdings değişince veya 60 saniye tick sırasında tutarı gizlemez', async () => {
     const next = pending<typeof inputs>();
     vi.mocked(loadMonthSalaryInputs).mockResolvedValueOnce(inputs).mockReturnValueOnce(next.promise);
@@ -44,6 +84,7 @@ describe('maaş ekranları sessiz yenilenir', () => {
     vi.mocked(loadWalletView).mockResolvedValueOnce(wallet).mockReturnValueOnce(next.promise).mockRejectedValueOnce(new Error('offline'));
     const { rerender } = render(<KarCuzdani holdings={salaryHoldings} />);
     await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: /Kâr Cüzdanı/ }));
     const rule = screen.getByTestId('harca-bitir');
     const amount = screen.getByRole('spinbutton') as HTMLInputElement;
     fireEvent.change(amount, { target: { value: '123' } }); amount.focus();
