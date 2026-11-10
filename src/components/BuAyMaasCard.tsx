@@ -1,39 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+import { useSilentRefresh } from '../hooks/useSilentRefresh';
 import {
   buildMonthSalaryCard,
-  type MonthSalaryCardView,
   type MonthSalaryInputs,
 } from '../lib/monthSalaryCard';
 import { loadMonthSalaryInputs } from '../services/monthSalaryCardService';
 import type { Holding } from '../lib/supabase';
 
 export function BuAyMaasCard({ inputs, holdings }: { inputs?: MonthSalaryInputs; holdings?: Holding[] }) {
-  const [status, setStatus] = useState<'loading' | 'error' | 'ready'>(inputs ? 'ready' : 'loading');
-  const [view, setView] = useState<MonthSalaryCardView | null>(inputs ? buildMonthSalaryCard(inputs) : null);
-  // Home ile aynı güncel girdiler: küçük fiyat değişimlerinde de eski maaş görünmesin.
-  const holdingsRef = useRef(holdings);
-  holdingsRef.current = holdings;
-  const investKey = useMemo(() => JSON.stringify(holdings), [holdings]);
-
-  useEffect(() => {
-    if (inputs) {
-      setView(buildMonthSalaryCard(inputs));
-      setStatus('ready');
-      return;
-    }
-    let cancel = false;
-    setStatus('loading');
-    loadMonthSalaryInputs(new Date(), holdingsRef.current)
-      .then(next => {
-        if (cancel) return;
-        setView(buildMonthSalaryCard(next));
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (!cancel) setStatus('error');
-      });
-    return () => { cancel = true; };
-  }, [inputs, investKey]);
+  const resource = useSilentRefresh(async () => buildMonthSalaryCard(await loadMonthSalaryInputs(new Date(), holdings)), !inputs);
+  const inputView = useMemo(() => inputs ? buildMonthSalaryCard(inputs) : null, [inputs]);
+  const view = inputView ?? resource.data;
+  const status = inputs || view ? 'ready' : resource.loading ? 'loading' : 'error';
 
   return (
     <section

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useSilentRefresh } from '../hooks/useSilentRefresh';
+import { useEffect, useState } from 'react';
 import { supabase, Holding } from '../lib/supabase';
 import { computePortfolioMetrics } from '../lib/portfolioMetrics';
 import { dayInTZ } from '../lib/eurPnl';
 import { loadDailyChangeBasis } from '../services/dailyNetChangeService';
-import { dailyNetChange, officialDailyChange, type DailyClose } from '../lib/dailyNetChange';
+import { dailyNetChange, officialDailyChange } from '../lib/dailyNetChange';
 import { dailyBreakdown, topWithOthers, closePricesAt } from '../lib/dailyBreakdown';
 import { investmentSchedule, ScheduleBuy } from '../lib/investmentSchedule';
 import { INVESTMENT_SCHEDULE } from '../config';
@@ -13,28 +14,21 @@ const trDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(
 const card = 'rounded-2xl border border-gold-200/60 dark:border-gold-900/40 bg-white/70 dark:bg-ink-900/60 p-4';
 
 export function DailyNetChangeCard({ holdings }: { holdings: Holding[] }) {
-  const [snap, setSnap] = useState<{ v: number; d: string; at: string; eurRate: number | null } | null>(null);
-  const [prevPx, setPrevPx] = useState<Record<string, number> | null>(null);
   const [open, setOpen] = useState(false);
-  const [report, setReport] = useState<DailyClose | null>(null);
-  const [error, setError] = useState(false);
-  const today = dayInTZ(new Date());
-  useEffect(() => {
-    let c = false;
-    const refresh = () => loadDailyChangeBasis(today).then(basis => {
-      if (c) return;
-      setSnap(basis.snap); setReport(basis.report);
-      if (basis.snap && basis.prevPrices) setPrevPx(closePricesAt(basis.prevPrices, basis.snap.at));
-    }).catch(() => { if (!c) setError(true); });
-    void refresh();
-    const timer = setInterval(refresh, 60_000);
-    return () => { c = true; clearInterval(timer); };
-  }, [today]);
-  const m = useMemo(() => computePortfolioMetrics(holdings), [holdings]);
-  const official = officialDailyChange(report);
-  const r = report?.report_date === today ? official
-    : (snap?.eurRate ? dailyNetChange(m.totalValueTRY, snap.v, m.fxRates.eur, snap.d, snap.eurRate) : null) ?? official;
-  const b = snap && prevPx ? dailyBreakdown(holdings, prevPx, snap.v, snap.eurRate ?? undefined) : null;
+  const resource = useSilentRefresh(async () => {
+    const today = dayInTZ(new Date());
+    const basis = await loadDailyChangeBasis(today);
+    const m = computePortfolioMetrics(holdings);
+    const { snap, report } = basis;
+    const official = officialDailyChange(report);
+    const r = report?.report_date === today ? official
+      : (snap?.eurRate ? dailyNetChange(m.totalValueTRY, snap.v, m.fxRates.eur, snap.d, snap.eurRate) : null) ?? official;
+    if (!r) throw new Error('Günlük değişim okunamadı.');
+    const b = snap?.eurRate && basis.prevPrices ? dailyBreakdown(holdings, closePricesAt(basis.prevPrices, snap.at), snap.v, snap.eurRate) : null;
+    return { r, official, b, report, today };
+  });
+  const { r, official, b, report, today } = resource.data ?? {};
+  const error = resource.error;
   const pos = (r?.changeEUR ?? 0) >= 0;
   return (
     <div className={card}>
