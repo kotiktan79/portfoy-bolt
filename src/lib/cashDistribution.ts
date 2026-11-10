@@ -5,11 +5,10 @@
 
 import { isHouseMoney } from '../config/portfolioPolicy';
 import { getFxRatesFromHoldings, holdingValueTRY } from './fx';
+import { policySnapshot } from './policyAllocation';
 import { isOpenHolding } from './openPosition';
 import {
-  EUR_CASH_RESERVE,
-  WEEKLY_BUY_EUR,
-  buildWeeklyPlan,
+  buildWeeklyPlan, weeklyPlanCopy,
   euroCashEUR,
 } from './buyPlan';
 import type { Holding } from './supabase';
@@ -132,14 +131,9 @@ function nativeUnits(h: { symbol?: string | null; currency?: string | null; quan
  * Euro nakitten €7.000 kenarda; kalan haftada €1.000 VWCE.
  * Tutarlar buyPlan sabitlerinden gelir (EUR_CASH_RESERVE, WEEKLY_BUY_EUR).
  */
-export function euroDripNote(euroCash: number): string {
-  const plan = buildWeeklyPlan({ euroCashEUR: euroCash });
-  const weeks = !(plan.weeks > 0)
-    ? '~0 hafta'
-    : plan.weeks < 0.5
-      ? '1 haftadan az'
-      : `~${Math.round(plan.weeks)} hafta`;
-  return `Euro nakitten €${fmtGrouped(plan.reserveEUR || EUR_CASH_RESERVE)} kenarda; kalan ~€${fmtGrouped(plan.investableEUR)} haftada €${fmtGrouped(plan.weeklyEUR || WEEKLY_BUY_EUR)} VWCE'ye gidiyor (${weeks})`;
+export function euroDripNote(euroCash: number, safePct: number | null = null): string {
+  const copy = weeklyPlanCopy(buildWeeklyPlan({ euroCashEUR: euroCash, safePct }));
+  return `${copy.weekLine} ${copy.cashLine}`;
 }
 
 function integerPercents(items: Array<{ key: string; value: number }>): Map<string, number> {
@@ -255,9 +249,9 @@ export function buildCashDistribution(
       }))
       .sort((a, b) => b.eur - a.eur || a.currency.localeCompare(b.currency));
 
-  const euroCash = rows
-    .filter(r => r.currency === 'EUR')
-    .reduce((s, r) => s + (r.eur ?? r.amount), 0);
+  const euroCash = euroCashEUR(holdings.filter(h => !isHouseMoney(h)));
+  const allocation = policySnapshot(holdings);
+  const safePct = allocation.totalEUR > 0 ? allocation.rows.find(row => row.key === 'safe')?.currentPct ?? null : null;
 
   let houseTRY = 0;
   let houseCount = 0;
@@ -278,7 +272,7 @@ export function buildCashDistribution(
     totalLabel: kasaStatus === 'loading' ? 'Portföy nakdi' : 'Toplam',
     shares,
     shareText: shares.filter(s => s.pct > 0).map(s => `${s.label} %${s.pct}`).join(', '),
-    note: euroDripNote(euroCash),
+    note: euroDripNote(euroCash, safePct),
     houseText,
     houseTRY,
     houseEUR,

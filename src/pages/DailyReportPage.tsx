@@ -224,7 +224,7 @@ export default function DailyReportPage() {
                   <p className="text-[10px] uppercase tracking-wider text-gray-400">Bu Ayın Dinamik Maaşı</p>
                   <p className="text-lg font-bold text-brand-600">{dynSalary ? `€${formatMoney(dynSalary.entitlementEUR ?? 0)}` : '—'} {dynSalary && <span className="text-xs">/ay</span>}</p>
                   <p className="text-[10px] text-gray-400">{dynSalary
-                    ? (dynSalary.withdrawableEUR > 0
+                    ? (dynSalary.spendDown ? `${dynSalary.spendDown.year} maaşı · portföyden €${formatMoney(dynSalary.spendDown.fromPortfolioEUR)} + kasadan €${formatMoney(dynSalary.spendDown.fromKasaEUR)}` : dynSalary.withdrawableEUR > 0
                       ? `${dynSalary.monthLabel} çekilebilir kârı €${formatMoney(dynSalary.withdrawableEUR)} × 0,85`
                       : `${dynSalary.monthLabel}: kâr ${dynSalary.profitEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.profitEUR))}, yıl sonu enflasyon sonrası ${dynSalary.realGainEUR < 0 ? '−' : '+'}€${formatMoney(Math.abs(dynSalary.realGainEUR))}, devreden açık −€${formatMoney(Math.abs(dynSalary.carryInEUR + dynSalary.realGainEUR))} → çekilebilir €0`)
                     : 'geçen ayın çekilebilir kârı × 0,85'}</p>
@@ -450,7 +450,7 @@ export default function DailyReportPage() {
                         </div>
                         <div>
                           <p className="text-[10px] uppercase text-gray-400">Maaş (×0,85)</p>
-                          <p className="text-sm font-bold text-brand-600">{row.salaryEUR > 0 ? `€${formatMoney(row.salaryEUR)}` : '€0'}</p>
+                          <p className="text-sm font-bold text-brand-600">{dynSalary?.spendDown ? 'Eski kâr hesabı' : row.salaryEUR > 0 ? `€${formatMoney(row.salaryEUR)}` : '€0'}</p>
                         </div>
                       </div>
                       {row.carryInEUR < 0 && (

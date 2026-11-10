@@ -42,10 +42,11 @@ describe('Bu Ay Maaşın — harca-bitir', () => {
     expect(v.primary).toContain('€484');
     expect(v.rule).toContain('Harca-bitir');
   });
-  it('başladıktan sonra çekilen düşülür; kasa parçası ayrı', () => {
+  it('çekimden sonra yıllık maaş aynı kalır; kalan çekim ayrıca hesaplanır', () => {
     const v = buildMonthSalaryCard({ ...base, asOfMonth: '2031-05', withdrawnThisMonthEUR: 100, spendDown: { year: 2031, monthlyEUR: 400, fromPortfolioEUR: 350, fromKasaEUR: 50, fixed: true } });
     expect(v.state).toBe('open');
-    expect(v.shownEUR).toBe(300);
-    expect(v.sourceLine).toBe('Portföyden €250 + kasadan €50');
+    expect(v.shownEUR).toBe(400);
+    expect(v.fromPoolEUR).toBe(250);
+    expect(v.sourceLine).toBe('Portföyden €350 + kasadan €50');
   });
 });

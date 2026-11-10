@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { policySnapshot } from '../lib/policyAllocation';
 import {
   buildMonthSalaryCard,
   type MonthSalaryCardView,
@@ -11,10 +10,10 @@ import type { Holding } from '../lib/supabase';
 export function BuAyMaasCard({ inputs, holdings }: { inputs?: MonthSalaryInputs; holdings?: Holding[] }) {
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>(inputs ? 'ready' : 'loading');
   const [view, setView] = useState<MonthSalaryCardView | null>(inputs ? buildMonthSalaryCard(inputs) : null);
-  // Fiyat yenilemesinde kart her seferinde baştan yüklenmesin: yalnız portföy ~€100 oynayınca
+  // Home ile aynı güncel girdiler: küçük fiyat değişimlerinde de eski maaş görünmesin.
   const holdingsRef = useRef(holdings);
   holdingsRef.current = holdings;
-  const investKey = useMemo(() => (holdings && holdings.length ? Math.round(policySnapshot(holdings).totalEUR / 100) : 0), [holdings]);
+  const investKey = useMemo(() => JSON.stringify(holdings), [holdings]);
 
   useEffect(() => {
     if (inputs) {
@@ -84,6 +83,7 @@ export function BuAyMaasCard({ inputs, holdings }: { inputs?: MonthSalaryInputs;
               {view.sourceLine}
             </p>
           )}
+          {view.remainingLine && <p className="text-sm text-slate-600 dark:text-gray-300">{view.remainingLine}</p>}
           <p className="pt-1 text-base text-slate-600 dark:text-gray-300">
             {view.rule}
           </p>

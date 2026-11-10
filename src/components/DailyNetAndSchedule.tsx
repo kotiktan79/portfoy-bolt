@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, Holding } from '../lib/supabase';
 import { computePortfolioMetrics } from '../lib/portfolioMetrics';
-import { dailyNetChange } from '../lib/dailyNetChange';
+import { dayInTZ } from '../lib/eurPnl';
+import { loadDailyChangeBasis } from '../services/dailyNetChangeService';
+import { dailyNetChange, officialDailyChange, type DailyClose } from '../lib/dailyNetChange';
 import { dailyBreakdown, topWithOthers, closePricesAt } from '../lib/dailyBreakdown';
 import { investmentSchedule, ScheduleBuy } from '../lib/investmentSchedule';
 import { INVESTMENT_SCHEDULE } from '../config';
@@ -11,38 +13,41 @@ const trDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(
 const card = 'rounded-2xl border border-gold-200/60 dark:border-gold-900/40 bg-white/70 dark:bg-ink-900/60 p-4';
 
 export function DailyNetChangeCard({ holdings }: { holdings: Holding[] }) {
-  const [snap, setSnap] = useState<{ v: number; d: string; at: string } | null>(null);
+  const [snap, setSnap] = useState<{ v: number; d: string; at: string; eurRate: number | null } | null>(null);
   const [prevPx, setPrevPx] = useState<Record<string, number> | null>(null);
   const [open, setOpen] = useState(false);
+  const [report, setReport] = useState<DailyClose | null>(null);
+  const [error, setError] = useState(false);
+  const today = dayInTZ(new Date());
   useEffect(() => {
     let c = false;
-    void (async () => {
-      const { data } = await supabase.from('portfolio_snapshots').select('snapshot_date,total_value,created_at').order('snapshot_date', { ascending: false }).order('created_at', { ascending: false }).limit(1);
-      if (c || !data?.length) return;
-      const at = String(data[0].created_at);
-      setSnap({ v: Number(data[0].total_value), d: String(data[0].snapshot_date), at });
-      const t = Date.parse(at);
-      const { data: px } = await supabase.from('price_history').select('holding_id,price,recorded_at')
-        .gte('recorded_at', new Date(t - 30 * 60_000).toISOString()).lte('recorded_at', new Date(t + 30 * 60_000).toISOString());
-      if (!c) setPrevPx(closePricesAt(px ?? [], at));
-    })();
-    return () => { c = true; };
-  }, []);
+    const refresh = () => loadDailyChangeBasis(today).then(basis => {
+      if (c) return;
+      setSnap(basis.snap); setReport(basis.report);
+      if (basis.snap && basis.prevPrices) setPrevPx(closePricesAt(basis.prevPrices, basis.snap.at));
+    }).catch(() => { if (!c) setError(true); });
+    void refresh();
+    const timer = setInterval(refresh, 60_000);
+    return () => { c = true; clearInterval(timer); };
+  }, [today]);
   const m = useMemo(() => computePortfolioMetrics(holdings), [holdings]);
-  const r = snap ? dailyNetChange(m.totalValueTRY, snap.v, m.fxRates.eur, snap.d) : null;
-  const b = snap && prevPx ? dailyBreakdown(holdings, prevPx, snap.v) : null;
+  const official = officialDailyChange(report);
+  const r = report?.report_date === today ? official
+    : (snap?.eurRate ? dailyNetChange(m.totalValueTRY, snap.v, m.fxRates.eur, snap.d, snap.eurRate) : null) ?? official;
+  const b = snap && prevPx ? dailyBreakdown(holdings, prevPx, snap.v, snap.eurRate ?? undefined) : null;
   const pos = (r?.changeEUR ?? 0) >= 0;
   return (
     <div className={card}>
       <div className="text-sm font-semibold text-ink-700 dark:text-gold-100">Günlük net değişim</div>
-      <div className="text-xs text-ink-500 dark:text-gold-200/60">Dünkü kapanışa göre{r ? ` (${trDate(r.prevDate)} kaydı)` : ''}</div>
+      <div className="text-xs text-ink-500 dark:text-gold-200/60">{r?.estimated ? `Tahmini · ${today} · ${trDate(r.prevDate)} kapanışına göre` : r ? `${trDate(r.prevDate)} · resmi kapanış` : 'Kapanış verisi bekleniyor'}</div>
       {r ? (
         <div className={`mt-2 text-2xl font-bold ${pos ? 'text-emerald-600' : 'text-rose-600'}`}>
-          {pos ? '+' : '−'}{eur(r.changeEUR)} <span className="text-base">({pos ? '+' : '−'}%{Math.abs(r.changePct).toFixed(2).replace('.', ',')})</span>
+          {pos ? '+' : '−'}€{Math.abs(r.changeEUR).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {r.changePct != null && <span className="text-base">({pos ? '+' : '−'}%{Math.abs(r.changePct).toFixed(2).replace('.', ',')})</span>}
         </div>
-      ) : <div className="mt-2 text-sm text-ink-500">hesaplanıyor…</div>}
-      {r && <div className="text-xs text-ink-500 dark:text-gold-200/60 mt-1">Şimdi {eur(r.nowEUR)} · kapanış {eur(r.prevEUR)} (aynı euro kuruyla)</div>}
-      {r && b && <Breakdown b={b} open={open} setOpen={setOpen} />}
+      ) : <div className="mt-2 text-sm text-ink-500">{error ? 'Günlük değişim okunamadı.' : 'hesaplanıyor…'}</div>}
+      {r?.estimated && r.nowEUR != null && r.prevEUR != null && <div className="text-xs text-ink-500 dark:text-gold-200/60 mt-1">Şimdi {eur(r.nowEUR)} · önceki kapanış {eur(r.prevEUR)} (kendi günlerinin kuruyla)</div>}
+      {official && r?.estimated && <p className="mt-1 text-xs">Son resmi kapanış ({report?.report_date}): {official.changeEUR < 0 ? '−' : '+'}€{Math.abs(official.changeEUR).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>}
+      {r?.estimated && b && <Breakdown b={b} open={open} setOpen={setOpen} />}
     </div>
   );
 }
@@ -107,7 +112,7 @@ function Breakdown({ b, open, setOpen }: { b: ReturnType<typeof dailyBreakdown> 
           {open ? 'Daha az göster' : 'Tümünü göster'}
         </button>
       )}
-      <Line label="Kur etkisi (euro/dolar varlıklar, TL bazında)" v={b.fxEUR} muted />
+      <Line label="Kur etkisi (euro bazında)" v={b.fxEUR} muted />
       <Line label="Fark (kayıt/fiyat zamanı)" v={b.gapEUR} muted />
       <div className="flex justify-between font-semibold border-t border-gold-200/60 dark:border-gold-900/40 mt-1 pt-1">
         <span>Toplam</span><span className="tabular-nums">{sgn(b.totalEUR)}</span>

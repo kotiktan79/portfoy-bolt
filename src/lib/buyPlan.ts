@@ -1,6 +1,6 @@
 // HAFTALIK ALIM PLANI — 2026-10-27.
 // Her hafta EUR nakitten sabit €1.000, tamamı VWCE.
-// V3YL ve XEON'daki mevcut pay durur; yeni alım yok.
+// V3YL'deki mevcut pay durur; yeni V3YL alımı yok.
 // XEON'a ancak güvenli taraf hedefin (%14) altına inerse dönülür.
 // €7.000 EUR nakit kenarda kalır, plana girmez.
 // Ekran, günlük plan, rapor ve AI aynı fonksiyonu okur. Bu oran bir tablo satırı değildir.
@@ -22,6 +22,7 @@ export type WeeklySymbol = 'VWCE' | 'XEON';
 
 export interface WeeklyPlan {
   weeklyEUR: number;
+  buyEUR: number;
   reserveEUR: number;
   euroCashEUR: number;
   /** EUR nakit − kenarda kalan. Eksi olmaz. */
@@ -69,8 +70,8 @@ export function euroCashEUR(rows: CashRow[]): number {
 }
 
 /** Açık VWCE satırının euro fiyatı. TRY kayıtta kur gerekir. Fiyat yoksa null. */
-export function vwcePriceEUR(rows: CashRow[], eurTry?: number | null): number | null {
-  const priced = rows.filter(h => String(h.symbol || '').toUpperCase() === 'VWCE' && Number(h.current_price) > 0);
+export function instrumentPriceEUR(rows: CashRow[], symbol: string, eurTry?: number | null): number | null {
+  const priced = rows.filter(h => String(h.symbol || '').toUpperCase() === symbol && Number(h.current_price) > 0);
   const h = priced.find(x => Math.abs(Number(x.quantity) || 0) > 1e-8) || priced[0];
   if (!h) return null;
   const price = Number(h.current_price);
@@ -79,6 +80,8 @@ export function vwcePriceEUR(rows: CashRow[], eurTry?: number | null): number | 
   if (cur === 'TRY' && eurTry != null && eurTry > 1) return price / eurTry;
   return null;
 }
+
+export const vwcePriceEUR = (rows: CashRow[], eurTry?: number | null) => instrumentPriceEUR(rows, 'VWCE', eurTry);
 
 export function formatWeekCount(weeks: number): string {
   if (!(weeks > 0)) return '0 hafta';
@@ -91,6 +94,7 @@ export function buildWeeklyPlan(input: {
   euroCashEUR: number;
   safePct?: number | null;
   vwcePriceEUR?: number | null;
+  xeonPriceEUR?: number | null;
 }): WeeklyPlan {
   const euroCash = Math.max(0, Number(input.euroCashEUR) || 0);
   const investableEUR = Math.max(0, euroCash - EUR_CASH_RESERVE);
@@ -98,9 +102,12 @@ export function buildWeeklyPlan(input: {
   const safeRaw = input.safePct;
   const safePct = safeRaw == null || !Number.isFinite(Number(safeRaw)) ? null : Number(safeRaw);
   const safeShort = safePct != null && safePct < SAFE_TARGET_PCT;
-  const price = input.vwcePriceEUR != null && Number(input.vwcePriceEUR) > 0 ? Number(input.vwcePriceEUR) : null;
+  const buyEUR = Math.min(WEEKLY_BUY_EUR, investableEUR);
+  const rawPrice = safeShort ? input.xeonPriceEUR : input.vwcePriceEUR;
+  const price = rawPrice != null && Number(rawPrice) > 0 ? Number(rawPrice) : null;
   return {
     weeklyEUR: WEEKLY_BUY_EUR,
+    buyEUR,
     reserveEUR: EUR_CASH_RESERVE,
     euroCashEUR: euroCash,
     investableEUR,
@@ -109,9 +116,9 @@ export function buildWeeklyPlan(input: {
     safePct,
     safeTargetPct: SAFE_TARGET_PCT,
     safeShort,
-    vwceEUR: WEEKLY_BUY_EUR,
+    vwceEUR: safeShort ? 0 : buyEUR,
     priceEUR: price,
-    units: price ? WEEKLY_BUY_EUR / price : null,
+    units: price && buyEUR > 0 ? buyEUR / price : null,
   };
 }
 
@@ -126,15 +133,16 @@ export function weeklyPlanCopy(plan: WeeklyPlan): {
   const pct = plan.safePct == null
     ? ''
     : plan.safePct.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 0 });
-  const weekLine = plan.safeShort
-    ? `Güvenli taraf %${pct}, hedef %${plan.safeTargetPct}. Bu haftaki €${euro0(plan.weeklyEUR)} XEON'a gider. Hedefe dönünce yine tamamı VWCE.`
-    : `Bu hafta €${euro0(plan.weeklyEUR)}, tamamı VWCE.`;
-  const unitsLine = plan.units == null || plan.priceEUR == null
-    ? `€${euro0(plan.vwceEUR)} VWCE. Güncel fiyat yok; adet hesaplanamadı.`
-    : `€${euro0(plan.vwceEUR)} VWCE, fiyat €${plan.priceEUR.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — yaklaşık ${plan.units.toLocaleString('de-DE', { maximumFractionDigits: 2 })} adet.`;
+  const shortage = plan.buyEUR < plan.weeklyEUR && plan.buyEUR > 0 ? `Haftalık €${euro0(plan.weeklyEUR)} için nakit yetmiyor. ` : '';
+  const weekLine = plan.buyEUR <= 0 ? 'Bu hafta alım yok. €7.000 nakit yedek korunur.'
+    : `${shortage}Bu hafta €${euro0(plan.buyEUR)}, tamamı ${plan.destination}${plan.safeShort ? ` (güvenli taraf %${pct}, hedef %${plan.safeTargetPct})` : ''}.`;
+  const unitsLine = plan.buyEUR <= 0 ? 'Alınacak adet yok.'
+    : plan.units == null || plan.priceEUR == null
+      ? `€${euro0(plan.buyEUR)} ${plan.destination}. Güncel fiyat yok; adet hesaplanamadı.`
+      : `€${euro0(plan.buyEUR)} ${plan.destination}, fiyat €${plan.priceEUR.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — yaklaşık ${plan.units.toLocaleString('de-DE', { maximumFractionDigits: 2 })} adet.`;
   const cashLine = plan.investableEUR <= 0
     ? `EUR nakit €${euro0(plan.euroCashEUR)}. €${euro0(plan.reserveEUR)} kenarda kalır; yatırılacak tutar yok.`
     : `EUR nakit €${euro0(plan.euroCashEUR)}. €${euro0(plan.reserveEUR)} kenarda kalır. Yatırılacak €${euro0(plan.investableEUR)} — ${formatWeekCount(plan.weeks)}.`;
-  const holdLine = `V3YL ve XEON'daki mevcut pay durur; yeni alım yok. XEON'a ancak güvenli taraf %${plan.safeTargetPct} hedefinin altına inerse dönülür.`;
+  const holdLine = `V3YL'deki mevcut pay durur; yeni V3YL alımı yok. XEON'a ancak güvenli taraf %${plan.safeTargetPct} hedefinin altına inerse dönülür.`;
   return { weekLine, unitsLine, cashLine, holdLine };
 }

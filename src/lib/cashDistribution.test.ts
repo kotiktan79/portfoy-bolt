@@ -79,7 +79,8 @@ describe('nakit dağılımı', () => {
     expect(model.totalText).toBe('€72.823');
     expect(model.totalLabel).toBe('Toplam');
     expect(model.shareText).toBe('Dolar %56, Euro %36, Ruble %8');
-    expect(model.note).toBe('Euro nakitten €7.000 kenarda; kalan ~€19.501 haftada €1.000 VWCE\'ye gidiyor (~20 hafta)');
+    expect(model.note).toContain('Yatırılacak €19.501');
+    expect(model.note).toContain('tamamı XEON');
     expect(model.houseTRY).toBeCloseTo(38_292 + 1_500, 4);
     expect(model.houseEUR).toBeCloseTo((38_292 + 1_500) / EUR_TRY, 4);
     expect(model.houseText).toBe('Ev Parası (Türkiye) ₺39.792 · €796 — toplama dahil değil');
@@ -88,15 +89,16 @@ describe('nakit dağılımı', () => {
     expect(fmtEUR(model.totalEUR)).toBe(model.totalText);
   });
 
-  it('kasa euroyu da haftalık plana katar; sıfır ve ev parası notu şişirmez', () => {
+  it('kasa euroyu haftalık alıma ikinci kez katmaz; yalnız portföy nakdi kullanılır', () => {
     const model = buildCashDistribution(
       todayHoldings(),
       [...todayKasa(), { currency: 'EUR', balance: 1_000, eur: 1_000 }],
       'ready',
     );
-    expect(model.note).toContain('~€20.501');
-    expect(model.note).toContain('(~21 hafta)');
-    expect(euroDripNote(6_000)).toBe('Euro nakitten €7.000 kenarda; kalan ~€0 haftada €1.000 VWCE\'ye gidiyor (~0 hafta)');
+    expect(model.note).toContain('Yatırılacak €19.501');
+    expect(model.note).not.toContain('20.501');
+    expect(model.note).toContain('yaklaşık 20 hafta');
+    expect(euroDripNote(6_000)).toContain('Bu hafta alım yok');
     expect(euroDripNote(7_400)).toContain('1 haftadan az');
   });
 

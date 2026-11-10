@@ -49,7 +49,7 @@ export default function IncomeWidget() {
   };
 
   // Eğer hiç veri yoksa gösterme
-  if (!data.hasReport && data.monthlyIncome === 0) return null;
+  if (!data.hasReport && data.monthlyIncome === 0 && !salary?.spendDown) return null;
 
   return (
     <button
@@ -67,7 +67,7 @@ export default function IncomeWidget() {
       <div className="flex items-end justify-between">
         <div className="flex gap-4">
           <div>
-            <p className="text-[10px] text-gray-400">{salary ? (salary.carryInEUR < 0 ? `devreden açık −€${Math.round(Math.abs(salary.carryInEUR))}` : `${salary.monthLabel} çekilebilir × 0,85`) : 'Bu ay'}</p>
+            <p className="text-[10px] text-gray-400">{salary ? (salary.spendDown ? `${salary.spendDown.year} maaşı` : salary.carryInEUR < 0 ? `devreden açık −€${Math.round(Math.abs(salary.carryInEUR))}` : `${salary.monthLabel} çekilebilir × 0,85`) : 'Bu ay'}</p>
             <p className="text-sm font-bold text-accent-600">{salary ? `€${formatMoney(salary.entitlementEUR ?? 0)}` : '—'} <span className="text-[10px] font-normal text-gray-400">/ay</span></p>
           </div>
           {data.monthlyIncome > 0 && (

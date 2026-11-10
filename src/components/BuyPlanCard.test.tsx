@@ -64,7 +64,7 @@ describe('haftalık plan her iki ekranda aynı', () => {
         <DailyActionPlan holdings={holdings} totalValue={0} totalInvestment={0} totalProfitLoss={0} totalProfitLossPercent={0} totalCashValue={0} />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/Haftalık €1\.000 · tamamı VWCE · €7\.000 EUR nakit kenarda/)).toBeTruthy();
+    expect(screen.getByText(/Haftada en fazla €1\.000 · nakit yedeğe göre alım · €7\.000 EUR nakit kenarda/)).toBeTruthy();
     expect(screen.getByText(/Bu hafta €1\.000, tamamı VWCE/)).toBeTruthy();
     expect(screen.getByText(/yaklaşık 8 adet/)).toBeTruthy();
     expect(screen.getByText(/Yatırılacak €13\.000/)).toBeTruthy();

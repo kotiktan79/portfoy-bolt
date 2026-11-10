@@ -5,13 +5,11 @@ import { getFxRatesFromHoldings, holdingValueTRY } from '../lib/fx';
 import { getDynamicSalary, getSalaryAccrual, getMonthToDate, DynamicSalary, SalaryAccrual, MonthToDate } from '../services/salaryService';
 import { dayInTZ, POOL_CAP_EUR, MONTHLY_CAP_EUR, withdrawalEUR, remainingEntitlementEUR, makeRateSeries, normalizeInflation, INFLATION_EUR, RELIABLE_FROM, type RateSeries } from '../lib/eurPnl';
 import { currentYM } from '../services/salaryService';
-import { fetchAll, invalidateEurPnlCache } from '../services/eurPnlService';
+import { invalidateEurPnlCache } from '../services/eurPnlService';
 import { getKasaFx, type KasaFx } from '../services/kasaFxService';
 import { planSalary, kasaOutstandingEUR, type SalaryPlanInput } from '../lib/salaryPlan';
-import { ledgerFromTransactions, balanceGap, type LedgerRow } from '../lib/cashLedger';
-import { inflationStatusText, parseInflationDecisions, type InflationDecisions } from '../lib/inflationDecision';
-import { policySnapshot } from '../lib/policyAllocation';
-import { parseSalaryRule, withSalaryRule, planSpendDown, fixYear, expectedPath, pathMilestones, type SalaryRuleConfig, type SalaryRuleMode } from '../lib/spendDownSalary';
+import { inflationStatusText } from '../lib/inflationDecision';
+import { parseSalaryRule, withSalaryRule, fixYear, expectedPath, pathMilestones, type SalaryRuleConfig, type SalaryRuleMode } from '../lib/spendDownSalary';
 import HarcaBitirMaasKarti from './HarcaBitirMaasKarti';
 
 // KÂR CÜZDANI — TEK CETVEL: EURO (2026-09-19 gece)
@@ -45,7 +43,7 @@ export default function KarCuzdani({ holdings }: Props) {
   const [inflationInput, setInflationInput] = useState('3');
   const [inflationMsg, setInflationMsg] = useState<string | null>(null);
   const [histFx, setHistFx] = useState<{ eur: RateSeries; usd: RateSeries } | null>(null);
-  const [cashGaps, setCashGaps] = useState<Array<{ currency: string; stored: number; derived: number; gap: number | null; depGap: number | null }>>([]);
+
 
   // KASA (ölçüm dışı) — kur etkisi görünür olsun; maaş/havuz rakamlarına DOKUNMAZ (2026-09-27)
   useEffect(() => {
@@ -56,41 +54,7 @@ export default function KarCuzdani({ holdings }: Props) {
     return () => { c = true; };
   }, []);
 
-  useEffect(() => {
-    let c = false;
-    (async () => {
-      const [txs, bals] = await Promise.all([
-        fetchAll<any>('cashGapTx', () => supabase.from('cash_transactions').select('currency,transaction_type,type,amount,notes')),
-        fetchAll<any>('cashGapBal', () => supabase.from('cash_balances').select('currency,balance,total_deposits')),
-      ]);
-      if (c) return;
-      const ledger: LedgerRow[] = ledgerFromTransactions(txs);
-      const seen = new Set<string>();
-      const gaps: Array<{ currency: string; stored: number; derived: number; gap: number | null; depGap: number | null }> = [];
-      for (const b of bals) {
-        const ccy = String(b.currency || 'TRY').toUpperCase();
-        seen.add(ccy);
-        const d = ledger.find(l => l.currency === ccy);
-        const derived = d?.balance ?? 0;
-        const deposits = d?.deposits ?? 0;
-        gaps.push({
-          currency: ccy,
-          stored: Number(b.balance) || 0,
-          derived,
-          gap: balanceGap(Number(b.balance) || 0, derived),
-          depGap: balanceGap(Number(b.total_deposits) || 0, deposits),
-        });
-      }
-      for (const l of ledger) {
-        if (seen.has(l.currency)) continue;
-        gaps.push({ currency: l.currency, stored: 0, derived: l.balance, gap: balanceGap(0, l.balance), depGap: balanceGap(0, l.deposits) });
-      }
-      setCashGaps(gaps.filter(g => g.gap != null || g.depGap != null));
-    })().catch(() => { if (!c) setCashGaps([]); });
-    return () => { c = true; };
-  }, []);
-
-  useEffect(() => { loadAll(); loadPolicy(); }, []);
+  useEffect(() => { loadAll(); loadPolicy(); }, [holdings]);
   async function loadPolicy() {
     const [pol, mov] = await Promise.all([
       supabase.from('portfoy_bolt_salary_policy').select('*').eq('id', 1).maybeSingle(),
@@ -102,7 +66,6 @@ export default function KarCuzdani({ holdings }: Props) {
       setInflationAnnual(inf);
       setInflationInput(String(Math.round(inf * 1000) / 10));
       setRuleCfg(parseSalaryRule(pol.data.inflation_decisions));
-      setInflDecisions(parseInflationDecisions(pol.data.inflation_decisions));
       setPolicy({
         floorEUR: n(pol.data.floor_eur),
         capEUR: n(pol.data.cap_eur),
@@ -119,7 +82,7 @@ export default function KarCuzdani({ holdings }: Props) {
     setLoadError(null);
     try {
       const [s, a, w, m] = await Promise.all([
-        getDynamicSalary(), getSalaryAccrual(),
+        getDynamicSalary(holdings), getSalaryAccrual(),
         supabase.from('salary_withdrawals').select('*').order('withdrawn_at', { ascending: false }).limit(200),
         getMonthToDate(),
       ]);
@@ -160,20 +123,16 @@ export default function KarCuzdani({ holdings }: Props) {
   const [kasaMoves, setKasaMoves] = useState<KasaMove[]>([]);
   const [moveMsg, setMoveMsg] = useState<string | null>(null);
   const [ruleCfg, setRuleCfg] = useState<SalaryRuleConfig>(() => parseSalaryRule(null));
-  const [inflDecisions, setInflDecisions] = useState<InflationDecisions>({});
   const [ruleBusy, setRuleBusy] = useState(false);
   const [ruleMsg, setRuleMsg] = useState<string | null>(null);
   // HARCA-BİTİR: yatırım portföyü (kasa ve Ev Parası hariç) → yıllık maaş
   const startMonth = policy.salaryStartMonth || '2027-04';
   const startYear = Number(startMonth.slice(0, 4));
   const thisYear = Number(monthKey.slice(0, 4));
-  const ruleYear = Math.max(thisYear, startYear);
-  const investableEur = useMemo(() => holdings.length ? policySnapshot(holdings).totalEUR : 0, [holdings]);
-  const spendDown = investableEur > 0 ? planSpendDown({
-    year: ruleYear, portfolioEUR: investableEur, kasaEUR: kasa?.totalEurNow ?? 0, config: ruleCfg, inflationDecisions: inflDecisions,
-  }) : null;
-  const spendDownPath = spendDown ? pathMilestones(expectedPath({ startYear: ruleYear, portfolioEUR: spendDown.baseEUR, config: ruleCfg, prevEUR: spendDown.prevEUR == null ? null : spendDown.ruleEUR })) : [];
-  const spendMode = ruleCfg.mode === 'spend_down';
+  const spendDown = salary?.spendDown ?? null;
+  const spendMode = (salary?.salaryRule ?? ruleCfg).mode === 'spend_down';
+  const spendDownPath = spendDown ? pathMilestones(expectedPath({ startYear: spendDown.year,
+    portfolioEUR: spendDown.baseEUR, config: salary?.salaryRule ?? ruleCfg })) : [];
   const salaryStarted = monthKey >= startMonth;
 
   async function writeRule(next: SalaryRuleConfig, okMsg: string) {
@@ -186,6 +145,7 @@ export default function KarCuzdani({ holdings }: Props) {
       if (error) { setRuleMsg('Kaydedilemedi: ' + error.message); return; }
       setRuleMsg(okMsg);
       await loadPolicy();
+      await loadAll();
     } finally { setRuleBusy(false); }
   }
   function switchMode(m: SalaryRuleMode) {
@@ -195,7 +155,7 @@ export default function KarCuzdani({ holdings }: Props) {
   }
   function fixThisYear() {
     if (!spendDown) return;
-    const next = fixYear(ruleCfg, spendDown);
+    const next = fixYear(salary?.salaryRule ?? ruleCfg, spendDown);
     if (!next) { setRuleMsg(`${spendDown.year} maaşı zaten sabit. Değiştirilmedi.`); return; }
     if (!window.confirm(`${spendDown.year} maaşı €${fmt(spendDown.monthlyEUR)}/ay olarak sabitlensin mi? Yıl içinde değişmez.`)) return;
     void writeRule(next, `${spendDown.year} maaşı €${fmt(spendDown.monthlyEUR)}/ay olarak sabitlendi.`);
@@ -304,7 +264,7 @@ export default function KarCuzdani({ holdings }: Props) {
       </div>
 
       <HarcaBitirMaasKarti
-        mode={ruleCfg.mode} config={ruleCfg} plan={spendDown} path={spendDownPath}
+        mode={salary?.salaryRule?.mode ?? ruleCfg.mode} config={salary?.salaryRule ?? ruleCfg} plan={spendDown} path={spendDownPath}
         preview={!salaryStarted} startLabel={trMonth(startMonth)}
         canFix={spendMode && thisYear >= startYear && !!spendDown && !spendDown.fixed}
         busy={ruleBusy} message={ruleMsg} onSwitchMode={switchMode} onFixYear={fixThisYear}
@@ -369,7 +329,7 @@ export default function KarCuzdani({ holdings }: Props) {
       </>)}
       {spendMode && salaryStarted && spendDown && spendDown.fromKasaEUR > 0 && (
         <div className="mx-5 mt-3 text-xs">
-          <p className="font-semibold text-emerald-700 dark:text-emerald-300">Kötü yıl: tabana tamamlamak için bu ay kasadan €{fmt(spendDown.fromKasaEUR)}.</p>
+          <p className="font-semibold text-emerald-700 dark:text-emerald-300">Tabanı tamamlamak için bu ay kasadan €{fmt(spendDown.fromKasaEUR)}.</p>
           <button type="button" onClick={() => recordKasaMove('topup', spendDown.fromKasaEUR)} className="mt-1 px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold">Kasadan €{fmt(spendDown.fromKasaEUR)} aldım</button>
           {moveMsg && <p className="mt-1 text-[11px] text-slate-500 dark:text-gray-400">{moveMsg}</p>}
         </div>
@@ -379,7 +339,7 @@ export default function KarCuzdani({ holdings }: Props) {
         <div className="md:col-span-2">
           <div className="grid grid-cols-3 gap-3 text-xs">
             <div><p className="text-slate-500 dark:text-gray-400">Bu ay çekilen</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(withdrawnThisMonthEur)}</p></div>
-            <div><p className="text-slate-500 dark:text-gray-400">Kalan hak</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
+            <div><p className="text-slate-500 dark:text-gray-400">{spendMode ? 'Kalan portföy çekimi' : 'Kalan hak'}</p><p className="font-bold text-emerald-600 dark:text-emerald-400">€{fmt(remainingEur)}</p></div>
             <div><p className="text-slate-500 dark:text-gray-400">Portföy</p><p className="font-bold text-gray-900 dark:text-white">€{fmt(portfolioEur)}</p></div>
             {!spendMode && <div className="col-span-3 mt-1 p-2 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-emerald-200 dark:border-emerald-900">
               <p className="text-slate-500 dark:text-gray-400">Kâr havuzu <span className="text-[10px]">(kapanmış aylardan birikmiş · tavan €{fmt(POOL_CAP_EUR)} · aylık çekim tavanı €{fmt(MONTHLY_CAP_EUR)})</span></p>
@@ -413,18 +373,7 @@ export default function KarCuzdani({ holdings }: Props) {
               <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
                 Aynı bakiyenin geçmiş kurlarla karşılaştırması — para yatırma/çekme karışmaz. Atıl döviz beklerken euro değeri oynar.
               </p>
-              {cashGaps.length > 0 && (
-                <div className="mt-2 text-[11px] text-amber-800 dark:text-amber-200">
-                  <p className="font-semibold">Kasa defteri ile kayıtlı bakiye aynı değil. Fark gizlenmedi; kayıtlı bakiye değiştirilmedi.</p>
-                  {cashGaps.map(g => (
-                    <p key={g.currency}>
-                      {g.currency}: kayıt {g.stored.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}, hareketlerden {g.derived.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-                      {g.gap != null && <> · bakiye farkı {g.gap.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</>}
-                      {g.depGap != null && <> · yatırma farkı {g.depGap.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</>}
-                    </p>
-                  ))}
-                </div>
-              )}
+
             </div>
           )}
           {mtd && (
@@ -432,7 +381,7 @@ export default function KarCuzdani({ holdings }: Props) {
               <span className="font-semibold">{mtd.monthLabel} şimdiye kadar ({mtd.asOf.slice(8)}. gün):</span> kâr {sgn(mtd.gainEUR)}€{fmt(mtd.gainEUR)}{mtd.inflationEUR > 0 ? <> · yıl sonu enflasyon payı −€{fmt(mtd.inflationEUR)} = {sgn(mtd.realGainEUR)}€{fmt(mtd.realGainEUR)}</> : mtd.inflationDecision ? <> · {inflationStatusText(mtd)}</> : <> · enflasyon payı yıl sonunda senin onayınla düşülecek{(mtd.inflationYearEndEstimateEUR ?? 0) > 0 && <> (tahmini €{fmt(mtd.inflationYearEndEstimateEUR ?? 0)})</>}</>}
               {mtd.carryResetApplied && <> · <span className="text-emerald-700 dark:text-emerald-300 font-semibold">Nisan öncesi kazanılan kâr yastığıyla eski açık sıfırlandı</span></>}
               {mtd.carryInEUR < 0 && <> · devreden açık −€{fmt(mtd.carryInEUR)} → kalan açık €{fmt(Math.min(0, mtd.carryInEUR + mtd.realGainEUR))}</>}
-              <br />→ <span className="font-semibold">gelecek ay maaş ön izlemesi: €{fmt(mtd.projectedSalaryEUR)}</span> (ay sonuna kadar değişir)
+              {!spendMode && <><br />→ <span className="font-semibold">gelecek ay maaş ön izlemesi: €{fmt(mtd.projectedSalaryEUR)}</span> (ay sonuna kadar değişir)</>}
             </div>
           )}
           {accrual && (
@@ -443,7 +392,7 @@ export default function KarCuzdani({ holdings }: Props) {
           )}
           <div className="mt-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 flex items-start gap-2">
             <AlertCircle size={14} className="text-slate-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-slate-600 dark:text-gray-300">Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz. Enflasyon payı her ay değil, yıl sonunda (Aralık) bir kez ve yalnız sen onaylarsan düşülür. Sıfır ayda yastıktan geçin.</p>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300">{spendMode ? 'Maaş yıllık harca-bitir planından gelir; gerektiğinde ana para da kullanılır.' : 'Kâr = euro servetin artışı (koyduğun/çektiğin para hariç). Euro baz: kur hareketi kârdır. Zarar ay birikmişten düşer, ana paraya dokunulmaz.'} Enflasyon payı her ay değil, yıl sonunda (Aralık) bir kez ve yalnız sen onaylarsan düşülür. {spendMode ? 'Kasa payı yıllık maaş planında ayrıca gösterilir.' : 'Sıfır ayda yastıktan geçin.'}</p>
           </div>
           <div className="mt-2 flex items-center gap-2 text-[11px]">
             <label className="text-slate-500 dark:text-gray-400">Enflasyon %/yıl</label>

@@ -58,8 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (e: any) {
       log.push(`EUR motoru HATA: ${e.message}`);
     }
-    const salaryEUR = eur?.entitlementEUR || 0;      // TEK TABAN: kapanmış havuz × 0,85 (aylık tavanla) — cüzdanla aynı
-    const projectedSalaryEUR = eur?.mtd?.salaryEUR || 0;
+    const salaryEUR = aiCtx?.salary?.plan?.monthlyEUR ?? eur?.entitlementEUR ?? 0;      // TEK TABAN: kapanmış havuz × 0,85 (aylık tavanla) — cüzdanla aynı
+    const projectedSalaryEUR = aiCtx?.salary?.plan?.monthlyEUR ?? eur?.mtd?.salaryEUR ?? 0;
 
     // FX kurları — holdings'teki USD/EUR pozisyonlarından; yoksa live API.
     // Eski hardcode || 45 / || 51, USD holding silindiğinde snapshot poisoning'e yol açıyordu.
@@ -211,6 +211,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const nextYM = (() => { const y = Number(todayStr.slice(0, 4)), m = Number(todayStr.slice(5, 7)); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; })();
       const snapshot = {
         date: todayStr,
+        spendDown: aiCtx?.salary?.config.mode === 'spend_down',
         asOf: eur.asOf,                       // rakamların ait olduğu snapshot günü (≠ date ise snapshot cron'u aksamıştır)
         wealthEUR: eur.wealthEUR,
         wealthTRY: eur.wealthTRY,

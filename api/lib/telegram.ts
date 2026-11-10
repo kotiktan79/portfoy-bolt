@@ -61,8 +61,8 @@ export function buildDailyTelegram(d: DailySnapshot): string {
     `${arrow(d.mtdGainEUR)} Bu ay: ${seur(d.mtdGainEUR)} nominal · reel ${seur(d.mtdRealEUR)}`,
     ...(d.inflationNote && d.inflationNote !== INFLATION_RULE_TEXT ? [escapeHtml(d.inflationNote)] : []),
     ``,
-    `💸 Çekilebilir maaş: <b>${eur(d.salaryEUR)}</b> (kâr havuzu × 0,85, aylık tavan €1.000)`,
-    d.carryInEUR < 0
+    `💸 Çekilebilir maaş: <b>${eur(d.salaryEUR)}</b> ${d.spendDown ? '(yıllık maaş planı)' : '(kâr havuzu × 0,85, aylık tavan €1.000)'}`,
+    d.spendDown ? 'Maaş yıllık planla belirlenir; ayın kârından ayrıca hesaplanmaz.' : d.carryInEUR < 0
       ? `⛔ Devreden açık ${seur(d.carryInEUR)} → ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}`
       : `➡️ ${escapeHtml(d.nextMonthLabel)} ön izleme ${eur(d.projectedSalaryEUR)}${d.carryResetApplied ? ' (eski açık Nisan öncesi kâr yastığıyla sıfırlandı)' : ''}`,
   ];
@@ -105,13 +105,13 @@ export function buildMonthlyTelegram(m: MonthlySnapshot): string {
     ...(m.carryResetApplied ? ['Eski açık Nisan öncesi kâr yastığıyla sıfırlandı'] : []),
     `Devreden açık: ${seur(m.carryInEUR)} → ${seur(m.carryOutEUR)}`,
     ``,
-    `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> (ay sonu havuzu ${seur(m.carryOutEUR)} × 0,85, aylık tavan €1.000)`,
+    `💸 <b>${escapeHtml(m.salaryMonthLabel)} maaşı: ${eur(m.salaryEUR)}</b> ${m.spendDown ? '(yıllık maaş planı)' : `(ay sonu havuzu ${seur(m.carryOutEUR)} × 0,85, aylık tavan €1.000)`}`,
   ];
   if (m.salaryEUR === 0) lines.push(`⛔ Maaş yok — açık ${eur(m.carryOutEUR)} kapanınca başlar. Ana paraya dokunulmaz.`);
   lines.push('', `💰 Kaydedilen gelir: ${seur(m.realizedIncomeEUR)}`);
   if (m.yearRows.length) {
     lines.push('', `📆 Ay ay:`);
-    m.yearRows.forEach(r => lines.push(`• ${escapeHtml(r.month)}: ${seur(r.gainEUR)} · maaş ${eur(r.salaryEUR)}`));
+    m.yearRows.forEach(r => lines.push(`• ${escapeHtml(r.month)}: ${seur(r.gainEUR)}${m.spendDown ? '' : ` · maaş ${eur(r.salaryEUR)}`}`));
   }
   if (!m.healthOk) lines.push('', '⚠️ Kur serisi güncel değil.');
   return lines.join('\n');

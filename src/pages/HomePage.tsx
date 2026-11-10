@@ -132,12 +132,19 @@ export default function HomePage() {
   useEffect(() => {
     // Motor verisi tek durumda izlenir: yüklenirken '…', hata olursa '—' + 'veri yüklenemedi' (asla sahte €0)
     Promise.all([
-      getDynamicSalary().then(setDynamic),
       getInceptionPnl().then(setInception),
       getPerformanceReturns(null, null).then(r => setInceptionMwr(r.inception?.dietzPct ?? null)).catch(() => setInceptionMwr(null)),
       getEurDaily().then(d => { setLastDay(d.length ? d[d.length - 1] : null); setPrevDay(d.length > 1 ? d[d.length - 2] : null); }),
     ]).then(() => setEurState('ok')).catch(() => setEurState('error'));
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    getDynamicSalary(holdings).then(s => { if (!cancelled) setDynamic(s); })
+      .catch(() => { if (!cancelled) setDynamic(null); });
+    return () => { cancelled = true; };
+  }, [holdings, loading]);
 
   const {
     totalInvestment, totalCurrentValue,
@@ -207,7 +214,7 @@ export default function HomePage() {
                 intradayChangePct={livePnlData?.intraday.period === 'yok' ? undefined : livePnlData?.intraday.percentage}
                 historicalData={historicalData?.map(d => ({ date: d.date, value: Number(d.total_value) }))}
                 dynamicSafeMaxUSD={dynamic?.entitlementEUR}
-                dynamicSalaryLabel={dynamic ? salaryLabel(dynamic) : undefined}
+                dynamicSalaryLabel={dynamic?.spendDown ? `${dynamic.spendDown.year} maaşı · portföyden €${Math.round(dynamic.spendDown.fromPortfolioEUR)} + kasadan €${Math.round(dynamic.spendDown.fromKasaEUR)}` : dynamic ? salaryLabel(dynamic) : undefined}
                 inceptionGainEUR={inception?.totalGainEUR}
                 inceptionGainPct={inception?.totalGainPct}
                 inceptionMwrPct={inceptionMwr}

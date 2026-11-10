@@ -26,15 +26,16 @@ describe('haftalık alım planı', () => {
     expect(weeklyPlanCopy(p).weekLine).not.toContain('XEON');
   });
 
-  it('güvenli taraf %14 altındaysa bu hafta XEON; VWCE adedi yine yazılır', () => {
-    const p = buildWeeklyPlan({ euroCashEUR: 12_000, safePct: 13.9, vwcePriceEUR: 100 });
+  it('güvenli taraf %14 altındaysa bu hafta XEON; XEON fiyatı ve adedi yazılır', () => {
+    const p = buildWeeklyPlan({ euroCashEUR: 12_000, safePct: 13.9, vwcePriceEUR: 100, xeonPriceEUR: 125 });
     expect(p.destination).toBe('XEON');
     expect(p.safeShort).toBe(true);
-    expect(p.vwceEUR).toBe(1_000);
-    expect(p.units).toBeCloseTo(10, 5);
+    expect(p.vwceEUR).toBe(0);
+    expect(p.units).toBeCloseTo(8, 5);
     const copy = weeklyPlanCopy(p);
     expect(copy.weekLine).toContain('XEON');
-    expect(copy.unitsLine).toContain('VWCE');
+    expect(copy.unitsLine).toContain('XEON');
+    expect(copy.unitsLine).not.toContain('VWCE');
     expect(copy.holdLine).toContain('V3YL');
   });
 
@@ -80,5 +81,25 @@ describe('haftalık alım planı', () => {
       { symbol: 'VWCE', currency: 'TRY', quantity: 3, current_price: 7_000 },
     ], 50)).toBeCloseTo(140, 5);
     expect(vwcePriceEUR([])).toBeNull();
+  });
+});
+
+describe('yedek ve kısmi haftalık alım', () => {
+  it.each([7000, 6500])('%s nakitte hiçbir alım önermez', euroCashEUR => {
+    const p = buildWeeklyPlan({ euroCashEUR, safePct: 10, xeonPriceEUR: 150 });
+    expect(p.buyEUR).toBe(0); expect(p.units).toBeNull();
+    expect(weeklyPlanCopy(p).weekLine).toContain('alım yok');
+    expect(weeklyPlanCopy(p).unitsLine).toBe('Alınacak adet yok.');
+  });
+  it('7500 nakitte rezerv korunur, yalnız 500 alım önerilir', () => {
+    const p = buildWeeklyPlan({ euroCashEUR: 7500, safePct: 20, vwcePriceEUR: 125 });
+    expect(p.buyEUR).toBe(500); expect(p.units).toBe(4);
+    expect(weeklyPlanCopy(p).weekLine).toContain('nakit yetmiyor');
+    expect(weeklyPlanCopy(p).unitsLine).toContain('€500 VWCE');
+  });
+  it('XEON fiyatı yoksa VWCE fiyatını kullanmaz', () => {
+    const p = buildWeeklyPlan({ euroCashEUR: 9000, safePct: 5, vwcePriceEUR: 100 });
+    expect(p.units).toBeNull(); expect(weeklyPlanCopy(p).unitsLine).toContain('XEON');
+    expect(weeklyPlanCopy(p).unitsLine).not.toContain('VWCE');
   });
 });

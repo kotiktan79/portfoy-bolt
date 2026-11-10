@@ -1,3 +1,4 @@
+vi.mock('../services/salaryService', () => ({ getDynamicSalary: vi.fn(async () => null) }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 class ResizeObserverStub {
@@ -45,6 +46,7 @@ describe('Hedef aylık maaş', () => {
 
   it('birincil hedef €700 maaş; çekim %5 planlanan, €1.000 iyi yıl', async () => {
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     expect(PLANNED_WITHDRAWAL_PCT).toBe(5);
     expect(SALARY_FLOOR_EUR).toBe(700);
     expect(MONTHLY_CAP_EUR).toBe(1_000);
@@ -87,6 +89,7 @@ describe('Hedef aylık maaş', () => {
   it('çiftlik aktif olunca grafik düşer; maaş kartı €168 bin olarak kalır', async () => {
     const user = userEvent.setup();
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     await user.click(screen.getByText(/Dış gelir \(beklenen, hedefe dahil değil\)/));
     expect(screen.getByDisplayValue('Çiftlik (bal, aronya, alıç, APIA)')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Ev kirası')).toBeInTheDocument();
@@ -109,6 +112,7 @@ describe('Hedef aylık maaş', () => {
   it('muhafazakâr %4 sermayeyi yeniler ve tarayıcı kaydına yazılır', async () => {
     const user = userEvent.setup();
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     await user.click(screen.getByRole('button', { name: 'Muhafazakâr %4' }));
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
     expect(screen.getAllByText('€210.000').length).toBeGreaterThan(0);
@@ -126,8 +130,9 @@ describe('Hedef aylık maaş', () => {
     });
   });
 
-  it('iyi yıl 0 ise tavan ve süre notu gizlenir', () => {
+  it('iyi yıl 0 ise tavan ve süre notu gizlenir', async () => {
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     fireEvent.change(screen.getByLabelText(/İyi yıl tavanı/), { target: { value: '0' } });
     expect(screen.queryByText(/iyi yıl için gerekli sermaye/)).not.toBeInTheDocument();
     expect(screen.queryByText(/yaklaşık \d/)).not.toBeInTheDocument();
@@ -137,6 +142,7 @@ describe('Hedef aylık maaş', () => {
 
   it('getiri değişince süre notunun varsayımı değişir', async () => {
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     fireEvent.change(screen.getByLabelText(/^Yıllık getiri/), { target: { value: '8' } });
     await waitFor(() => {
       expect(screen.getByText(/yıllık getiri %8 − enflasyon %3 = reel %5/, { selector: 'p' })).toBeInTheDocument();
@@ -152,6 +158,7 @@ describe('Hedef aylık maaş', () => {
       safeWithdrawalRatePct: 4,
     }));
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(700);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(5);
     expect(screen.getByLabelText(/İyi yıl tavanı/)).toHaveValue(1_000);
@@ -174,6 +181,7 @@ describe('Hedef aylık maaş', () => {
       monthlyContribution: 0,
     }));
     const first = render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(850);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(3.5);
     expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(6.5);
@@ -195,6 +203,7 @@ describe('Hedef aylık maaş', () => {
       monthlyContribution: 0,
     }));
     const second = render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(1_000);
     expect(screen.getByLabelText(/İyi yıl tavanı/)).toHaveValue(1_200);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
@@ -210,6 +219,7 @@ describe('Hedef aylık maaş', () => {
       monthlyContribution: 0,
     }));
     const third = render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(1_000);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
     expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(6.5);
@@ -231,6 +241,7 @@ describe('Hedef aylık maaş', () => {
       monthlyContribution: 0,
     }));
     render(<FireProjection />);
+    await screen.findByRole('heading', { name: 'Aylık maaş hedefi' });
     expect(screen.getByLabelText(/^Yıllık getiri/)).toHaveValue(4);
     expect(screen.getByLabelText(/Aylık maaş hedefi/)).toHaveValue(1_000);
     expect(screen.getByLabelText(/Güvenli çekim \(SWR\)/)).toHaveValue(4);
