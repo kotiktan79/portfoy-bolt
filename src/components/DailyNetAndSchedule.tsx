@@ -2,6 +2,7 @@ import { useSilentRefresh } from '../hooks/useSilentRefresh';
 import { useEffect, useState } from 'react';
 import { supabase, Holding } from '../lib/supabase';
 import { computePortfolioMetrics } from '../lib/portfolioMetrics';
+import { getDailyBreakdownFlowEUR } from '../services/eurPnlService';
 import { dayInTZ } from '../lib/eurPnl';
 import { loadDailyChangeBasis } from '../services/dailyNetChangeService';
 import { dailyNetChange, officialDailyChange } from '../lib/dailyNetChange';
@@ -24,7 +25,8 @@ export function DailyNetChangeCard({ holdings }: { holdings: Holding[] }) {
     const r = report?.report_date === today ? official
       : (snap?.eurRate ? dailyNetChange(m.totalValueTRY, snap.v, m.fxRates.eur, snap.d, snap.eurRate) : null) ?? official;
     if (!r) throw new Error('Günlük değişim okunamadı.');
-    const b = snap?.eurRate && basis.prevPrices ? dailyBreakdown(holdings, closePricesAt(basis.prevPrices, snap.at), snap.v, snap.eurRate) : null;
+    const flowEUR = r.estimated && snap ? await getDailyBreakdownFlowEUR(holdings, snap.at).catch(() => null) : null;
+    const b = flowEUR != null && snap?.eurRate && basis.prevPrices ? dailyBreakdown(holdings, closePricesAt(basis.prevPrices, snap.at), snap.v, snap.eurRate, flowEUR) : null;
     return { r, official, b, report, today };
   });
   const { r, official, b, report, today } = resource.data ?? {};
@@ -107,6 +109,7 @@ function Breakdown({ b, open, setOpen }: { b: ReturnType<typeof dailyBreakdown> 
         </button>
       )}
       <Line label="Kur etkisi (euro bazında)" v={b.fxEUR} muted />
+      {Math.abs(b.flowEUR) >= 1 && <Line label="Yeni alım / kasadan aktarım (kâr değil)" v={b.flowEUR} muted />}
       <Line label="Fark (kayıt/fiyat zamanı)" v={b.gapEUR} muted />
       <div className="flex justify-between font-semibold border-t border-gold-200/60 dark:border-gold-900/40 mt-1 pt-1">
         <span>Toplam</span><span className="tabular-nums">{sgn(b.totalEUR)}</span>

@@ -1,3 +1,5 @@
+import { breakdownFlowEUR } from '../lib/dailyBreakdown';
+import { isClosedHolding } from '../lib/openPosition';
 // EUR bazlı kâr verisi — TEK KAYNAK. Snapshot + exchange_rates(EUR,USD) + realize + döviz maliyet takvimi.
 // Tüm K/Z ekranları, Kâr Cüzdanı ve maaş buradan okur. Dayanak: lib/eurPnl.ts başlığı.
 import { supabase } from '../lib/supabase';
@@ -209,4 +211,23 @@ async function closePricesOn(day: string, untilTs: string): Promise<Map<string, 
   _cpCache.set(key, m);
   if (_cpCache.size > 4) _cpCache.delete(_cpCache.keys().next().value as string);   // birkaç gün yeter
   return m;
+}
+
+/** Arayüz dökümündeki kâr dışı akış. Kâr hesabına yazmaz; aynı salt okunur kaynakları kullanır. */
+export async function getDailyBreakdownFlowEUR(holdings: Holding[], snapshotAt: string): Promise<number | null> {
+  const model = await load();
+  const last = model.lastSnapshot;
+  // Döküm ve akış mutlaka aynı snapshot'a göre kurulmalı.
+  if (!last || last.createdAt !== snapshotAt) return null;
+  const fx = getFxRatesFromHoldings(holdings);
+  const ccyById = new Map(holdings.map(h => [String(h.id), String(h.currency || 'TRY').toUpperCase()]));
+  const [realizedTodayTRY, payoutTodayTRY] = await Promise.all([
+    realizedSince(snapshotAt, fx.usd, fx.eur, ccyById), payoutSince(last.date),
+  ]);
+  const otherNow = { ...model.ratesAtLast };
+  delete otherNow.USD; delete otherNow.EUR;
+  return breakdownFlowEUR(model, {
+    holdings: holdings.filter(h => h.asset_type !== 'cash' && !isClosedHolding(h)),
+    usdNow: fx.usd, eurNow: fx.eur, otherNow, realizedTodayTRY, payoutTodayTRY,
+  });
 }

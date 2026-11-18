@@ -1,21 +1,23 @@
 // Günlük net değişimin KAYNAĞI: her varlığın dünkü kapanıştan bu yana katkısı (€).
 // Kapanış fiyatı = snapshot'la aynı anda (cron 21:00 Bükreş) price_history'ye yazılan fiyat.
-// Şema değişikliği yok. Satırlar + kur etkisi + fark = kart toplamı (birebir).
+// Şema değişikliği yok. Satırlar + kur etkisi + akış + fark = kart toplamı (birebir).
 import type { Holding } from './supabase';
 import { getFxRatesFromHoldings, fxToTRY, FxRates } from './fx';
 import { isClosedHolding } from './openPosition';
+import type { EurModel, LiveGainInput } from './eurPnl';
 
 export interface BreakdownRow { id: string; symbol: string; eur: number; noPrev?: boolean }
 export interface DailyBreakdown {
   rows: BreakdownRow[];   // fiyat etkisi, |€| büyükten küçüğe
   fxEUR: number;          // euro/dolar cinsi varlıkların kur etkisi (TL bazında)
+  flowEUR: number;        // yeni alım / kasadan aktarım; kâr değil
   gapEUR: number;         // fark (kayıt/fiyat zamanı): kapanış fiyatlarıyla kurulan toplam − snapshot
-  totalEUR: number;       // = Σrows + fxEUR + gapEUR = şimdi − kapanış
+  totalEUR: number;       // = Σrows + fxEUR + flowEUR + gapEUR = şimdi − kapanış
 }
 
 const isFxCash = (h: Holding, s: string) => h.asset_type === 'currency' && (h.symbol === s || (s === 'EURO' && h.symbol === 'EUR'));
 
-export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, number>, snapshotTRY: number, prevEurRate?: number): DailyBreakdown | null {
+export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, number>, snapshotTRY: number, prevEurRate?: number, flowEUR = 0): DailyBreakdown | null {
   const now = getFxRatesFromHoldings(holdings);
   if (!(now.eur > 0) || !(snapshotTRY > 0)) return null;
   const pick = (sym: string, cur: number) => {
@@ -39,7 +41,33 @@ export function dailyBreakdown(holdings: Holding[], prevPrices: Record<string, n
     rows.push({ id: String(h.id), symbol: h.symbol, eur: fxToTRY(q * (pN - pP), h.currency, now) / now.eur, ...(noPrev ? { noPrev } : {}) });
   }
   rows.sort((a, b) => Math.abs(b.eur) - Math.abs(a.eur));
-  return { rows, fxEUR: fxTRY, gapEUR: (prevSumTRY - snapshotTRY) / prev.eur, totalEUR: nowTRY / now.eur - snapshotTRY / prev.eur };
+  return { rows, fxEUR: fxTRY, flowEUR, gapEUR: (prevSumTRY - snapshotTRY) / prev.eur - flowEUR, totalEUR: nowTRY / now.eur - snapshotTRY / prev.eur };
+}
+
+/** Yalnız döküm için: liveEurGain'in akış cebiri; kâr motorunu değiştirmez.
+ * Önceki döviz maliyetinin kur kayması, realize ve kasa ödemesi yeni alım değildir. */
+export function breakdownFlowEUR(model: EurModel, inp: LiveGainInput): number | null {
+  const last = model.lastSnapshot;
+  if (!last || !(inp.eurNow > 0)) return null;
+  const rateNow = (currency: string) => currency === 'TRY' ? 1
+    : currency === 'EUR' ? inp.eurNow : currency === 'USD' ? inp.usdNow : Number(inp.otherNow?.[currency]) || 0;
+  const daily = model.daily[model.daily.length - 1];
+  const rateLast = (currency: string) => currency === 'EUR' ? daily?.eurRate || inp.eurNow
+    : currency === 'USD' ? daily?.usdRate || inp.usdNow : Number(model.ratesAtLast?.[currency]) || 0;
+  let investmentTRY = 0;
+  for (const h of inp.holdings) {
+    const rate = rateNow(String(h.currency || 'TRY').toUpperCase());
+    if (!(rate > 0)) continue;
+    const q = Number(h.quantity) || 0, price = Number(h.purchase_price) || 0;
+    investmentTRY += q * price * rate;
+  }
+  const driftTRY = model.foreignCostsAtLast.reduce((sum, c) => {
+    const currency = String(c.currency || '').toUpperCase();
+    const now = rateNow(currency), prev = rateLast(currency);
+    return now > 0 && prev > 0 ? sum + c.costNative * (now - prev) : sum;
+  }, 0);
+  const flowTRY = investmentTRY - last.totalInvestment - driftTRY - (inp.realizedTodayTRY || 0) - (inp.payoutTodayTRY || 0);
+  return flowTRY / inp.eurNow;
 }
 
 /** İlk n satır + kalanların toplamı. */
