@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { DailyNetChangeCard } from './DailyNetAndSchedule';
+import { dailyBreakdown } from '../lib/dailyBreakdown';
 import { salaryHoldings } from '../test/helpers/salaryFixture';
+
+vi.mock('../services/eurPnlService', () => ({ getDailyBreakdownFlowEUR: vi.fn().mockResolvedValue(0) }));
+import { getDailyBreakdownFlowEUR } from '../services/eurPnlService';
 
 vi.mock('../services/dailyNetChangeService', () => ({ loadDailyChangeBasis: vi.fn() }));
 import { loadDailyChangeBasis } from '../services/dailyNetChangeService';
@@ -24,6 +28,42 @@ describe('günlük net değişim kaynağı', () => {
     render(<DailyNetChangeCard holdings={holdings} />);
     expect(await screen.findByText('+€0,00')).toBeInTheDocument();
     expect(screen.getByText(/Tahmini/)).toBeInTheDocument();
+  });
+  it.each([1000, -1000, 1, -1, 0.99, -0.99, 0])('akış satırı yalnız |flowEUR| ≥ 1 ise görünür: %s', async flow => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-10T10:00:00Z'));
+    vi.mocked(loadDailyChangeBasis).mockResolvedValue({ ...basis, report: null });
+    vi.mocked(getDailyBreakdownFlowEUR).mockResolvedValueOnce(flow);
+    render(<DailyNetChangeCard holdings={salaryHoldings} />);
+    await screen.findByText('Nereden geldi? (canlı)');
+    const label = screen.queryByText('Yeni alım / kasadan aktarım (kâr değil)');
+    if (Math.abs(flow) >= 1) {
+      expect(label).toBeInTheDocument();
+      expect(label?.parentElement?.textContent).toContain(`${flow >= 0 ? '+' : '−'}€${Math.abs(flow).toLocaleString('tr-TR')}`);
+    } else expect(label).toBeNull();
+    expect(screen.queryByText(/defter uyuşmuyor/i)).toBeNull();
+  });
+  it.each(['null', 'error'] as const)('akış %s olduğunda döküm ve eski fark korunur', async outcome => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-10T10:00:00Z'));
+    vi.mocked(loadDailyChangeBasis).mockResolvedValue({ ...basis, report: null });
+    if (outcome === 'null') vi.mocked(getDailyBreakdownFlowEUR).mockResolvedValueOnce(null);
+    else vi.mocked(getDailyBreakdownFlowEUR).mockRejectedValueOnce(new Error('offline'));
+    render(<DailyNetChangeCard holdings={salaryHoldings} />);
+    expect(await screen.findByText('Nereden geldi? (canlı)')).toBeInTheDocument();
+    expect(screen.queryByText('Yeni alım / kasadan aktarım (kâr değil)')).toBeNull();
+    const old = dailyBreakdown(salaryHoldings, {}, basis.snap.v, basis.snap.eurRate)!;
+    const formatted = (value: number) => `${value >= 0 ? '+' : '−'}€${Math.round(Math.abs(value)).toLocaleString('tr-TR')}`;
+    expect(screen.getByText('Fark (kayıt/fiyat zamanı)').parentElement?.textContent).toContain(formatted(old.gapEUR));
+    expect(screen.getByText('Toplam').parentElement?.textContent).toContain(formatted(old.totalEUR));
+  });
+  it('resmi kapanışta da snapshot varsa akışı hesaplar ve dökümü gösterir', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-09T19:00:00Z'));
+    vi.mocked(loadDailyChangeBasis).mockResolvedValue(basis);
+    vi.mocked(getDailyBreakdownFlowEUR).mockClear().mockResolvedValueOnce(1000);
+    render(<DailyNetChangeCard holdings={salaryHoldings} />);
+    expect(await screen.findByText('Yeni alım / kasadan aktarım (kâr değil)')).toBeInTheDocument();
+    expect(getDailyBreakdownFlowEUR).toHaveBeenCalledWith(salaryHoldings, basis.snap.at);
+    expect(screen.getByText('Nereden geldi? (canlı)')).toBeInTheDocument();
+    expect(screen.getByText('−€372,87')).toBeInTheDocument();
   });
   it('dakikalık yenileme beklerken veya hata verince önceki tutar ve DOM korunur', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-09T19:00:00Z'));
