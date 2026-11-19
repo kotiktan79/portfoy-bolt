@@ -25,8 +25,8 @@ export function DailyNetChangeCard({ holdings }: { holdings: Holding[] }) {
     const r = report?.report_date === today ? official
       : (snap?.eurRate ? dailyNetChange(m.totalValueTRY, snap.v, m.fxRates.eur, snap.d, snap.eurRate) : null) ?? official;
     if (!r) throw new Error('Günlük değişim okunamadı.');
-    const flowEUR = r.estimated && snap ? await getDailyBreakdownFlowEUR(holdings, snap.at).catch(() => null) : null;
-    const b = flowEUR != null && snap?.eurRate && basis.prevPrices ? dailyBreakdown(holdings, closePricesAt(basis.prevPrices, snap.at), snap.v, snap.eurRate, flowEUR) : null;
+    const flowEUR = snap ? await getDailyBreakdownFlowEUR(holdings, snap.at).catch(() => null) : null;
+    const b = snap?.eurRate && basis.prevPrices ? dailyBreakdown(holdings, closePricesAt(basis.prevPrices, snap.at), snap.v, snap.eurRate, flowEUR ?? 0) : null;
     return { r, official, b, report, today };
   });
   const { r, official, b, report, today } = resource.data ?? {};
@@ -43,7 +43,7 @@ export function DailyNetChangeCard({ holdings }: { holdings: Holding[] }) {
       ) : <div className="mt-2 text-sm text-ink-500">{error ? 'Günlük değişim okunamadı.' : 'hesaplanıyor…'}</div>}
       {r?.estimated && r.nowEUR != null && r.prevEUR != null && <div className="text-xs text-ink-500 dark:text-gold-200/60 mt-1">Şimdi {eur(r.nowEUR)} · önceki kapanış {eur(r.prevEUR)} (kendi günlerinin kuruyla)</div>}
       {official && r?.estimated && <p className="mt-1 text-xs">Son resmi kapanış ({report?.report_date}): {official.changeEUR < 0 ? '−' : '+'}€{Math.abs(official.changeEUR).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>}
-      {r?.estimated && b && <Breakdown b={b} open={open} setOpen={setOpen} />}
+      {b && <Breakdown b={b} open={open} setOpen={setOpen} />}
     </div>
   );
 }
