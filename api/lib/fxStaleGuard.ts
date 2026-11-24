@@ -3,7 +3,7 @@
 // euro motoruna dokunmaz. Çağıran, seçilen kuru eskisi gibi source='api' yazar
 // (motor exchange_rates'te source=api / ecb okur).
 
-export const FX_DEVIATION_LIMIT = 0.002; // %0.2 — bunun üstü yedek kaynağa geçer
+export const FX_DEVIATION_LIMIT = 0.002; // %0.2 — kaynaklar arası sapma eşiği
 export const FX_SANITY_LIMIT = 0.10; // %10 — tek yedek bu kadar ayrılıyorsa bozuk sayılır
 export const FX_STALE_REPEAT = 6;
 export const FX_STALE_HOURS = 6;
@@ -113,9 +113,28 @@ export function decideFxRate(input: {
   }
 
   const disagrees = deviation != null && deviation > FX_DEVIATION_LIMIT && !sameQuote(primary, secondary);
-  if (stale || disagrees) {
+  if (stale) {
     if (sameQuote(primary, secondary)) {
       return { ...base, rate: primary, action: 'primary', log: null };
+    }
+    const lastGood = (input.recent ?? [])
+      .filter(s => positive(s.rate) && Number.isFinite(Date.parse(s.recordedAt))
+        && Date.parse(s.recordedAt) <= now && !sameQuote(s.rate, primary))
+      .sort((a, b) => Date.parse(b.recordedAt) - Date.parse(a.recordedAt))[0];
+    if (lastGood) {
+      const primaryMove = Math.abs(primary - lastGood.rate) / lastGood.rate;
+      const secondaryMove = Math.abs(secondary - lastGood.rate) / lastGood.rate;
+      if (secondaryMove > 0.01 || secondaryMove > primaryMove) {
+        const why = secondaryMove > 0.01
+          ? 'son iyi kura göre %1 üstü sıçrama'
+          : 'son iyi kurdan birincilden daha uzak';
+        return {
+          ...base,
+          rate: primary,
+          action: 'primary',
+          log: `${input.pair}: yedek ${name} ${fmt(secondary)} ${why} (${fmt(lastGood.rate)}) — birincil ${fmt(primary)} korundu`,
+        };
+      }
     }
     const why: string[] = [];
     if (stale) why.push(`birincil ${fmt(primary)} son ${FX_STALE_REPEAT} kayıtta aynı (≥${FX_STALE_HOURS} saat)`);
