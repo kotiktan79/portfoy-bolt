@@ -61,14 +61,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const salaryEUR = aiCtx?.salary?.plan?.monthlyEUR ?? eur?.entitlementEUR ?? 0;      // TEK TABAN: kapanmış havuz × 0,85 (aylık tavanla) — cüzdanla aynı
     const projectedSalaryEUR = aiCtx?.salary?.plan?.monthlyEUR ?? eur?.mtd?.salaryEUR ?? 0;
 
-    // FX kurları — holdings'teki USD/EUR pozisyonlarından; yoksa live API.
+    // FX kurları — EUR motorundan (yoksa holding); USD holding'den, yoksa live API.
     // Eski hardcode || 45 / || 51, USD holding silindiğinde snapshot poisoning'e yol açıyordu.
     const usdHolding = holdings.find((h: any) => h.symbol === 'USD' && h.asset_type === 'currency');
     const eurHolding = holdings.find((h: any) => (h.symbol === 'EURO' || h.symbol === 'EUR') && h.asset_type === 'currency');
     const usdFromHolding = Number(usdHolding?.current_price) || 0;
     const eurFromHolding = Number(eurHolding?.current_price) || 0;
     const usdRate = usdFromHolding > 1 ? usdFromHolding : await fetchLiveRate('USD');
-    const eurRate = eurFromHolding > 1 ? eurFromHolding : await fetchLiveRate('EUR');
+    const eurRate = eur?.eurRate || eurFromHolding;
     // Yardımcı kurlar (RUB/RON/GBP/CHF için yaklaşık) — yalnız daily_reports'un eski TL sütunları için
     const fxRate = (ccy: string): number => {
       const c = (ccy || 'TRY').toUpperCase();
@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2. Piyasa verilerini çek (kapsamlı)
     // ========================================
     log.push('Piyasa verileri çekiliyor...');
-    const marketData = await fetchComprehensiveMarketData(log);
+    const marketData = await fetchComprehensiveMarketData(log, eur?.eurRate || null);
 
     // ========================================
     // 3. Piyasa haberleri araştır
@@ -281,7 +281,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 interface MarketData {
   usd_try: number;
-  eur_try: number;
+  eur_try: number | null;
   btc_usd: number;
   eth_usd: number;
   gold_usd: number;
@@ -294,9 +294,9 @@ interface MarketData {
   raw_text: string;
 }
 
-async function fetchComprehensiveMarketData(log: string[]): Promise<MarketData> {
+async function fetchComprehensiveMarketData(log: string[], eurRate: number | null): Promise<MarketData> {
   const data: MarketData = {
-    usd_try: 0, eur_try: 0, btc_usd: 0, eth_usd: 0,
+    usd_try: 0, eur_try: eurRate, btc_usd: 0, eth_usd: 0,
     gold_usd: 0, silver_usd: 0, bist_summary: '',
     us_stocks: {}, bist_stocks: {}, crypto: {}, indices: {},
     raw_text: '',
@@ -304,21 +304,15 @@ async function fetchComprehensiveMarketData(log: string[]): Promise<MarketData> 
 
   const lines: string[] = [];
 
+  if (eurRate != null) lines.push(`EUR/TRY: ${eurRate.toFixed(2)}`);
+
   // Döviz kurları
   try {
-    const [usdRes, eurRes] = await Promise.all([
-      fetch('https://open.er-api.com/v6/latest/USD'),
-      fetch('https://open.er-api.com/v6/latest/EUR'),
-    ]);
+    const usdRes = await fetch('https://open.er-api.com/v6/latest/USD');
     if (usdRes.ok) {
       const usdData = await usdRes.json();
       data.usd_try = usdData.rates?.TRY || 0;
       lines.push(`USD/TRY: ${data.usd_try.toFixed(2)}`);
-    }
-    if (eurRes.ok) {
-      const eurData = await eurRes.json();
-      data.eur_try = eurData.rates?.TRY || 0;
-      lines.push(`EUR/TRY: ${data.eur_try.toFixed(2)}`);
     }
   } catch (e: any) { log.push(`Döviz hatası: ${e.message}`); }
 
@@ -619,19 +613,19 @@ Yukarıdaki verilerle bugünkü brifingi hazırla. İşlem önerme, maaş hesapl
   return { raw: text, actions: [], market_outlook: text };
 }
 
-// Live FX fallback — USD/EUR holding yoksa kullanılır. 60s cache.
+// Live FX fallback — USD holding yoksa kullanılır. EUR motorun kurunu kullanır. 60s cache.
 const _fxCache: Record<string, { value: number; ts: number }> = {};
-async function fetchLiveRate(base: 'USD' | 'EUR'): Promise<number> {
+async function fetchLiveRate(base: 'USD'): Promise<number> {
   const cached = _fxCache[base];
   if (cached && Date.now() - cached.ts < 60000) return cached.value;
   try {
     const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
     if (res.ok) {
       const data = await res.json();
-      const rate = data.rates?.TRY || (base === 'USD' ? 38 : 41);
+      const rate = data.rates?.TRY || 38;
       _fxCache[base] = { value: rate, ts: Date.now() };
       return rate;
     }
   } catch { /* fallback */ }
-  return cached?.value || (base === 'USD' ? 38 : 41);
+  return cached?.value || 38;
 }

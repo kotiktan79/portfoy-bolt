@@ -19,6 +19,28 @@ function hourly(rate: number, count: number, end = NOW): FxSample[] {
 }
 
 describe('decideFxRate', () => {
+  it('keeps a fresh primary despite a disagreeing Yahoo tick', () => {
+    const d = decideFxRate({ pair: 'EUR/TRY', primary: 55.53, secondary: 55.10,
+      secondaryName: 'yahoo', recent: hourly(55.52, 8), now: NOW });
+    expect(d.stale).toBe(false);
+    expect(d.action).toBe('primary');
+    expect(d.rate).toBe(55.53);
+  });
+
+  it.each([
+    [55.31, 55.31, 'secondary', 55.31],
+    [56, 55.31, 'primary', 55.11],
+    [55.31, 55.12, 'primary', 55.11],
+  ] as const)('stuck primary: secondary %s vs last good %s → %s', (secondary, lastGood, action, rate) => {
+    const recent = [...hourly(55.11, 6), ...hourly(lastGood, 1, NOW - 6 * 3_600_000)];
+    const d = decideFxRate({ pair: 'EUR/TRY', primary: 55.11, secondary,
+      secondaryName: 'yahoo', recent: recent.reverse(), now: NOW });
+    expect(d.stale).toBe(true);
+    expect(d.action).toBe(action);
+    expect(d.rate).toBe(rate);
+    if (action === 'primary') expect(d.log).toMatch(/son iyi kur/);
+  });
+
   it('yedek %0.2 içindeyse birincil kalır', () => {
     const d = decideFxRate({
       pair: 'EUR/TRY',
@@ -56,7 +78,7 @@ describe('decideFxRate', () => {
     expect(d.log).toMatch(/55\.1100/);
   });
 
-  it('geçmiş yokken de %0.2 üstü sapma yedeğe düşer (tek cron yazımı)', () => {
+  it('geçmiş yokken %0.2 üstü sapmada da birincil kalır', () => {
     const d = decideFxRate({
       pair: 'EUR/TRY',
       primary: 55.11,
@@ -66,8 +88,8 @@ describe('decideFxRate', () => {
       now: NOW,
     });
     expect(d.stale).toBe(false);
-    expect(d.action).toBe('secondary');
-    expect(d.rate).toBe(55.31);
+    expect(d.action).toBe('primary');
+    expect(d.rate).toBe(55.11);
   });
 
   it('6 saatten kısa tekrar bayat sayılmaz', () => {
@@ -205,7 +227,7 @@ describe('resolveTryRate', () => {
       return json({}, false);
     }) as typeof fetch;
 
-    const d = await resolveTryRate('EUR', [], { now: NOW });
+    const d = await resolveTryRate('EUR', hourly(55.11, 8), { now: NOW });
     expect(d.action).toBe('secondary');
     expect(d.secondaryName).toBe('frankfurter');
     expect(d.rate).toBe(55.31);
