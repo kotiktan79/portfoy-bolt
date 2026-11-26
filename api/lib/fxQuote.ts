@@ -171,12 +171,36 @@ export async function resolveTryRate(
     ? (positive(opts.primary) ? opts.primary : null)
     : await fetchOpenErTry(ccy);
   const secondary = await fetchSecondaryTry(ccy, { ...opts, primary });
-  return decideFxRate({
+  const ask = (confirm?: { rate: number; name: string } | null) => decideFxRate({
     pair: `${ccy}/TRY`,
     primary,
     secondary: secondary?.rate ?? null,
     secondaryName: secondary?.name ?? null,
     recent,
     now: opts.now,
+    confirm: confirm?.rate ?? null,
+    confirmName: confirm?.name ?? null,
   });
+  const first = ask();
+  if (!first.needsConfirm || !secondary) return first;
+  // Tik doğrulaması: yedekten FARKLI bir resmi kaynak (Frankfurter, sonra ECB).
+  const confirm = await fetchConfirmTry(ccy, secondary.name, { ...opts, primary });
+  return confirm ? ask(confirm) : first;
+}
+
+export async function fetchConfirmTry(
+  currency: string,
+  exclude: string,
+  opts: SecondaryOpts = {},
+): Promise<{ rate: number; name: string } | null> {
+  const attempts: Array<[string, () => Promise<number | null>]> = [
+    ['frankfurter', () => fetchFrankfurterTry(currency)],
+  ];
+  if (opts.allowEcb !== false) attempts.push(['ecb', () => fetchEcbTry(currency)]);
+  for (const [name, get] of attempts) {
+    if (name === exclude) continue;
+    const rate = await get();
+    if (rate != null && withinSanity(opts.primary, rate)) return { rate, name };
+  }
+  return null;
 }

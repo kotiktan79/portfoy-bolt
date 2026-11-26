@@ -7,6 +7,11 @@ export const FX_DEVIATION_LIMIT = 0.002; // %0.2 — kaynaklar arası sapma eşi
 export const FX_SANITY_LIMIT = 0.10; // %10 — tek yedek bu kadar ayrılıyorsa bozuk sayılır
 export const FX_STALE_REPEAT = 6;
 export const FX_STALE_HOURS = 6;
+// 2026-11-25: open.er gün boyu 55.5585'te (günlük kur, takılı sayıldı), 18:00 UTC'de Yahoo tek
+// tik 55.6556 verdi (%0.17), son iyi kur penceresi boştu → tik doğrudan servete yazıldı.
+// Canlı tik kaynağı (Yahoo) birincilden bu kadar uzaksa ikinci bir kaynakla doğrulanmalı.
+export const FX_TICK_LIMIT = 0.0015; // %0.15
+export const FX_TICK_SOURCES = ['yahoo'];
 
 export interface FxSample {
   rate: number;
@@ -21,6 +26,8 @@ export interface FxDecision {
   secondaryName: string | null;
   /** Doluysa çağıran bunu günlüğe yazmalı. */
   log: string | null;
+  /** true: yedek tek kaynaklı tik; çağıran başka bir kaynaktan doğrulama getirip yeniden sormalı. */
+  needsConfirm?: boolean;
 }
 
 function positive(n: number | null | undefined): n is number {
@@ -64,6 +71,9 @@ export function decideFxRate(input: {
   secondaryName?: string | null;
   recent?: FxSample[];
   now?: number;
+  /** Yedekten bağımsız ikinci kaynak (Frankfurter/ECB) — yalnız tik doğrulaması için. */
+  confirm?: number | null;
+  confirmName?: string | null;
 }): FxDecision {
   const now = input.now ?? Date.now();
   const primary = positive(input.primary) ? input.primary : null;
@@ -133,6 +143,24 @@ export function decideFxRate(input: {
           rate: primary,
           action: 'primary',
           log: `${input.pair}: yedek ${name} ${fmt(secondary)} ${why} (${fmt(lastGood.rate)}) — birincil ${fmt(primary)} korundu`,
+        };
+      }
+    }
+    const jump = Math.abs(secondary - primary) / primary;
+    if (FX_TICK_SOURCES.includes(name) && jump > FX_TICK_LIMIT) {
+      const nearLastGood = !!lastGood && Math.abs(secondary - lastGood.rate) / lastGood.rate <= FX_TICK_LIMIT;
+      const confirm = positive(input.confirm) ? input.confirm : null;
+      const confirmed = confirm != null && Math.abs(confirm - secondary) < Math.abs(confirm - primary);
+      if (!nearLastGood && !confirmed) {
+        const cName = input.confirmName || 'ikinci kaynak';
+        return {
+          ...base,
+          rate: primary,
+          action: 'primary',
+          needsConfirm: confirm == null,
+          log: confirm == null
+            ? `${input.pair}: yedek ${name} ${fmt(secondary)} birincilden %${pct(jump)} uzak (> %${pct(FX_TICK_LIMIT)}), doğrulayan kaynak yok — tek tik sayıldı, birincil ${fmt(primary)} korundu`
+            : `${input.pair}: yedek ${name} ${fmt(secondary)} tik; ${cName} ${fmt(confirm)} birincile daha yakın — birincil ${fmt(primary)} korundu`,
         };
       }
     }
