@@ -61,7 +61,7 @@ describe('decideFxRate', () => {
     expect(d.action).toBe('primary');
   });
 
-  it('13 Ekim: 55.11 birincil, Yahoo 55.31 → yedek', () => {
+  it('13 Ekim: 55.11 birincil, Yahoo 55.31, Frankfurter 55.29 doğruluyor → yedek', () => {
     const d = decideFxRate({
       pair: 'EUR/TRY',
       primary: 55.11,
@@ -69,6 +69,8 @@ describe('decideFxRate', () => {
       secondaryName: 'yahoo',
       recent: hourly(55.11, 36),
       now: NOW,
+      confirm: 55.2921,
+      confirmName: 'frankfurter',
     });
     expect(d.action).toBe('secondary');
     expect(d.rate).toBe(55.31);
@@ -76,6 +78,40 @@ describe('decideFxRate', () => {
     expect(d.deviation).toBeGreaterThan(FX_DEVIATION_LIMIT);
     expect(d.log).toMatch(/yahoo 55\.3100/);
     expect(d.log).toMatch(/55\.1100/);
+  });
+
+  it('25 Kasım: takılı 55.5585, Yahoo tik 55.6556, doğrulama yok → birincil, doğrulama istenir', () => {
+    const d = decideFxRate({ pair: 'EUR/TRY', primary: 55.558487, secondary: 55.6556,
+      secondaryName: 'yahoo', recent: hourly(55.558487, 12), now: NOW });
+    expect(d.stale).toBe(true);
+    expect(d.action).toBe('primary');
+    expect(d.rate).toBe(55.558487);
+    expect(d.needsConfirm).toBe(true);
+    expect(d.log).toMatch(/tek tik/);
+  });
+
+  it('25 Kasım: ECB 55.4163 birincile daha yakın → tik reddedilir', () => {
+    const d = decideFxRate({ pair: 'EUR/TRY', primary: 55.558487, secondary: 55.6556,
+      secondaryName: 'yahoo', recent: hourly(55.558487, 12), now: NOW, confirm: 55.4163, confirmName: 'ecb' });
+    expect(d.action).toBe('primary');
+    expect(d.rate).toBe(55.558487);
+    expect(d.needsConfirm).toBe(false);
+    expect(d.log).toMatch(/ecb 55\.4163/);
+  });
+
+  it('Yahoo %0.15 içindeyse doğrulama gerekmez', () => {
+    const d = decideFxRate({ pair: 'EUR/TRY', primary: 55.558487, secondary: 55.60,
+      secondaryName: 'yahoo', recent: hourly(55.558487, 12), now: NOW });
+    expect(d.action).toBe('secondary');
+    expect(d.rate).toBe(55.60);
+    expect(d.needsConfirm).toBeUndefined();
+  });
+
+  it('resmi kaynak (Frankfurter) tik sayılmaz, doğrulama istemez', () => {
+    const d = decideFxRate({ pair: 'EUR/TRY', primary: 55.11, secondary: 55.31,
+      secondaryName: 'frankfurter', recent: hourly(55.11, 8), now: NOW });
+    expect(d.action).toBe('secondary');
+    expect(d.rate).toBe(55.31);
   });
 
   it('geçmiş yokken %0.2 üstü sapmada da birincil kalır', () => {
@@ -200,13 +236,14 @@ describe('resolveTryRate', () => {
     return new Response(JSON.stringify(body), { status: ok ? 200 : 500, headers: { 'Content-Type': 'application/json' } });
   }
 
-  it('open.er 55.11 ve Yahoo 55.31 → Yahoo, Frankfurter çağrılmaz', async () => {
+  it('open.er 55.11 ve Yahoo 55.31, Frankfurter doğruluyor → Yahoo, ECB çağrılmaz', async () => {
     const urls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       urls.push(url);
       if (url.includes('open.er-api.com')) return json({ rates: { TRY: 55.11 } });
       if (url.includes('finance.yahoo.com')) return json({ chart: { result: [{ meta: { regularMarketPrice: 55.31 } }] } });
+      if (url.includes('frankfurter.dev/v2')) return json([{ quote: 'TRY', rate: 55.2921 }]);
       throw new Error('beklenmeyen istek ' + url);
     }) as typeof fetch;
 
@@ -214,8 +251,35 @@ describe('resolveTryRate', () => {
     expect(d.action).toBe('secondary');
     expect(d.secondaryName).toBe('yahoo');
     expect(d.rate).toBe(55.31);
-    expect(urls.some(u => u.includes('frankfurter'))).toBe(false);
     expect(urls.some(u => u.includes('ecb.europa.eu'))).toBe(false);
+  });
+
+  it('25 Kasım 18:00 UTC: Yahoo tik 55.6556, Frankfurter 55.4163 → birincil 55.558487', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('open.er-api.com')) return json({ rates: { TRY: 55.558487 } });
+      if (url.includes('finance.yahoo.com')) return json({ chart: { result: [{ meta: { regularMarketPrice: 55.6556 } }] } });
+      if (url.includes('frankfurter.dev/v2')) return json([{ quote: 'TRY', rate: 55.4163 }]);
+      return json({}, false);
+    }) as typeof fetch;
+
+    const d = await resolveTryRate('EUR', hourly(55.558487, 12), { now: NOW });
+    expect(d.action).toBe('primary');
+    expect(d.rate).toBe(55.558487);
+    expect(d.log).toMatch(/frankfurter 55\.4163/);
+  });
+
+  it('doğrulayan kaynak hiç yoksa takılı birincil korunur', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('open.er-api.com')) return json({ rates: { TRY: 55.558487 } });
+      if (url.includes('finance.yahoo.com')) return json({ chart: { result: [{ meta: { regularMarketPrice: 55.6556 } }] } });
+      return json({}, false);
+    }) as typeof fetch;
+
+    const d = await resolveTryRate('EUR', hourly(55.558487, 12), { now: NOW });
+    expect(d.action).toBe('primary');
+    expect(d.rate).toBe(55.558487);
   });
 
   it('Yahoo bozuksa Frankfurter devreye girer', async () => {

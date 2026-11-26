@@ -10,6 +10,7 @@ import { dayInTZ } from '../../src/lib/eurPnl.js';
 import { inflationStatusText } from '../../src/lib/inflationDecision.js';
 import { AI_ENABLED, AI_OFF_MODEL } from '../../src/lib/aiFeature.js';
 import { callAnthropicMessages } from '../lib/anthropic.js';
+import { chainFromPrevReport } from '../lib/reportChain.js';
 
 
 function getSupabase() {
@@ -57,6 +58,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log.push(`EUR motoru: servet ${fmtEUR(eur.wealthEUR)} (dün ${fmtEUR(eur.prevWealthEUR)}), gün ${fmtSignedEUR(eur.dayGainEUR)} = %${eur.dayGainPct.toFixed(2)}, ay ${fmtSignedEUR(eur.mtd?.gainEUR || 0)}, maaş ${fmtEUR(eur.entitlementEUR)} (havuz ${fmtSignedEUR(eur.poolEUR)}), kur ${eur.health.ok ? 'güncel' : 'ESKİ (' + eur.health.lastEurRateDay + ')'}`);
     } catch (e: any) {
       log.push(`EUR motoru HATA: ${e.message}`);
+    }
+
+    // Gün/ay önceki daily_reports satırından zincirlenir (düzeltmeler ertesi güne geçsin).
+    if (eur?.asOf) {
+      try {
+        const { data: prevSnap } = await supabase.from('portfolio_snapshots').select('snapshot_date')
+          .lt('snapshot_date', eur.asOf).order('snapshot_date', { ascending: false }).limit(1);
+        const prevDate = prevSnap?.[0]?.snapshot_date as string | undefined;
+        const { data: prevRows } = prevDate
+          ? await supabase.from('daily_reports').select('report_date,wealth_eur,pnl_eur_mtd').eq('report_date', prevDate).limit(1)
+          : { data: null };
+        const chained = chainFromPrevReport({
+          asOf: eur.asOf, wealthEUR: eur.wealthEUR, prevWealthEUR: eur.prevWealthEUR,
+          dayGainEUR: eur.dayGainEUR, mtdGainEUR: eur.mtd ? eur.mtd.gainEUR : null,
+        }, prevRows?.[0] ?? null);
+        if (chained.note) {
+          const delta = eur.mtd && chained.mtdGainEUR != null ? chained.mtdGainEUR - eur.mtd.gainEUR : 0;
+          eur = {
+            ...eur,
+            dayGainEUR: chained.dayGainEUR,
+            dayGainPct: chained.dayGainPct,
+            prevWealthEUR: chained.prevWealthEUR,
+            mtd: eur.mtd ? { ...eur.mtd, gainEUR: eur.mtd.gainEUR + delta, realGainEUR: eur.mtd.realGainEUR + delta } : eur.mtd,
+          };
+          log.push(chained.note);
+        }
+      } catch (e: any) {
+        log.push(`Zincir HATA (motor rakamı kullanıldı): ${e.message}`);
+      }
     }
     const salaryEUR = aiCtx?.salary?.plan?.monthlyEUR ?? eur?.entitlementEUR ?? 0;      // TEK TABAN: kapanmış havuz × 0,85 (aylık tavanla) — cüzdanla aynı
     const projectedSalaryEUR = aiCtx?.salary?.plan?.monthlyEUR ?? eur?.mtd?.salaryEUR ?? 0;
